@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ALBA-STOCK | Gestion de stock</title>
+  <link rel="stylesheet" href="front/styles.css">
+  <style>
+    body{min-height:100vh;background:#183b35;color:#fff}.landing{min-height:100vh;display:grid;grid-template-columns:1.15fr .85fr;align-items:center;gap:50px;max-width:1180px;margin:auto;padding:48px}.landing-brand{display:flex;align-items:center;gap:12px;font:700 25px 'Space Grotesk',sans-serif}.landing-mark{width:38px;height:38px;background:#f07f5f;border-radius:10px;display:grid;place-items:center}.landing-copy{max-width:650px}.landing-copy h1{font:600 clamp(38px,6vw,74px)/1.02 'Space Grotesk',sans-serif;letter-spacing:-2px;margin:35px 0 20px}.landing-copy h1 em{font-style:normal;color:#f6c875}.landing-copy p{color:#b5d0c8;font-size:16px;line-height:1.7;max-width:540px}.landing-points{display:flex;gap:10px;flex-wrap:wrap;margin-top:28px}.landing-points span{border:1px solid #477166;border-radius:20px;padding:8px 12px;color:#d6e8e2;font-size:12px}.landing-card{background:#fff;color:#1d2926;border-radius:14px;padding:30px;box-shadow:0 25px 60px #091d1950}.landing-card h2{font:600 22px 'Space Grotesk',sans-serif;margin:0 0 8px}.landing-card p{color:#73807b;font-size:13px;margin:0 0 24px;line-height:1.5}.landing-action{display:block;text-align:center;text-decoration:none;border-radius:7px;padding:13px;font-weight:700;margin-top:11px}.landing-action.primary{background:#f07f5f;color:#fff}.landing-action.secondary{border:1px solid #dce5e0;color:#147c70}.landing-note{font-size:11px!important;text-align:center;margin-top:20px!important;color:#95a09b!important}@media(max-width:760px){.landing{display:block;padding:28px 20px}.landing-copy h1{font-size:42px;margin-top:55px}.landing-copy p{font-size:14px}.landing-card{margin-top:38px;padding:24px}.landing-brand{font-size:21px}}
+  </style>
+</head>
+<body>
+  <main class="landing">
+    <section class="landing-copy">
+      <div class="landing-brand"><span class="landing-mark">A</span>ALBA-STOCK</div>
+      <h1>La gestion de stock, <em>enfin simple.</em></h1>
+      <p>Gérez vos produits, succursales, ventes, caisses, approvisionnements et comptabilité depuis un seul espace de travail.</p>
+      <div class="landing-points"><span>Stock multi-succursales</span><span>Ventes & caisse</span><span>Approvisionnements</span><span>Rapports</span></div>
+    </section>
+    <section class="landing-card">
+      <h2>Commencer avec ALBA-STOCK</h2>
+      <p>Créez votre entreprise ou connectez-vous à un espace existant.</p>
+      <a class="landing-action primary" href="front/register.html">Créer mon entreprise</a>
+      <a class="landing-action secondary" href="front/login.html">Se connecter</a>
+      <a class="landing-action admin-link" href="front/superadmin-login.html">Accès super administrateur</a>
+      <p class="landing-note">Toute nouvelle entreprise doit être activée par le super administrateur.</p>
+    </section>
+  </main>
+</body>
+</html>

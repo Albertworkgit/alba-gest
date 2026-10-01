@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Super administration | ALBA-STOCK</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="crud-actions.css">
+  <style>
+    .module-access-form{display:grid;gap:16px;margin-top:20px}.module-access-company{max-width:420px;display:grid;gap:7px;color:#51615b;font-size:12px;font-weight:700}.module-access-company select{padding:10px;border:1px solid #e6ebe7;border-radius:6px;font:inherit}.module-access-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 18px;border:0;padding:0;margin:0}.module-access-list label{display:flex;align-items:center;gap:9px;padding:11px 12px;border:1px solid #e6ebe7;border-radius:6px;color:#33433d;font-size:13px}.module-access-list input{accent-color:#147c70;width:16px;height:16px}.module-access-submit{justify-self:start;background:#147c70;color:#fff;border:0;padding:10px 14px;border-radius:6px;font-weight:700;cursor:pointer}.module-access-submit:disabled{opacity:.6;cursor:wait}
+    @media(max-width:700px){.admin-shell{grid-template-columns:1fr}.admin-sidebar{padding:10px;flex-direction:row;overflow:auto}.admin-sidebar-label{display:none}.admin-nav-item{white-space:nowrap;width:auto}}
+  </style>
+  <style>
+    body{margin:0;background:#f5f7f3;color:#1d2926}.admin-top{height:66px;background:#183b35;color:#fff;padding:0 4%;display:flex;justify-content:space-between;align-items:center}.admin-top strong{font:700 20px 'Space Grotesk'}.logout,.currency-submit{background:#f07f5f;color:#fff;border:0;padding:10px 14px;border-radius:6px;font-weight:700;cursor:pointer}.admin-shell{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:calc(100vh - 66px)}.admin-sidebar{background:#183b35;color:#d8e8e3;padding:28px 16px;display:flex;flex-direction:column;gap:8px}.admin-sidebar-label{margin:0 12px 10px;color:#89aaa1;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;font-weight:700}.admin-nav-item{width:100%;padding:12px;border:0;border-radius:7px;background:transparent;color:#aac3bd;text-align:left;font:600 13px 'DM Sans',sans-serif;cursor:pointer}.admin-nav-item:hover,.admin-nav-item.active{background:#2a5e54;color:#fff}.admin-nav-item span{display:inline-block;width:28px;font-size:17px}.admin-content{width:100%;max-width:1250px;margin:0 auto;padding:38px 4%}.admin-heading{margin-bottom:24px}.admin-heading h1{font:600 32px 'Space Grotesk';margin:0}.admin-heading p,.admin-panel>p{color:#73807b}.admin-view[hidden]{display:none}.admin-panel{background:#fff;border:1px solid #e6ebe7;border-radius:10px;padding:22px;margin-top:18px;overflow:auto}.admin-panel h2{margin:0;font:600 20px 'Space Grotesk'}.currency-form{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:18px 0}.currency-form label{display:flex;flex-direction:column;gap:6px;color:#51615b;font-size:12px;font-weight:700}.currency-form input{min-width:180px;padding:10px;border:1px solid #e6ebe7;border-radius:6px;font:inherit}.admin-table{width:100%;border-collapse:collapse;min-width:520px}.admin-table th,.admin-table td{padding:13px;text-align:left;border-bottom:1px solid #edf1ee;font-size:12px}.admin-table th{font-size:10px;color:#73807b;text-transform:uppercase}.status-button{border:0;border-radius:6px;padding:8px 10px;font-weight:700;font-size:11px;cursor:pointer}.activate{background:#dcefe8;color:#147c70}.deactivate{background:#fde8e4;color:#bb5149}.admin-message{position:fixed;right:20px;bottom:20px;background:#183b35;color:#fff;padding:12px 15px;border-radius:6px;display:none;z-index:5}.admin-message.visible{display:block}@media(max-width:700px){.admin-shell{grid-template-columns:1fr}.admin-sidebar{padding:12px;display:flex;flex-direction:row;overflow:auto}.admin-sidebar-label{display:none}.admin-nav-item{white-space:nowrap;width:auto}.admin-content{padding:25px 16px}.admin-heading h1{font-size:27px}}
+  </style>
+</head>
+<body>
+  <header class="admin-top"><strong>ALBA-STOCK · Super administration</strong><button class="logout" id="logout">Se déconnecter</button></header>
+  <div class="admin-shell">
+    <aside class="admin-sidebar" aria-label="Menu super administrateur">
+      <p class="admin-sidebar-label">Administration</p>
+      <button class="admin-nav-item active" type="button" data-admin-view="enterprises"><span>▦</span>Entreprises</button>
+      <button class="admin-nav-item" type="button" data-admin-view="modules"><span>◈</span>Droits des modules</button>
+      <button class="admin-nav-item" type="button" data-admin-view="currencies"><span>¤</span>Monnaies</button>
+      <button class="admin-nav-item" type="button" data-admin-view="profile"><span>♙</span>Mon profil</button>
+    </aside>
+    <main class="admin-content">
+      <header class="admin-heading"><h1 id="admin-page-title">Gestion des entreprises</h1><p id="admin-page-description">Activez ou désactivez les comptes inscrits sur la plateforme.</p></header>
+      <section class="admin-view" id="admin-view-enterprises">
+        <div class="admin-panel"><table class="admin-table"><thead><tr><th>Entreprise</th><th>Email</th><th>Date</th><th>Statut</th><th>Action</th><th>Modules</th><th>Suppression</th></tr></thead><tbody id="enterprise-list"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div>
+      </section>
+      <section class="admin-view" id="admin-view-modules" hidden>
+        <div class="admin-panel">
+          <h2>Droits d’utilisation des modules</h2>
+          <p>Choisissez les modules auxquels chaque entreprise peut accéder.</p>
+          <form id="module-access-form" class="module-access-form">
+            <label class="module-access-company">Entreprise<select id="module-access-enterprise" required><option value="">Sélectionner une entreprise</option></select></label>
+            <fieldset id="module-access-list" class="module-access-list" disabled></fieldset>
+            <button class="module-access-submit" type="submit" disabled>Enregistrer les droits</button>
+          </form>
+        </div>
+      </section>
+      <section class="admin-view" id="admin-view-currencies" hidden>
+        <div class="admin-panel">
+          <h2>Monnaies disponibles</h2>
+          <p>Ajoutez les monnaies que les utilisateurs pourront choisir lors de la création d’un produit.</p>
+          <form id="currency-form" class="currency-form" method="post" action="../backend/public/auth.php?action=super-admin-currencies">
+            <label>Code monnaie<input name="type_monais" maxlength="10" placeholder="Ex. USD" required></label>
+            <label>Symbole ou nom court<input name="description" maxlength="10" placeholder="Ex. $" required></label>
+            <button class="currency-submit" type="submit">Enregistrer la monnaie</button>
+            <button class="status-button" id="currency-cancel" type="button" hidden>Annuler la modification</button>
+          </form>
+          <div style="overflow:auto"><table class="admin-table"><thead><tr><th>Code monnaie</th><th>Symbole / nom court</th><th>Actions</th></tr></thead><tbody id="currency-list"><tr><td colspan="3">Chargement des monnaies…</td></tr></tbody></table></div>
+        </div>
+      </section>
+      <section class="admin-view" id="admin-view-profile" hidden>
+        <div class="admin-panel">
+          <h2>Informations du compte</h2>
+          <form id="admin-profile-form" class="currency-form">
+            <label>Nom complet<input name="full_name" id="admin-profile-name" required></label>
+            <label>Email<input name="email" id="admin-profile-email" type="email" required></label>
+            <button class="currency-submit" type="submit">Enregistrer le profil</button>
+          </form>
+        </div>
+        <div class="admin-panel">
+          <h2>Modifier le mot de passe</h2>
+          <form id="admin-password-form" class="currency-form">
+            <label>Mot de passe actuel<input name="current_password" type="password" autocomplete="current-password" required></label>
+            <label>Nouveau mot de passe<input name="new_password" type="password" minlength="8" autocomplete="new-password" required></label>
+            <label>Confirmer le mot de passe<input name="confirm_password" type="password" minlength="8" autocomplete="new-password" required></label>
+            <button class="currency-submit" type="submit">Modifier le mot de passe</button>
+          </form>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div class="admin-message" id="admin-message" role="status"></div>
+  <script src="superadmin.js?v=8"></script>
+</body>
+</html>

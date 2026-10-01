@@ -1,0 +1,333 @@
+CREATE TABLE IF NOT EXISTS entreprises (
+    entreprise_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL COMMENT 'Nom de l entreprise',
+    email VARCHAR(100),
+    phone VARCHAR(20),
+    address TEXT,
+    logo VARCHAR(255) NULL,
+    cachet VARCHAR(255) NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1=active, 0=desactivee',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- 2. SUCCURSALES (Magasins / Dépôts d'une entreprise)
+CREATE TABLE IF NOT EXISTS succursales (
+    succursale_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL COMMENT 'A quelle entreprise appartient cette succursale',
+    name VARCHAR(100) NOT NULL,
+    code VARCHAR(20) NOT NULL COMMENT 'Ex: GOMA-01, BUKA-01',
+    est_sucursal_mere TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1=succursale principale de l entreprise',
+    address TEXT,
+    phone VARCHAR(20),
+    UNIQUE KEY uq_succursale_code (entreprise_id, code),
+    CONSTRAINT fk_succursale_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 3. ROLES (Admin, Caissier, Magasinier...)
+CREATE TABLE IF NOT EXISTS roles (
+    role_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    role_name VARCHAR(50) NOT NULL,
+    permissions JSON NULL COMMENT 'Ex: ["voir_vente", "creer_produit"]',
+    description TEXT,
+    UNIQUE KEY uq_role_name (entreprise_id, role_name),
+    CONSTRAINT fk_role_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 4. UTILISATEURS
+CREATE TABLE IF NOT EXISTS users (
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    succursale_id INT NULL COMMENT 'NULL = a acces a toutes les succursales',
+    role_id INT NOT NULL,
+    username VARCHAR(50) NOT NULL,
+    email VARCHAR(100),
+    password_hash VARCHAR(500) NOT NULL,
+    full_name VARCHAR(100),
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_username (entreprise_id, username),
+    CONSTRAINT fk_user_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_user_succursale FOREIGN KEY (succursale_id) REFERENCES succursales(succursale_id) ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT fk_user_role FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 5. CATEGORIES DE PRODUITS
+CREATE TABLE IF NOT EXISTS categories (
+    category_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    UNIQUE KEY uq_category_name (entreprise_id, name),
+    CONSTRAINT fk_category_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 6. FOURNISSEURS
+CREATE TABLE IF NOT EXISTS fournisseurs (
+    fournisseur_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    succursale_id INT NULL COMMENT 'NULL = fournisseur partagé dans toute l entreprise',
+    name VARCHAR(100) NOT NULL,
+    contact_name VARCHAR(100),
+    email VARCHAR(100),
+    phone VARCHAR(20),
+    address TEXT,
+    CONSTRAINT fk_fournisseur_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_fournisseur_succursale FOREIGN KEY (succursale_id) REFERENCES succursales(succursale_id) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 7. UNITÉS DE MESURE DISPONIBLES POUR CHAQUE ENTREPRISE
+CREATE TABLE IF NOT EXISTS unites_mesure (
+    unite_mesure_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    symbole VARCHAR(15) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_unite_entreprise_name (entreprise_id, name),
+    CONSTRAINT fk_unite_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 8. PRODUITS
+CREATE TABLE IF NOT EXISTS produits (
+    produit_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    category_id INT NULL,
+    fournisseur_id INT NULL,
+    sku VARCHAR(50) NOT NULL COMMENT 'Code barre unique',
+    name VARCHAR(150) NOT NULL,
+    description TEXT,
+    unit_price DECIMAL(15,2) NOT NULL DEFAULT 0 COMMENT 'Prix de vente',
+    cost_price DECIMAL(15,2) NOT NULL DEFAULT 0 COMMENT 'Prix d achat',
+    monais VARCHAR(10) NOT NULL COMMENT 'Monnaie du prix, définie par le super administrateur',
+    unite_de_mesure INT NULL,
+    est_perisable TINYINT(1) NOT NULL DEFAULT 0,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_produit_sku (entreprise_id, sku),
+    CONSTRAINT fk_produit_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_produit_category FOREIGN KEY (category_id) REFERENCES categories(category_id) ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT fk_produit_fournisseur FOREIGN KEY (fournisseur_id) REFERENCES fournisseurs(fournisseur_id) ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT fk_produit_unite FOREIGN KEY (unite_de_mesure) REFERENCES unites_mesure(unite_mesure_id) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 8. STOCKS (Le coeur du système - 1 ligne = 1 produit dans 1 succursale)
+CREATE TABLE IF NOT EXISTS stocks (
+    stock_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    succursale_id INT NOT NULL,
+    produit_id INT NOT NULL,
+    quantity INT NOT NULL DEFAULT 0,
+    min_stock_level INT NOT NULL DEFAULT 5 COMMENT 'Alerte si stock < a ce niveau',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_stock (entreprise_id, succursale_id, produit_id),
+    CONSTRAINT fk_stock_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_stock_succursale FOREIGN KEY (succursale_id) REFERENCES succursales(succursale_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_stock_produit FOREIGN KEY (produit_id) REFERENCES produits(produit_id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- Historique utilisé pour les fiches de stock et les justificatifs de mouvement.
+CREATE TABLE IF NOT EXISTS mouvements_stock (
+    mouvement_stock_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    succursale_id INT NOT NULL,
+    produit_id INT NOT NULL,
+    user_id INT NULL,
+    movement_type ENUM('ENTREE','SORTIE','AJUSTEMENT') NOT NULL,
+    quantity_before INT NOT NULL,
+    quantity_moved INT NOT NULL DEFAULT 0,
+    quantity_after INT NOT NULL,
+    reference_type VARCHAR(30) NOT NULL,
+    reference_id INT NULL,
+    note VARCHAR(255) NULL,
+    movement_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_mouvement_stock_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_mouvement_stock_succursale FOREIGN KEY (succursale_id) REFERENCES succursales(succursale_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_mouvement_stock_produit FOREIGN KEY (produit_id) REFERENCES produits(produit_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_mouvement_stock_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE,
+    INDEX idx_mouvement_stock_ledger (entreprise_id, succursale_id, produit_id, movement_date)
+) ENGINE=InnoDB;
+
+-- 9. CLIENTS
+CREATE TABLE IF NOT EXISTS clients (
+    client_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100),
+    phone VARCHAR(20),
+    address TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_client_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 10. TYPES DE CAISSES (CDF, USD...)
+CREATE TABLE IF NOT EXISTS types_caisses (
+    type_caisse_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    code VARCHAR(10) NOT NULL COMMENT 'USD, CDF',
+    name VARCHAR(50) NOT NULL,
+    symbole VARCHAR(10) NOT NULL COMMENT '$, FC',
+    description VARCHAR(255),
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_type_caisse_code (entreprise_id, code),
+    CONSTRAINT fk_type_caisse_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 11. CAISSES (Session d'ouverture/fermeture)
+CREATE TABLE IF NOT EXISTS caisses (
+    caisse_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    succursale_id INT NOT NULL,
+    type_caisse_id INT NOT NULL,
+    user_id INT NOT NULL COMMENT 'Caissier qui a ouvert',
+    name VARCHAR(100) NOT NULL,
+    date_ouverture DATETIME DEFAULT CURRENT_TIMESTAMP,
+    date_fermeture DATETIME NULL,
+    solde_ouverture DECIMAL(15,2) NOT NULL DEFAULT 0,
+    montant DECIMAL(15,2) NOT NULL DEFAULT 0 COMMENT 'Solde courant réel de la caisse',
+    solde_fermeture DECIMAL(15,2) NOT NULL DEFAULT 0,
+    statut ENUM('OUVERTE','FERMEE') NOT NULL DEFAULT 'OUVERTE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_caisse_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_caisse_succursale FOREIGN KEY (succursale_id) REFERENCES succursales(succursale_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_caisse_type FOREIGN KEY (type_caisse_id) REFERENCES types_caisses(type_caisse_id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT fk_caisse_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 12. VENTES (En-tête de facture)
+CREATE TABLE IF NOT EXISTS ventes (
+    vente_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    succursale_id INT NOT NULL,
+    caisse_id INT NULL,
+    user_id INT NOT NULL,
+    client_id INT NULL,
+    invoice_no VARCHAR(50) NOT NULL COMMENT 'Ex: FACT-2026-0001',
+    sale_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    total_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+    amount_paid DECIMAL(15,2) NOT NULL DEFAULT 0,
+    status ENUM('PENDING','PAID','PARTIAL','CANCELLED') NOT NULL DEFAULT 'PAID',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_invoice (entreprise_id, invoice_no),
+    CONSTRAINT fk_vente_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_vente_succursale FOREIGN KEY (succursale_id) REFERENCES succursales(succursale_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_vente_caisse FOREIGN KEY (caisse_id) REFERENCES caisses(caisse_id) ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT fk_vente_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT fk_vente_client FOREIGN KEY (client_id) REFERENCES clients(client_id) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 13. DETAILS VENTES (Lignes de la facture)
+CREATE TABLE IF NOT EXISTS vente_details (
+    vente_detail_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    vente_id INT NOT NULL,
+    produit_id INT NOT NULL,
+    quantity INT NOT NULL,
+    unit_price DECIMAL(15,2) NOT NULL,
+    subtotal DECIMAL(15,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_vente_detail_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_vente_detail_vente FOREIGN KEY (vente_id) REFERENCES ventes(vente_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_vente_detail_produit FOREIGN KEY (produit_id) REFERENCES produits(produit_id) ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 14. ACHATS (Approvisionnement)
+CREATE TABLE IF NOT EXISTS achats (
+    achat_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    succursale_id INT NOT NULL,
+    fournisseur_id INT NULL,
+    user_id INT NOT NULL,
+    purchase_no VARCHAR(50) NOT NULL,
+    purchase_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    total_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+    movement_type ENUM('IN','OUT') NOT NULL DEFAULT 'IN',
+    motif_sortie VARCHAR(255) NULL,
+    status ENUM('PENDING','RECEIVED','CANCELLED') NOT NULL DEFAULT 'RECEIVED',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_purchase_no (entreprise_id, purchase_no),
+    CONSTRAINT fk_achat_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_achat_succursale FOREIGN KEY (succursale_id) REFERENCES succursales(succursale_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_achat_fournisseur FOREIGN KEY (fournisseur_id) REFERENCES fournisseurs(fournisseur_id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT fk_achat_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 15. MOUVEMENTS DE CAISSE (Toutes les entrées/sorties d'argent)
+CREATE TABLE IF NOT EXISTS mouvements_caisse (
+    mouvement_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    caisse_id INT NOT NULL,
+    user_id INT NOT NULL,
+    type ENUM('ENTREE','SORTIE') NOT NULL,
+    amount DECIMAL(15,2) NOT NULL,
+    reason VARCHAR(150) COMMENT 'Vente, Retrait, Depense...',
+    reference_id INT NULL,
+    movement_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_mouvement_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_mouvement_caisse FOREIGN KEY (caisse_id) REFERENCES caisses(caisse_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_mouvement_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+-- 16. TRANSFERTS DE STOCK (Goma -> Bukavu)
+CREATE TABLE IF NOT EXISTS transferts_stock (
+    transfert_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    produit_id INT NOT NULL,
+    succursale_from_id INT NOT NULL COMMENT 'Source',
+    succursale_to_id INT NOT NULL COMMENT 'Destination',
+    quantity INT NOT NULL,
+    transfer_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) DEFAULT 'COMPLETED',
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_transfert_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_transfert_produit FOREIGN KEY (produit_id) REFERENCES produits(produit_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_transfert_from FOREIGN KEY (succursale_from_id) REFERENCES succursales(succursale_id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT fk_transfert_to FOREIGN KEY (succursale_to_id) REFERENCES succursales(succursale_id) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+
+
+CREATE TABLE IF NOT EXISTS super_admins (
+    super_admin_id INT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+-- 17. DÉTAILS DES APPROVISIONNEMENTS
+CREATE TABLE IF NOT EXISTS achat_details (
+    achat_detail_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    achat_id INT NOT NULL,
+    produit_id INT NOT NULL,
+    quantity INT NOT NULL,
+    date_expiration DATE NULL,
+    quantity_out INT NOT NULL DEFAULT 0,
+    unit_cost DECIMAL(15,2) NOT NULL DEFAULT 0,
+    subtotal DECIMAL(15,2) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_achat_detail_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE,
+    CONSTRAINT fk_achat_detail_achat FOREIGN KEY (achat_id) REFERENCES achats(achat_id) ON DELETE CASCADE,
+    CONSTRAINT fk_achat_detail_produit FOREIGN KEY (produit_id) REFERENCES produits(produit_id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS achat_detail_sorties (
+    sortie_id INT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    sortie_detail_id INT NOT NULL,
+    lot_detail_id INT NOT NULL,
+    quantity INT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_sortie_lot (entreprise_id, lot_detail_id),
+    CONSTRAINT fk_sortie_detail_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE,
+    CONSTRAINT fk_sortie_detail_achat_detail FOREIGN KEY (sortie_detail_id) REFERENCES achat_details(achat_detail_id) ON DELETE CASCADE,
+    CONSTRAINT fk_sortie_detail_lot FOREIGN KEY (lot_detail_id) REFERENCES achat_details(achat_detail_id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS tb_monais (
+    type_monais VARCHAR(20) PRIMARY KEY,
+    description VARCHAR(10) NULL
+) ENGINE=InnoDB;

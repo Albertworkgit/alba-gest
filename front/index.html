@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ALBA-STOCK | Pilotage intelligent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="stock-navigation.css">
+  <link rel="stylesheet" href="reports.css">
+  <link rel="stylesheet" href="crud-actions.css">
+  <style>
+    .app-footer{display:flex;justify-content:center;align-items:center;gap:6px;color:#95a09b;font-size:11px;padding:30px 0 5px}
+    .app-footer strong{color:#147c70;font-weight:700}
+    .app-footer span{border-left:1px solid #e6ebe7;padding-left:6px}
+    .entity-modal{position:fixed;inset:0;z-index:30;background:#183b3566;display:grid;place-items:center;padding:18px}.entity-dialog{width:min(620px,100%);max-height:90vh;overflow:auto;background:#fff;color:#1d2926;border-radius:10px;padding:24px;box-shadow:0 25px 70px #0004}.entity-dialog h2{font:600 20px 'Space Grotesk';margin:0 0 5px}.entity-dialog p{color:#73807b;font-size:12px;margin:0 0 18px}.entity-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}.entity-form label{display:flex;flex-direction:column;gap:6px;color:#73807b;font-size:11px;font-weight:700}.entity-form input,.entity-form select,.entity-form textarea{padding:10px;border:1px solid #e6ebe7;border-radius:6px;font:inherit;color:#1d2926}.entity-form textarea,.entity-form .full{grid-column:1/-1}.entity-form textarea{min-height:75px}.entity-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.entity-modal-actions button{padding:10px 13px;border-radius:6px;font-weight:700}.modal-cancel{background:#eef2ef;color:#51615b}.modal-submit{background:#147c70;color:#fff}.dark-theme .entity-dialog{background:#263633;color:#e5eeea}.dark-theme .entity-form input,.dark-theme .entity-form select,.dark-theme .entity-form textarea{background:#202e2b;color:#e5eeea;border-color:#354742}@media(max-width:560px){.entity-form{grid-template-columns:1fr}.entity-form textarea,.entity-form .full{grid-column:auto}}
+    .brand-copy{display:flex;flex-direction:column;line-height:1.05}.brand-copy small{color:#9fc1b9;font:500 8px 'DM Sans',sans-serif;letter-spacing:.2px;margin-top:5px;white-space:nowrap}
+    .theme-control{position:relative}.theme-button{display:flex;align-items:center;gap:6px;width:auto;color:#5d6b65;font-size:12px;background:transparent;padding:6px 8px;border-radius:6px}.theme-button:hover{background:#edf2ef}.theme-panel{position:absolute;right:0;top:39px;z-index:10;width:184px;background:#fff;border:1px solid #e6ebe7;border-radius:8px;padding:8px;box-shadow:0 12px 28px #183b3520;display:none}.theme-panel.open{display:block}.theme-panel p{margin:3px 8px 7px;color:#73807b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px}.theme-option{display:block;width:100%;padding:9px 8px;text-align:left;color:#1d2926;background:transparent;border-radius:5px;font-size:12px}.theme-option:hover,.theme-option.selected{background:#e5f2ed;color:#147c70;font-weight:700}.theme-option span{display:inline-block;width:20px}.dark-theme .topbar{background:#202b29}.dark-theme .theme-button{color:#c6d4cf}.dark-theme .theme-button:hover{background:#2b3a36}.dark-theme .theme-panel{background:#263633;border-color:#3a4b46;box-shadow:0 12px 28px #0005}.dark-theme .theme-panel p{color:#9db2aa}.dark-theme .theme-option{color:#dce8e3}.dark-theme .theme-option:hover,.dark-theme .theme-option.selected{background:#34554c;color:#fff}.dark-theme .app-footer{color:#91aaa1}.dark-theme .app-footer span{border-color:#3a4b46}
+    .cash-actions{display:flex;gap:8px;flex-wrap:wrap}.cash-actions button{padding:8px 12px;border-radius:6px;font-size:11px;font-weight:700}.cash-open{background:#dcefe8;color:#147c70}.cash-close{background:#fde8e4;color:#bb5149}.cash-create{background:#147c70;color:#fff}.dark-theme{--ink:#e5eeea;--muted:#9db2aa;--line:#354742;--surface:#263633;--canvas:#182321}.dark-theme body{background:var(--canvas);color:var(--ink)}.dark-theme .main-content{background:var(--canvas)}.dark-theme .breadcrumbs{color:#91aaa1}.dark-theme .breadcrumbs strong{color:#e5eeea}.dark-theme .panel,.dark-theme .stat-card{box-shadow:none}.dark-theme .search-field,.dark-theme .select-field,.dark-theme .form-field input,.dark-theme .form-field select,.dark-theme .form-field textarea{background:#202e2b;color:var(--ink);border-color:var(--line)}.dark-theme .data-table td{border-color:var(--line)}.dark-theme .data-table th{color:#91aaa1}.dark-theme .progress{background:#354742}.dark-theme .chart-area{background:linear-gradient(to bottom,transparent 24%,#354742 25%,transparent 26%,transparent 49%,#354742 50%,transparent 51%,transparent 74%,#354742 75%,transparent 76%)}.dark-theme .text-button{color:#72c8b4}.dark-theme .page-heading h1 em{color:#72c8b4}.dark-theme .support-card{background:#244d45}
+    @media(max-width:720px){.brand{font-size:18px;gap:7px;padding-left:8px;padding-right:8px}.brand-mark{width:27px;height:27px;font-size:15px}.brand-copy small{font-size:7px;margin-top:4px}.top-actions{gap:5px}.theme-button{padding:6px;width:32px;justify-content:center}.theme-button span{display:none}.theme-panel{right:-5px}.top-avatar{width:29px;height:29px}.breadcrumbs span{display:none}.breadcrumbs{font-size:11px}.page-heading h1{max-width:100%;overflow-wrap:anywhere}}
+    @media(max-width:720px){.sidebar{overflow-y:auto;overscroll-behavior:contain;padding-bottom:24px}.sidebar-bottom{margin-top:28px}.nav-list{padding-bottom:4px}.support-card{margin-top:8px}}
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><span class="brand-mark">A</span><span class="brand-copy"><span>ALBA-STOCK<span class="brand-dot">.</span></span><small data-enterprise-name>Gestion de stock</small></span></div>
+      <p class="eyebrow nav-section" data-nav-section hidden>Espace de travail</p>
+      <nav class="nav-list" aria-label="Navigation principale">
+        <button class="nav-item active" data-view="dashboard" data-access="voir_stock|voir_ventes|voir_approvisionnements|voir_caisse" hidden><span class="nav-icon">⌂</span>Vue d'ensemble</button>
+        <button class="nav-item" data-view="stock" data-access="voir_stock" hidden><span class="nav-icon">▦</span>Stock</button>
+        <button class="nav-item" data-view="procurement" data-access="voir_approvisionnements" hidden><span class="nav-icon">⇅</span>Approvisionnements</button>
+        <button class="nav-item" data-view="sales" data-access="voir_ventes" hidden><span class="nav-icon">↗</span>Ventes</button>
+        <button class="nav-item" data-view="cash" data-access="voir_caisse" hidden><span class="nav-icon">▣</span>Caisse</button>
+        <button class="nav-item" data-view="accounting" data-access="voir_ventes|voir_approvisionnements|voir_comptabilite" hidden><span class="nav-icon">◫</span>Comptabilité</button>
+        <p class="eyebrow nav-section" data-nav-section hidden>Administration</p>
+        <button class="nav-item" data-view="branches" data-access="voir_succursales" hidden><span class="nav-icon">⌂</span>Succursales</button>
+        <button class="nav-item" data-view="clients" data-access="voir_clients" hidden><span class="nav-icon">♙</span>Clients</button>
+        <button class="nav-item" data-view="client-order" data-access="*" hidden><span class="nav-icon">＋</span>Portail client</button>
+        <button class="nav-item" data-view="users" data-access="gerer_utilisateurs|gerer_roles" hidden><span class="nav-icon">♙</span>Utilisateurs & rôles</button>
+        <p class="eyebrow nav-section" data-nav-section hidden>Espace succursale</p>
+        <button class="nav-item" data-view="requests" data-access="*" hidden><span class="nav-icon">✉</span>Demandes reçues <b class="nav-badge">3</b></button>
+        <button class="nav-item" data-view="branch-dashboard" data-access="voir_stock" hidden><span class="nav-icon">▣</span>Vue de la succursale</button>
+        <button class="nav-item" data-view="settings" data-access="session" hidden><span class="nav-icon">⚙</span>Mon profil</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="support-card"><span class="support-icon">?</span><div><strong>Besoin d'aide ?</strong><small>Centre de support</small></div><span>→</span></div>
+        <button class="profile-switch"><span class="avatar" data-session-avatar>--</span><span class="profile-copy"><strong data-session-name>Chargement…</strong><small data-session-role>Session</small><small data-session-enterprise>Entreprise</small><small data-session-branch>Succursale</small></span><span>⌄</span></button>
+        <button type="button" class="logout-button" data-logout><span aria-hidden="true">↪</span> Se déconnecter</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobile-menu" aria-label="Ouvrir le menu">☰</button>
+        <div class="breadcrumbs"><span class="workspace-identity"><strong data-context-company>Chargement…</strong><b>/</b><strong data-context-branch>Chargement…</strong></span><b>/</b><strong id="breadcrumb-label">Vue d'ensemble</strong></div>
+        <label class="company-scope" id="company-scope-control" hidden><span>Périmètre</span><select id="company-scope"><option value="">Toute l’entreprise</option></select></label>
+        <div class="top-actions"><button class="icon-button" aria-label="Rechercher">⌕</button><button class="icon-button notification" aria-label="Notifications">♢<i></i></button><div class="theme-control"><button class="theme-button" id="theme-button" aria-expanded="false" aria-controls="theme-panel">◐ <span>Thème</span></button><div class="theme-panel" id="theme-panel"><p>Apparence</p><button class="theme-option" data-theme-choice="light"><span>☀</span>Mode clair</button><button class="theme-option" data-theme-choice="dark"><span>☾</span>Mode sombre</button><button class="theme-option" data-theme-choice="auto"><span>◌</span>Automatique</button></div></div><div class="top-avatar" data-session-avatar>--</div></div>
+      </header>
+
+      <div class="page-content">
+        <section class="page-heading"><div><p class="kicker" id="page-kicker">TABLEAU DE BORD</p><h1 id="page-title">Chargement de votre espace…</h1><p class="muted" id="page-description">Récupération des informations de votre compte.</p></div><button class="primary-button" id="primary-action" hidden></button></section>
+        <div id="view-container"></div>
+        <footer class="app-footer">Tous droits réservés © 2026</footer>
+      </div>
+    </main>
+  </div>
+  <div class="toast" id="toast">Action enregistrée</div>
+  <script src="app.js?v=20260930-sale-payment-fix"></script>
+</body>
+</html>
