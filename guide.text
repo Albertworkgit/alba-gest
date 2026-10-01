@@ -1,0 +1,229 @@
+ALBA-STOCK - GUIDE D'UTILISATION
+================================
+
+Version du guide : 1 octobre 2026
+Application : ALBA-STOCK, gestion de stock, ventes, caisse et comptabilite
+
+
+1. PRESENTATION
+---------------
+
+ALBA-STOCK est une application web multi-entreprise. Chaque entreprise gere ses
+succursales, utilisateurs, articles, niveaux de stock, approvisionnements,
+ventes, paiements, caisses et ecritures comptables. Les acces aux modules et aux
+succursales dependent des droits du compte connecte.
+
+L'application est composee d'une interface web JavaScript, d'une API PHP et
+d'une base de donnees MySQL. Les fichiers de l'interface sont dans front/,
+l'API et les services dans backend/, et les migrations SQL dans
+backend/database/.
+
+
+2. DEMARRAGE ET CONNEXION
+-------------------------
+
+En environnement local XAMPP :
+
+1. Demarrer Apache et MySQL depuis le panneau XAMPP.
+2. Verifier que la base configuree est accessible.
+3. Ouvrir http://localhost/westock/front/login.html.
+4. Se connecter avec son adresse electronique ou son nom d'utilisateur et son
+   mot de passe.
+
+Par defaut, la connexion MySQL de backend/Core/Database.php utilise l'hote
+127.0.0.1, la base bd_stock_multitenant, l'utilisateur root et un mot de passe
+vide. Les variables d'environnement DB_HOST, DB_NAME, DB_USER et DB_PASSWORD
+peuvent remplacer ces valeurs. Ne pas conserver les identifiants par defaut
+dans un environnement expose ou de production.
+
+Les migrations de backend/database/ doivent etre appliquees dans l'ordre sur
+une base initialisee. La migration 025 cree les tables de comptabilite et la
+migration 029 ajoute caisses.montant, qui stocke le solde courant de chaque
+caisse.
+
+Une entreprise qui s'inscrit reste inactive jusqu'a son approbation par un
+super administrateur. Son premier utilisateur et sa succursale principale sont
+egalement crees lors de l'inscription. L'entreprise doit ensuite recevoir ses
+modules avant que ses utilisateurs puissent acceder a l'application.
+
+
+3. ESPACE ENTREPRISE
+--------------------
+
+Tableau de bord
+  Presente les indicateurs disponibles selon les droits de l'utilisateur :
+  produits actifs, quantites en stock, alertes sous les seuils, ventes et
+  certains avertissements de peremption. Le contenu depend des donnees et des
+  modules autorises.
+
+Stock
+  - Consulter les produits actifs, leurs references, prix, monnaie, categorie,
+    unite, seuil minimal et quantite par succursale.
+  - Rechercher et filtrer le catalogue.
+  - Creer ou modifier des produits et des categories selon les permissions.
+  - Gerer les unites de mesure; leur administration est reservee a
+    l'administrateur de l'entreprise.
+  - Ajuster une quantite en l'augmentant, en la diminuant ou en la definissant.
+    Une quantite ne peut pas devenir negative; l'ajustement est inscrit dans
+    l'historique des mouvements de stock.
+  - Consulter les fiches de stock et les alertes de produits perissables.
+
+Approvisionnements
+  - Enregistrer une entree de stock fournisseur ou une sortie de stock avec un
+    motif.
+  - Choisir une succursale, un produit, une quantite, une reference, un
+    fournisseur eventuel et un cout d'achat.
+  - Pour une entree, utiliser le cout du produit ou saisir un cout specifique.
+    Le cout et le total sont exprimes dans la monnaie du produit.
+  - Pour les produits perissables, une date d'expiration valide est requise a
+    l'entree. Les lots sont suivis separement.
+  - Un approvisionnement en attente ne change pas encore le stock. Sa validation
+    applique le mouvement; une sortie est refusee si le stock disponible est
+    insuffisant.
+  - Une sortie de produit perissable est affectee aux lots selon leur date
+    d'expiration, en premier les lots qui expirent le plus tot.
+  - L'annulation d'un approvisionnement valide est soumise a une limite de
+    48 heures et peut etre refusee si le stock correspondant a deja ete
+    consomme.
+  - Les bons d'approvisionnement et rapports de mouvements peuvent etre
+    consultes ou imprimes.
+
+Ventes
+  - Creer une facture avec plusieurs produits et quantites; le client est
+    facultatif et un client comptoir peut etre utilise.
+  - Les lignes de vente peuvent inclure une remise. Les produits perissables
+    sont consommes depuis les lots encore valides.
+  - Une facture peut contenir plusieurs monnaies si les produits ont des
+    monnaies differentes.
+  - La creation de la vente reserve/diminue le stock et cree une vente a payer.
+    Son statut passe a partiellement paye ou paye selon les reglements recus.
+  - Encaisser un paiement depuis une caisse ouverte de la bonne succursale, de
+    la bonne monnaie et du bon mode de paiement. Une reference est requise pour
+    les paiements externes concernes.
+  - Consulter, imprimer une facture ou un recu, enregistrer un paiement
+    supplementaire et consulter les paiements.
+  - L'annulation d'une vente payee est soumise a une limite de 48 heures et
+    genere les regularisations necessaires, dont le remboursement et la remise
+    en stock.
+
+Caisse
+  - Ouvrir une caisse pour une succursale, une monnaie et un mode de paiement;
+    un compte bancaire peut etre associe au mode Banque.
+  - Le solde initial est enregistre a l'ouverture.
+  - Consulter le solde courant stocke directement dans caisses.montant.
+    L'application ne doit pas recalculer ce solde en additionnant l'historique
+    des mouvements.
+  - Enregistrer une entree ou une sortie manuelle avec un motif. Une sortie ne
+    peut pas depasser le montant disponible.
+  - Les paiements de vente augmentent le montant de la caisse; les paiements
+    fournisseurs et remboursements le diminuent. Les mouvements restent
+    conserves comme historique et justificatifs.
+  - Consulter le journal, les paiements par banque ou Mobile Money et les
+    totaux historiques d'entrees/sorties.
+  - Cloturer une caisse en saisissant le montant compte. La cloture enregistre
+    ce montant comme solde de cloture et solde persistant. Une caisse ayant des
+    ventes en attente ne peut pas etre cloturee.
+  - Une caisse cloturee ne peut etre supprimee si elle est referencee par des
+    operations ou paiements. Une nouvelle ouverture cree une nouvelle session
+    de caisse; le resume courant ne compte que les caisses ouvertes.
+
+Comptabilite SYSCOHADA
+  - Creer des comptes avec code, intitule, classe 1 a 9, nature debit/credit et
+    compte parent eventuel.
+  - Saisir une ecriture avec date, journal, reference, libelle, monnaie et au
+    moins deux lignes. Chaque ligne porte un montant au debit OU au credit,
+    jamais les deux. Le total des debits doit etre egal au total des credits.
+  - Consulter le journal comptable, le plan comptable et les ecritures par
+    periode et monnaie.
+  - Generer les sept etats disponibles : journal, grand livre, balance
+    generale, bilan, compte de resultat, tableau de flux de tresorerie et
+    annexes. Le grand livre necessite la selection d'un compte.
+  - Les etats sont produits a partir des ecritures comptables validees.
+  - Important : la migration cree les tables comptables, mais ne precharge pas
+    de plan comptable. Les comptes doivent etre crees avant de saisir une
+    ecriture. Les ventes, achats et mouvements de caisse ne sont pas
+    automatiquement transformes en ecritures comptables dans l'implementation
+    actuelle; leur comptabilisation doit etre saisie dans ce module.
+
+Administration de l'entreprise
+  - Succursales : consulter, creer et gerer les points de vente selon les
+    permissions. Une succursale principale peut etre definie.
+  - Clients : consulter les clients enregistres; la creation d'un client depuis
+    le parcours de vente peut etre disponible si le role y est autorise.
+  - Utilisateurs et roles : creer, modifier ou desactiver des utilisateurs et
+    configurer des roles et permissions. Les modules autorises pour
+    l'entreprise limitent aussi les droits effectifs.
+  - Parametres : mettre a jour le profil personnel et le mot de passe. Un
+    administrateur d'entreprise peut aussi modifier les coordonnees de
+    l'entreprise et ses images de logo/cachet si ces champs sont disponibles.
+
+Rapports et apparence
+  Les vues qui le permettent proposent des filtres par date et recherche, un
+  apercu, l'impression et des options d'export. Les donnees visibles restent
+  limitees aux permissions et au perimetre de succursale de l'utilisateur.
+  Le menu Apparence propose les themes clair, sombre et automatique.
+
+
+4. SUPER ADMINISTRATION
+-----------------------
+
+La connexion super administrateur utilise l'ecran superadmin-login.html et un
+compte de la table super_admins. Cet espace est distinct des comptes
+d'entreprise.
+
+Le super administrateur peut :
+  - consulter les entreprises inscrites et les activer ou les desactiver;
+  - supprimer une entreprise selon les regles de la plateforme;
+  - autoriser ou retirer les modules par entreprise : stock,
+    approvisionnements, ventes, caisse, comptabilite, utilisateurs, rapports,
+    administration;
+  - administrer les monnaies globales utilisables dans l'application;
+  - modifier son profil et son mot de passe.
+
+
+5. DROITS, PERIMETRE ET DONNEES
+-------------------------------
+
+Les permissions sont verifiees par l'API, pas seulement par l'affichage des
+boutons. Les permissions principales commencent par voir_, creer_, modifier_
+ou supprimer_. Les administrateurs initiaux disposent de droits etendus; les
+autres roles doivent recevoir explicitement les permissions necessaires.
+
+Un utilisateur rattache a une succursale est normalement limite a celle-ci.
+Un role autorise a toutes les succursales peut selectionner le perimetre
+disponible. Les donnees restent cloisonnees par entreprise.
+
+Les monnaies sont configurees globalement par le super administrateur. Elles
+sont utilisees sur les produits, ventes, achats, caisses et ecritures; les
+totaux de monnaies differentes doivent etre lus separement.
+
+
+6. ECRANS NON IMPLEMENTES OU LIMITES CONNUES
+--------------------------------------------
+
+- Les pages "Demandes recues" et "Portail client" indiquent que les demandes
+  et commandes clients ne sont pas gerees par le schema actuel.
+- Le module comptable ne cree pas automatiquement d'ecritures a partir des
+  operations de vente, achat ou caisse.
+- Le plan comptable n'est pas pre-rempli par la migration; il faut creer les
+  comptes de l'entreprise.
+- Les fonctions disponibles dans chaque compte dependent a la fois des droits
+  du role et des modules actives pour l'entreprise.
+- Certaines annulations sont limitees dans le temps ou dependantes de l'etat du
+  stock; un message de validation peut donc empecher une action demandee.
+
+
+7. EN CAS DE PROBLEME
+---------------------
+
+1. Verifier que le compte est actif et que l'entreprise a ete approuvee.
+2. Verifier que le super administrateur a autorise le module concerne.
+3. Verifier les permissions du role et le perimetre de succursale.
+4. Pour une vente ou un paiement, verifier le stock, le statut du document, la
+   monnaie, le mode et l'etat de la caisse.
+5. Pour une ecriture, verifier qu'il existe des comptes actifs, qu'une ligne
+   n'a qu'un seul cote renseigne et que debits et credits s'equilibrent.
+6. Pour une erreur de base, verifier la connexion MySQL et que les migrations
+   necessaires ont ete appliquees dans l'ordre.
+
+Fin du guide.

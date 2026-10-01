@@ -95,6 +95,12 @@ function renderView(viewName) {
   container.innerHTML = view.html;
   if (viewName === 'stock') configureStockWorkspace();
   configureReportToolbar(viewName);
+  if (viewName === 'accounting') {
+    const entryButton = container.querySelector('[data-account-entry-open]');
+    const accountButton = container.querySelector('[data-account-create-open]');
+    if (entryButton) entryButton.hidden = !hasAccess('creer_comptabilite');
+    if (accountButton) accountButton.hidden = !hasAccess('modifier_comptabilite');
+  }
   const categoryButton = container.querySelector('[data-create-category]');
   if (categoryButton) categoryButton.hidden = !hasAccess('creer_produit');
   const categoryManagementButton = container.querySelector('[data-toggle-categories]');
@@ -841,15 +847,11 @@ async function loadDashboardData() {
   document.getElementById('dash-sales').textContent = salesResult.status === 'fulfilled' ? salesResult.value.length : '—';
 }
 async function loadAccountingData() {
-  const salesTarget = document.getElementById('accounting-sales'); if (!salesTarget) return;
+  if (!document.getElementById('accounting-report-type')) return;
   setAccountingDateDefaults();
   await populateAccountingCurrencies();
   await loadAccountingAccounts();
-  const [sales, purchases] = await Promise.allSettled([apiGet('ventes'), apiGet('achats')]);
-  salesTarget.textContent = sales.status === 'fulfilled' ? currencyTotalsLabel(sales.value) : '—';
-  document.getElementById('accounting-purchases').textContent = purchases.status === 'fulfilled' ? currencyTotalsLabel(purchases.value) : '—';
-  const debtRows=document.getElementById('supplier-debt-rows');
-  if(debtRows){try{const debts=await fetchReportData('supplier-debts');debtRows.innerHTML=debts.length?debts.map(debt=>{const due=Math.max(0,Number(debt.total_amount)-Number(debt.amount_paid));return `<tr><td>${escapeHtml(debt.purchase_no)}</td><td>${escapeHtml(debt.supplier_name)}</td><td>${escapeHtml(debt.branch_name)}</td><td>${escapeHtml(dateLabel(debt.purchase_date))}</td><td>${moneyCurrencyLabel(debt.total_amount,debt.monais)}</td><td>${moneyCurrencyLabel(debt.amount_paid,debt.monais)}</td><td><strong>${moneyCurrencyLabel(due,debt.monais)}</strong></td><td><button type="button" class="icon-action-button" title="Payer le fournisseur" aria-label="Payer le fournisseur" data-supplier-payment="${Number(debt.achat_id)}" data-supplier-due="${due}" data-supplier-currency="${escapeHtml(debt.monais||'')}" data-supplier-branch="${Number(debt.succursale_id)}" data-supplier-ref="${escapeHtml(debt.purchase_no)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16v13H4zM7 4h10v3M4 11h16m-12 4h4"/></svg></button></td></tr>`;}).join(''):'<tr><td colspan="8">Aucune dette fournisseur en cours.</td></tr>';}catch(error){debtRows.innerHTML=`<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;}}
+  await loadAccountingEntryRows();
 }
 function setAccountingDateDefaults() {
   const fromInput = document.getElementById('accounting-from');
@@ -858,12 +860,16 @@ function setAccountingDateDefaults() {
   if (!fromInput.value) {
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - 30);
-    fromInput.value = fromDate.toISOString().slice(0, 10);
+    fromInput.value = localDateInputValue(fromDate);
   }
   if (!toInput.value) {
     const toDate = new Date();
-    toInput.value = toDate.toISOString().slice(0, 10);
+    toInput.value = localDateInputValue(toDate);
   }
+}
+function localDateInputValue(date) {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 10);
 }
 async function populateAccountingCurrencies() {
   const currencySelect = document.getElementById('accounting-currency');
@@ -884,19 +890,41 @@ async function populateAccountingCurrencies() {
 }
 async function loadAccountingAccounts() {
   const accountSelect = document.getElementById('accounting-account');
-  if (!accountSelect) return;
+  const accountRows = document.getElementById('accounting-account-rows');
+  if (!accountSelect && !accountRows) return;
   try {
     const accounts = await fetchReportData('accounting-accounts');
-    accountSelect.innerHTML = '<option value="">Sélectionner un compte</option>' + accounts.map(account => `<option value="${Number(account.compte_id)}">${escapeHtml(account.code)} — ${escapeHtml(account.intitule)}</option>`).join('');
+    if (accountSelect) accountSelect.innerHTML = '<option value="">Sélectionner un compte</option>' + accounts.map(account => `<option value="${Number(account.compte_id)}">${escapeHtml(account.code)} — ${escapeHtml(account.intitule)}</option>`).join('');
+    if (accountRows) accountRows.innerHTML = accounts.length ? accounts.map(account => `<tr><td>${escapeHtml(account.code)}</td><td>${escapeHtml(account.intitule)}</td><td>${Number(account.classe)}</td><td>${escapeHtml(account.nature)}</td><td>${escapeHtml(account.parent_code ? `${account.parent_code} — ${account.parent_intitule}` : '—')}</td><td>${Number(account.is_active) ? 'Actif' : 'Inactif'}</td><td>${Number(account.is_system) ? 'Système' : '—'}</td></tr>`).join('') : '<tr><td colspan="7">Aucun compte comptable. Créez d’abord les comptes nécessaires aux écritures.</td></tr>';
     const reportType = document.getElementById('accounting-report-type')?.value;
     const showAccountFilter = reportType === 'grand-livre';
     const filterWrapper = document.getElementById('accounting-account-filter');
     if (filterWrapper) filterWrapper.hidden = !showAccountFilter;
-    accountSelect.disabled = !showAccountFilter;
+    if (accountSelect) accountSelect.disabled = !showAccountFilter;
   } catch (error) {
-    accountSelect.innerHTML = '<option value="">Compte inaccessible</option>';
-    accountSelect.disabled = true;
+    if (accountSelect) {
+      accountSelect.innerHTML = '<option value="">Compte inaccessible</option>';
+      accountSelect.disabled = true;
+    }
+    if (accountRows) accountRows.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`;
     showToast(error.message);
+  }
+}
+async function loadAccountingEntryRows() {
+  const rowsTarget = document.getElementById('accounting-entry-rows');
+  if (!rowsTarget) return;
+  const from = document.getElementById('accounting-from')?.value;
+  const to = document.getElementById('accounting-to')?.value;
+  const currency = document.getElementById('accounting-currency')?.value;
+  if (!from || !to || !currency) {
+    rowsTarget.innerHTML = '<tr><td colspan="7">Choisissez une période et une monnaie pour afficher le journal.</td></tr>';
+    return;
+  }
+  try {
+    const entries = await fetchReportData('accounting-entries', {date_debut: from, date_fin: to, monnaie: currency});
+    rowsTarget.innerHTML = entries.length ? entries.map(entry => `<tr><td>${escapeHtml(dateLabel(entry.date_ecriture))}</td><td>${escapeHtml(entry.journal_code)}</td><td>${escapeHtml(entry.reference)}</td><td>${escapeHtml(entry.libelle)}</td><td>${Number(entry.line_count)}</td><td>${moneyCurrencyLabel(entry.debit_total, entry.monnaie)}</td><td>${moneyCurrencyLabel(entry.credit_total, entry.monnaie)}</td></tr>`).join('') : '<tr><td colspan="7">Aucune écriture validée pour cette période et cette monnaie.</td></tr>';
+  } catch (error) {
+    rowsTarget.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`;
   }
 }
 function toggleAccountingAccountFilter() {
@@ -910,19 +938,34 @@ function toggleAccountingAccountFilter() {
 function renderAccountingReportTable(report) {
   const output = document.getElementById('accounting-report-result');
   if (!output) return;
-  const rows = report?.rows || report?.charges || report?.produits || [];
+  const rows = report?.type === 'resultat'
+    ? [...(report.charges || []).map(row => ({...row, section: 'Charges'})), ...(report.produits || []).map(row => ({...row, section: 'Produits'}))]
+    : (report?.rows || []);
   const totals = report?.totals || report?.summary || {debit: 0, credit: 0};
-  const summaryHtml = totals && (typeof totals.debit === 'number' || typeof totals.credit === 'number')
-    ? `<div class="report-summary-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:12px 0 18px;">
-        <div class="stat-card"><span class="stat-label">Débit</span><div class="stat-value">${moneyCurrencyLabel(Number(totals.debit || 0), report?.monnaie || '')}</div></div>
-        <div class="stat-card"><span class="stat-label">Crédit</span><div class="stat-value">${moneyCurrencyLabel(Number(totals.credit || 0), report?.monnaie || '')}</div></div>
-      </div>`
-    : '';
+  let summaryHtml = '';
+  if (report?.type === 'resultat') {
+    summaryHtml = `<div class="report-summary-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:12px 0 18px;">
+      <div class="stat-card"><span class="stat-label">Total charges</span><div class="stat-value">${moneyCurrencyLabel(report.total_charges, report.monnaie)}</div></div>
+      <div class="stat-card"><span class="stat-label">Total produits</span><div class="stat-value">${moneyCurrencyLabel(report.total_produits, report.monnaie)}</div></div>
+      <div class="stat-card"><span class="stat-label">Résultat net</span><div class="stat-value">${moneyCurrencyLabel(report.resultat_net, report.monnaie)}</div></div>
+    </div>`;
+  } else if (report?.type === 'flux-tresorerie') {
+    summaryHtml = `<div class="report-summary-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:12px 0 18px;">
+      <div class="stat-card"><span class="stat-label">Total entrées</span><div class="stat-value">${moneyCurrencyLabel(report.total_entrees, report.monnaie)}</div></div>
+      <div class="stat-card"><span class="stat-label">Total sorties</span><div class="stat-value">${moneyCurrencyLabel(report.total_sorties, report.monnaie)}</div></div>
+      <div class="stat-card"><span class="stat-label">Variation nette</span><div class="stat-value">${moneyCurrencyLabel(report.variation_nette, report.monnaie)}</div></div>
+    </div>`;
+  } else if (totals && totals.debit !== undefined && totals.credit !== undefined) {
+    summaryHtml = `<div class="report-summary-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:12px 0 18px;">
+      <div class="stat-card"><span class="stat-label">Débit</span><div class="stat-value">${moneyCurrencyLabel(totals.debit, report?.monnaie || '')}</div></div>
+      <div class="stat-card"><span class="stat-label">Crédit</span><div class="stat-value">${moneyCurrencyLabel(totals.credit, report?.monnaie || '')}</div></div>
+    </div>`;
+  }
   if (!rows.length) {
     output.innerHTML = `${summaryHtml}<p class="empty-note">Aucune donnée pour cet état.</p>`;
     return;
   }
-  const allowedKeys = new Set(['code', 'compte_code', 'compte_id', 'journal_code', 'reference', 'libelle', 'ecriture_libelle', 'date_ecriture', 'monnaie', 'intitule', 'compte_intitule', 'classe', 'nature', 'debit', 'credit', 'solde_cumulatif', 'ouverture_debit', 'ouverture_credit', 'debit_periode', 'credit_periode', 'solde_debit', 'solde_credit', 'total_charges', 'total_produits', 'resultat_net', 'total_entrees', 'total_sorties', 'variation_nette']);
+  const allowedKeys = new Set(['section', 'code', 'compte_code', 'compte_id', 'journal_code', 'reference', 'libelle', 'ecriture_libelle', 'date_ecriture', 'monnaie', 'intitule', 'compte_intitule', 'classe', 'nature', 'debit', 'credit', 'solde_cumulatif', 'ouverture_debit', 'ouverture_credit', 'debit_periode', 'credit_periode', 'solde_debit', 'solde_credit', 'total_charges', 'total_produits', 'resultat_net', 'total_entrees', 'total_sorties', 'variation_nette']);
   const labels = Object.keys(rows[0]).filter(key => !['compte_id', 'ligne_id', 'ecriture_id', 'user_id', 'entreprise_id', 'parent_id', 'is_active', 'is_system'].includes(key) && (allowedKeys.has(key) || !key.startsWith('_')));
   const tableHeaders = labels.length ? labels : ['Libellé', 'Débit', 'Crédit'];
   const headerMarkup = tableHeaders.map(key => `<th>${escapeHtml(labelForAccountingKey(key))}</th>`).join('');
@@ -946,6 +989,7 @@ function labelForAccountingKey(key) {
     monnaie: 'Monnaie',
     classe: 'Classe',
     nature: 'Nature',
+    section: 'Type',
     debit: 'Débit',
     credit: 'Crédit',
     solde_cumulatif: 'Solde cumulé',
@@ -980,6 +1024,10 @@ async function loadAccountingReport() {
     showToast('Sélectionnez une période et une monnaie pour générer l’état.');
     return;
   }
+  if (reportType === 'grand-livre' && !accountId) {
+    showToast('Sélectionnez un compte pour générer le grand livre.');
+    return;
+  }
   try {
     const params = {type: reportType, date_debut: from, date_fin: to, monnaie: currency};
     if (reportType === 'grand-livre' && accountId) params.compte_id = accountId;
@@ -992,6 +1040,10 @@ async function loadAccountingReport() {
     const printButton = document.querySelector('[data-account-report-print]');
     if (printButton) printButton.disabled = false;
   } catch (error) {
+    const output = document.getElementById('accounting-report-result');
+    if (output) output.innerHTML = `<p class="empty-note">${escapeHtml(error.message)}</p>`;
+    const printButton = document.querySelector('[data-account-report-print]');
+    if (printButton) printButton.disabled = true;
     showToast(error.message);
   }
 }
@@ -1000,21 +1052,29 @@ async function openAccountingAccountForm() {
     const accounts = await fetchReportData('accounting-accounts');
     const modal = document.createElement('div');
     modal.className = 'entity-modal';
-    modal.innerHTML = `<section class="entity-dialog"><h2>Créer un compte comptable</h2><form class="entity-form"><label>Code<input name="code" maxlength="20" required placeholder="Ex. 101100"></label><label>Intitulé<input name="intitule" maxlength="160" required></label><label>Classe<select name="classe" required><option value="1">1 — Actif</option><option value="2">2 — Immobilisations</option><option value="3">3 — Stocks / clients</option><option value="4">4 — Trésorerie</option><option value="5">5 — Charges</option><option value="6">6 — Produits</option><option value="7">7 — Capitaux et passifs</option><option value="8">8 — Autres</option><option value="9">9 — Compta analytique</option></select></label><label>Nature<select name="nature" required><option value="DEBIT">Débit</option><option value="CREDIT">Crédit</option></select></label><label>Compte parent<select name="parent_id"><option value="">Aucun parent</option>${accounts.map(account => `<option value="${Number(account.compte_id)}">${escapeHtml(account.code)} — ${escapeHtml(account.intitule)}</option>`).join('')}</select></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Enregistrer</button></div></form></section>`;
+    modal.innerHTML = `<section class="entity-dialog"><h2>Créer un compte comptable</h2><form class="entity-form"><label>Code<input name="code" maxlength="20" required placeholder="Ex. 101100"></label><label>Intitulé<input name="intitule" maxlength="160" required></label><label>Classe<select name="classe" required><option value="1">1 — Ressources durables</option><option value="2">2 — Immobilisations</option><option value="3">3 — Stocks</option><option value="4">4 — Tiers</option><option value="5">5 — Trésorerie</option><option value="6">6 — Charges</option><option value="7">7 — Produits</option><option value="8">8 — Autres charges et produits</option><option value="9">9 — Comptabilité analytique</option></select></label><label>Nature<select name="nature" required><option value="DEBIT">Débit</option><option value="CREDIT">Crédit</option></select></label><label>Compte parent<select name="parent_id"><option value="">Aucun parent</option>${accounts.map(account => `<option value="${Number(account.compte_id)}">${escapeHtml(account.code)} — ${escapeHtml(account.intitule)}</option>`).join('')}</select></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Enregistrer</button></div></form></section>`;
     document.body.appendChild(modal);
     const form = modal.querySelector('form');
     modal.querySelector('.modal-cancel').addEventListener('click', () => modal.remove());
     form.addEventListener('submit', async event => {
       event.preventDefault();
-      const payload = Object.fromEntries(new FormData(form));
-      payload.classe = Number(payload.classe);
-      payload.parent_id = payload.parent_id ? Number(payload.parent_id) : null;
-      const response = await fetch('../backend/public/report-data.php?action=accounting-accounts', {method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify(payload)});
-      const result = await readJson(response);
-      if (!response.ok || !result.success) throw new Error(result.message || 'Création du compte impossible.');
-      modal.remove();
-      await loadAccountingAccounts();
-      showToast('Compte comptable créé.');
+      const submitButton = form.querySelector('.modal-submit');
+      submitButton.disabled = true;
+      try {
+        const payload = Object.fromEntries(new FormData(form));
+        payload.classe = Number(payload.classe);
+        payload.parent_id = payload.parent_id ? Number(payload.parent_id) : null;
+        const response = await fetch('../backend/public/report-data.php?action=accounting-accounts', {method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify(payload)});
+        const result = await readJson(response);
+        if (!response.ok || !result.success) throw new Error(result.message || 'Création du compte impossible.');
+        modal.remove();
+        await loadAccountingAccounts();
+        showToast('Compte comptable créé.');
+      } catch (error) {
+        showToast(error.message);
+      } finally {
+        if (submitButton.isConnected) submitButton.disabled = false;
+      }
     });
   } catch (error) {
     showToast(error.message);
@@ -1023,6 +1083,10 @@ async function openAccountingAccountForm() {
 async function openAccountingEntryForm() {
   try {
     const accounts = await fetchReportData('accounting-accounts');
+    if (!accounts.length) {
+      showToast('Créez d’abord au moins deux comptes comptables pour saisir une écriture.');
+      return;
+    }
     const currency = document.getElementById('accounting-currency')?.value || 'USD';
     const createLineRow = (index = 0) => `
       <div class="accounting-entry-line" style="display:grid;grid-template-columns:1.8fr 1.1fr 1.1fr 1.3fr 0.5fr;gap:8px;align-items:end;padding:10px 0;border-top:1px solid #e8efeb;">
@@ -1038,9 +1102,9 @@ async function openAccountingEntryForm() {
     document.body.appendChild(modal);
     const form = modal.querySelector('form');
     const linesContainer = modal.querySelector('#accounting-entry-lines');
+    let nextLineIndex = 2;
     const addLine = () => {
-      const currentIndex = linesContainer.querySelectorAll('.accounting-entry-line').length;
-      linesContainer.insertAdjacentHTML('beforeend', createLineRow(currentIndex));
+      linesContainer.insertAdjacentHTML('beforeend', createLineRow(nextLineIndex++));
     };
     modal.querySelector('#accounting-entry-add-line').addEventListener('click', addLine);
     linesContainer.addEventListener('click', event => {
@@ -1049,9 +1113,19 @@ async function openAccountingEntryForm() {
       const row = removeButton.closest('.accounting-entry-line');
       if (row) row.remove();
     });
+    linesContainer.addEventListener('input', event => {
+      const amountInput = event.target.closest('input[name^="line_debit_"], input[name^="line_credit_"]');
+      if (!amountInput || Number(amountInput.value) <= 0) return;
+      const otherSide = amountInput.name.startsWith('line_debit_') ? 'credit' : 'debit';
+      const otherInput = amountInput.closest('.accounting-entry-line').querySelector(`input[name^="line_${otherSide}_"]`);
+      if (otherInput) otherInput.value = '0';
+    });
     modal.querySelector('.modal-cancel').addEventListener('click', () => modal.remove());
     form.addEventListener('submit', async event => {
       event.preventDefault();
+      const submitButton = form.querySelector('.modal-submit');
+      submitButton.disabled = true;
+      try {
       const formData = new FormData(form);
       const lines = [];
       for (const [name, value] of formData.entries()) {
@@ -1072,6 +1146,16 @@ async function openAccountingEntryForm() {
         showToast('Ajoutez au moins deux lignes à l’écriture comptable.');
         return;
       }
+      if (prepared.some(line => !Number.isFinite(line.debit) || !Number.isFinite(line.credit) || line.debit < 0 || line.credit < 0 || (line.debit > 0 && line.credit > 0) || (line.debit === 0 && line.credit === 0))) {
+        showToast('Chaque ligne doit porter un montant au débit ou au crédit, jamais les deux.');
+        return;
+      }
+      const debitTotal = prepared.reduce((total, line) => total + line.debit, 0);
+      const creditTotal = prepared.reduce((total, line) => total + line.credit, 0);
+      if (debitTotal <= 0 || Math.abs(debitTotal - creditTotal) > 0.009) {
+        showToast(`Écriture non équilibrée. Débit : ${moneyCurrencyLabel(debitTotal, currency)} · Crédit : ${moneyCurrencyLabel(creditTotal, currency)}.`);
+        return;
+      }
       const payload = {
         date_ecriture: formData.get('date_ecriture'),
         journal_code: String(formData.get('journal_code') || '').trim().toUpperCase(),
@@ -1084,8 +1168,14 @@ async function openAccountingEntryForm() {
       const result = await readJson(response);
       if (!response.ok || !result.success) throw new Error(result.message || 'Validation de l’écriture impossible.');
       modal.remove();
+      await loadAccountingEntryRows();
       await loadAccountingReport();
       showToast('Écriture comptable enregistrée.');
+      } catch (error) {
+        showToast(error.message);
+      } finally {
+        if (submitButton.isConnected) submitButton.disabled = false;
+      }
     });
   } catch (error) {
     showToast(error.message);
@@ -2206,6 +2296,9 @@ document.addEventListener('change', event => {
   if (event.target.matches('#accounting-report-type')) {
     toggleAccountingAccountFilter();
   }
+  if (event.target.matches('#accounting-from, #accounting-to, #accounting-currency')) {
+    loadAccountingEntryRows();
+  }
 });
 document.addEventListener('submit', async event => {
   const companyForm = event.target.closest('#company-profile-form');
@@ -2260,7 +2353,7 @@ document.addEventListener('submit', async event => {
 });
 action.addEventListener('click', () => { if (currentViewName === 'stock') openEntityForm('product'); else if (currentViewName === 'users') openEntityForm('user'); else if (currentViewName === 'branches') openEntityForm('branch'); else if (currentViewName === 'procurement') openEntityForm('purchase'); else if (currentViewName === 'sales') openSaleForm(); else if (currentViewName === 'cash') openCashForm(); else if (action.textContent.trim()) showToast(`${action.textContent.trim()} : fenêtre prête à être connectée`); });
 document.addEventListener('click', event => { const pageButton = event.target.closest('[data-page-key]'); if (pageButton && !pageButton.disabled) { const loader = paginationLoaders.get(pageButton.dataset.pageKey); if (loader) loader(Number(pageButton.dataset.page)); return; } if (event.target.closest('[data-create-role]')) openEntityForm('role'); if (event.target.closest('[data-create-category]')) openEntityForm('category'); if (event.target.closest('[data-create-unit]') && sessionUser?.is_company_admin) openUnitManager(); if (event.target.closest('[data-stock-movement-report]')) openStockMovementsReport(); });
-document.addEventListener('click', event => { if (event.target.closest('.text-button') && !event.target.closest('[data-product-edit],[data-product-delete],[data-category-edit],[data-category-delete],[data-branch-edit],[data-branch-delete],[data-stock-edit],[data-stock-card],[data-role-edit],[data-role-delete],[data-user-edit],[data-user-delete],[data-stock-section],[data-toggle-categories],[data-create-unit],[data-create-category],[data-create-supplier],[data-create-purchase],[data-supplier-edit],[data-supplier-delete],[data-purchase-voucher],[data-report-action],[data-report-close],[data-bank-form-open],#purchase-add-supplier')) showToast('Rapport mis à jour'); });
+document.addEventListener('click', event => { if (event.target.closest('.text-button') && !event.target.closest('[data-product-edit],[data-product-delete],[data-category-edit],[data-category-delete],[data-branch-edit],[data-branch-delete],[data-stock-edit],[data-stock-card],[data-role-edit],[data-role-delete],[data-user-edit],[data-user-delete],[data-stock-section],[data-toggle-categories],[data-create-unit],[data-create-category],[data-create-supplier],[data-create-purchase],[data-supplier-edit],[data-supplier-delete],[data-purchase-voucher],[data-report-action],[data-report-close],[data-bank-form-open],[data-account-create-open],[data-account-report-print],#accounting-entry-add-line,#purchase-add-supplier')) showToast('Rapport mis à jour'); });
 document.addEventListener('click', event => {
   const stockButton = event.target.closest('[data-stock-edit]');
   if (stockButton) {
