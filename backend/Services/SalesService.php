@@ -14,6 +14,10 @@ final class SalesService
     {
         $enterprise=(int)$actor['entreprise_id']; $user=(int)$actor['id']; $branch=(int)($data['succursale_id']??$actor['succursale_id']??0);
         $clientId=isset($data['client_id'])&&$data['client_id']!==''?(int)$data['client_id']:null;
+        $counterClientName=$clientId===null?trim((string)($data['client_comptoir_name']??'')):'';
+        if($counterClientName!==''){$counterClientNameLength=preg_match_all('/./us',$counterClientName);if($counterClientNameLength===false||$counterClientNameLength>100)throw new RuntimeException('Le nom du client comptoir ne peut pas dépasser 100 caractères.');}
+        if($counterClientName==='')$counterClientName=null;
+        if($clientId===null&&$counterClientName===null)throw new RuntimeException('Le nom du client comptoir est obligatoire.');
         $lines=$data['items']??[]; $invoice=trim((string)($data['invoice_no']??''));
         if($branch<1||$invoice===''||!is_array($lines)||!count($lines)) throw new RuntimeException('Succursale, référence et au moins un produit sont requis.');
         $this->db->begin_transaction();
@@ -32,8 +36,8 @@ final class SalesService
             }
             $singleCurrency=count($currencyTotals)===1;$saleCurrency=$singleCurrency?(string)array_key_first($currencyTotals):null;$legacyTotal=$singleCurrency?(float)$currencyTotals[$saleCurrency]:0.0;$legacyPaid=0.0;
             $status='PENDING';
-            $nullableCashId=null;$sale=$this->db->prepare('INSERT INTO ventes (entreprise_id,succursale_id,caisse_id,user_id,client_id,invoice_no,total_amount,monais,amount_paid,status) VALUES (?,?,?,?,?,?,?,?,?,?)');
-            $sale->bind_param('iiiiisdsds',$enterprise,$branch,$nullableCashId,$user,$clientId,$invoice,$legacyTotal,$saleCurrency,$legacyPaid,$status);$sale->execute();$saleId=(int)$this->db->insert_id;
+            $nullableCashId=null;$sale=$this->db->prepare('INSERT INTO ventes (entreprise_id,succursale_id,caisse_id,user_id,client_id,client_comptoir_name,invoice_no,total_amount,monais,amount_paid,status) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+            $sale->bind_param('iiiiissdsds',$enterprise,$branch,$nullableCashId,$user,$clientId,$counterClientName,$invoice,$legacyTotal,$saleCurrency,$legacyPaid,$status);$sale->execute();$saleId=(int)$this->db->insert_id;
             $currencyBalance=$this->db->prepare('INSERT INTO vente_totaux_monnaies (entreprise_id,vente_id,monais,total_amount,amount_paid) VALUES (?,?,?,?,0)');
             foreach($currencyTotals as $currency=>$currencyTotal){$currencyBalance->bind_param('iisd',$enterprise,$saleId,$currency,$currencyTotal);$currencyBalance->execute();}
             foreach($prepared as $item){$productId=$item['product_id'];$quantity=$item['quantity'];$unit=$item['unit_price'];$discountPercent=$item['discount_percent'];$discount=$item['discount_amount'];$subtotal=$item['subtotal'];

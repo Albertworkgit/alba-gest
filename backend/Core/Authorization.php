@@ -79,8 +79,7 @@ final class Authorization
         if ($resource === 'categories') {
             return match ($method) {
                 'GET' => 'voir_stock',
-                'POST' => 'creer_produit',
-                'PUT', 'PATCH', 'DELETE' => 'modifier_stock',
+                'POST', 'PUT', 'PATCH', 'DELETE' => 'modifier_stock',
                 default => 'voir_stock',
             };
         }

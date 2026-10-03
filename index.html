@@ -3,28 +3,306 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ALBA-STOCK | Gestion de stock</title>
-  <link rel="stylesheet" href="front/styles.css">
+  <meta name="description" content="ALBA-STOCK réunit la gestion des stocks, des ventes, des caisses et des succursales dans un seul espace de travail.">
+  <title>ALBA-STOCK | Gérez votre activité, du stock à la caisse</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <style>
-    body{min-height:100vh;background:#183b35;color:#fff}.landing{min-height:100vh;display:grid;grid-template-columns:1.15fr .85fr;align-items:center;gap:50px;max-width:1180px;margin:auto;padding:48px}.landing-brand{display:flex;align-items:center;gap:12px;font:700 25px 'Space Grotesk',sans-serif}.landing-mark{width:38px;height:38px;background:#f07f5f;border-radius:10px;display:grid;place-items:center}.landing-copy{max-width:650px}.landing-copy h1{font:600 clamp(38px,6vw,74px)/1.02 'Space Grotesk',sans-serif;letter-spacing:-2px;margin:35px 0 20px}.landing-copy h1 em{font-style:normal;color:#f6c875}.landing-copy p{color:#b5d0c8;font-size:16px;line-height:1.7;max-width:540px}.landing-points{display:flex;gap:10px;flex-wrap:wrap;margin-top:28px}.landing-points span{border:1px solid #477166;border-radius:20px;padding:8px 12px;color:#d6e8e2;font-size:12px}.landing-card{background:#fff;color:#1d2926;border-radius:14px;padding:30px;box-shadow:0 25px 60px #091d1950}.landing-card h2{font:600 22px 'Space Grotesk',sans-serif;margin:0 0 8px}.landing-card p{color:#73807b;font-size:13px;margin:0 0 24px;line-height:1.5}.landing-action{display:block;text-align:center;text-decoration:none;border-radius:7px;padding:13px;font-weight:700;margin-top:11px}.landing-action.primary{background:#f07f5f;color:#fff}.landing-action.secondary{border:1px solid #dce5e0;color:#147c70}.landing-note{font-size:11px!important;text-align:center;margin-top:20px!important;color:#95a09b!important}@media(max-width:760px){.landing{display:block;padding:28px 20px}.landing-copy h1{font-size:42px;margin-top:55px}.landing-copy p{font-size:14px}.landing-card{margin-top:38px;padding:24px}.landing-brand{font-size:21px}}
+    :root{--ink:#173b35;--green:#167a6d;--green-dark:#0c5148;--mint:#e7f1ea;--paper:#f5f7f3;--coral:#ed8063;--yellow:#f3cf70;--line:#dce6df;--white:#fff;--muted:#60736c}
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:var(--paper);color:var(--ink);font:400 15px/1.55 'DM Sans',sans-serif}
+    a{color:inherit}
+    .site-header{height:76px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:0 clamp(20px,5vw,76px);background:#fff;border-bottom:1px solid var(--line)}
+    .brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;font:700 19px 'Space Grotesk',sans-serif;white-space:nowrap}
+    .brand-mark{display:grid;place-items:center;width:34px;height:34px;background:var(--coral);color:white;border-radius:8px;font-size:18px}
+    .site-nav{display:flex;align-items:center;gap:30px}
+    .site-nav a,.header-login{font-size:13px;font-weight:700;text-decoration:none}
+    .site-nav a{color:#49635b}
+    .site-nav a:hover{color:var(--green)}
+    .header-login{padding:10px 15px;border:1px solid var(--line);border-radius:5px;color:var(--ink)}
+    .hero{position:relative;isolation:isolate;display:flex;align-items:center;min-height:650px;overflow:hidden;background:#153d35;color:#fff}
+    .hero-photo,.hero-shade{position:absolute;inset:0;width:100%;height:100%}
+    .hero-photo{z-index:-2;object-fit:cover;object-position:center 55%;opacity:.58}
+    .hero-shade{z-index:-1;background:rgba(12,54,46,.72)}
+    .hero-inner{width:min(1180px,100%);margin:auto;padding:78px clamp(24px,7vw,100px) 92px}
+    .eyebrow{display:flex;align-items:center;gap:10px;margin:0 0 22px;color:#d2e7dc;font-size:11px;font-weight:700;text-transform:uppercase}
+    .eyebrow::before{content:"";width:24px;height:2px;background:var(--yellow)}
+    h1,h2,h3,p{margin-top:0}
+    .hero h1{margin:0;font:700 58px/1.05 'Space Grotesk',sans-serif}
+    .hero-lead{max-width:760px;margin:20px 0 12px;font:600 30px/1.2 'Space Grotesk',sans-serif;color:#f3cf70}
+    .hero-copy{max-width:640px;margin:0;color:#e1eee8;font-size:16px;line-height:1.75}
+    .hero-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:30px}
+    .button{display:inline-flex;justify-content:center;align-items:center;min-height:46px;padding:0 18px;border:1px solid transparent;border-radius:5px;text-decoration:none;font-size:13px;font-weight:700;transition:transform .18s ease,background .18s ease}
+    .button:hover{transform:translateY(-2px)}
+    .button-primary{background:var(--coral);color:#fff}
+    .button-primary:hover{background:#da7055}
+    .button-light{border-color:#a8c2b8;color:#fff}
+    .hero-proof{display:flex;gap:20px;flex-wrap:wrap;margin:35px 0 0;color:#e3eee8;font-size:12px}
+    .hero-proof span{display:flex;align-items:center;gap:8px}
+    .hero-proof span::before{content:"";width:6px;height:6px;background:var(--yellow);border-radius:50%}
+    .section{padding:94px clamp(20px,5vw,76px)}
+    .section-inner{width:min(1180px,100%);margin:0 auto}
+    .product-preview{background:#fff}
+    .preview-layout{display:grid;grid-template-columns:.78fr 1.22fr;align-items:center;gap:54px;width:min(1180px,100%);margin:0 auto}
+    .preview-copy h2{max-width:440px;margin:0 0 14px;font:600 36px/1.15 'Space Grotesk',sans-serif}
+    .preview-copy>p:not(.section-kicker){max-width:420px;color:var(--muted);font-size:14px}
+    .preview-copy .button{margin-top:10px}
+    .dashboard-demo{overflow:hidden;border:1px solid #d5e1db;border-radius:7px;background:#f8faf8;box-shadow:0 24px 55px #163a351a;animation:demo-enter .7s ease-out both}
+    .demo-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 17px;background:var(--ink);color:#fff;font-size:11px}
+    .demo-brand{font:700 13px 'Space Grotesk',sans-serif}
+    .demo-branch{color:#c5dad1}
+    .demo-content{padding:18px}
+    .demo-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:15px}
+    .demo-heading strong{font:600 17px 'Space Grotesk',sans-serif}
+    .demo-label{padding:5px 8px;border:1px solid #e5b965;border-radius:3px;color:#72571c;font-size:9px;font-weight:700;text-transform:uppercase}
+    .demo-metrics{display:grid;grid-template-columns:repeat(3,1fr);margin-bottom:18px;border-top:1px solid #dce6df;border-bottom:1px solid #dce6df}
+    .demo-metric{padding:12px 10px;border-right:1px solid #dce6df}
+    .demo-metric:last-child{border-right:0}
+    .demo-metric span{display:block;color:#62766d;font-size:9px}
+    .demo-metric strong{display:block;margin-top:3px;color:#173b35;font:600 19px 'Space Grotesk',sans-serif}
+    .demo-table-wrap{overflow-x:auto}
+    .demo-table{width:100%;border-collapse:collapse;background:#fff;font-size:10px;white-space:nowrap}
+    .demo-table th,.demo-table td{padding:10px 9px;border-bottom:1px solid #edf1ee;text-align:left}
+    .demo-table th{color:#708078;font-size:8px;text-transform:uppercase}
+    .demo-status{color:#167a6d;font-weight:700}
+    .demo-foot{margin:10px 0 0;color:#7a8982;font-size:9px}
+    @keyframes demo-enter{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+    .section-heading{display:flex;justify-content:space-between;align-items:end;gap:28px;margin-bottom:34px}
+    .section-heading-copy{max-width:650px}
+    .section-kicker{margin-bottom:10px;color:var(--green);font-size:11px;font-weight:700;text-transform:uppercase}
+    .section-heading h2{margin:0;font:600 36px/1.15 'Space Grotesk',sans-serif}
+    .section-heading p{max-width:430px;margin:0;color:var(--muted);font-size:14px}
+    .modules{background:var(--mint)}
+    .module-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid #cbdcd1;border-left:1px solid #cbdcd1}
+    .module{min-height:208px;padding:24px;border-right:1px solid #cbdcd1;border-bottom:1px solid #cbdcd1;background:rgba(255,255,255,.24)}
+    .module-index{display:block;margin-bottom:25px;color:var(--green);font:600 12px 'Space Grotesk',sans-serif}
+    .module h3{margin-bottom:8px;font:600 19px 'Space Grotesk',sans-serif}
+    .module p{max-width:320px;margin:0;color:#50665e;font-size:13px;line-height:1.65}
+    .capabilities{display:grid;grid-template-columns:1fr 1fr;gap:0 42px;margin-top:34px;padding-top:25px;border-top:1px solid #cbdcd1}
+    .capability{display:flex;gap:12px;padding:9px 0;color:#415a51;font-size:13px}
+    .capability strong{min-width:145px;color:var(--ink)}
+    .pricing{background:#fff}
+    .pricing .section-heading{align-items:start}
+    .pricing-currency{flex:none;margin-top:7px;padding:7px 10px;border:1px solid var(--line);border-radius:4px;color:var(--muted);font-size:11px;font-weight:700}
+    .plans{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:stretch}
+    .plan{display:flex;flex-direction:column;min-height:100%;padding:22px 19px;border:1px solid var(--line);border-radius:6px;background:#fff}
+    .plan-featured{position:relative;border:2px solid var(--green);padding:21px 18px;background:#f4faf6}
+    .plan-badge{align-self:flex-start;margin:-4px 0 12px;padding:5px 8px;background:var(--green);color:#fff;border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase}
+    .plan-name{margin:0 0 5px;font:600 19px 'Space Grotesk',sans-serif}
+    .plan-tagline{min-height:40px;margin:0;color:var(--muted);font-size:12px}
+    .plan-price{margin:19px 0 2px;font:700 34px/1 'Space Grotesk',sans-serif;white-space:nowrap}
+    .plan-period{margin:0 0 17px;color:var(--muted);font-size:11px}
+    .plan-trial{margin:0 0 17px;padding:8px 9px;background:#edf4ef;color:#315f52;font-size:11px;font-weight:700}
+    .plan-rule{height:1px;margin:0 0 14px;border:0;background:var(--line)}
+    .plan-limit{display:grid;grid-template-columns:1fr auto;gap:5px;padding:6px 0;border-bottom:1px solid #edf1ee;font-size:11px}
+    .plan-limit span{color:var(--muted)}
+    .plan-limit strong{text-align:right}
+    .plan-features{flex:1;margin:15px 0 20px;padding:0;list-style:none}
+    .plan-features li{position:relative;margin:8px 0;padding-left:16px;color:#40594f;font-size:12px}
+    .plan-features li::before{content:"+";position:absolute;left:0;color:var(--green);font-weight:700}
+    .plan .button{width:100%;margin-top:auto}
+    .button-dark{background:var(--green-dark);color:#fff}
+    .button-outline{border-color:#b9cbc1;color:var(--green-dark)}
+    .pricing-note{margin:22px 0 0;padding:15px 17px;border-left:3px solid var(--coral);background:#fbf5ed;color:#59655f;font-size:12px}
+    .workflow{background:#f5f7f3}
+    .workflow-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:30px}
+    .workflow-step{padding-top:17px;border-top:2px solid var(--green)}
+    .workflow-step span{display:block;margin-bottom:11px;color:var(--coral);font:700 13px 'Space Grotesk',sans-serif}
+    .workflow-step h3{margin-bottom:8px;font:600 18px 'Space Grotesk',sans-serif}
+    .workflow-step p{max-width:340px;margin:0;color:var(--muted);font-size:13px}
+    .limits{background:#173b35;color:#fff}
+    .limits .section-kicker{color:var(--yellow)}
+    .limits .section-heading p{color:#bfd2ca}
+    .limit-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:#42655b;border:1px solid #42655b}
+    .limit-item{padding:20px;background:#173b35;color:#d8e7e0;font-size:13px}
+    .limit-item strong{display:block;margin-bottom:5px;color:#fff;font:600 15px 'Space Grotesk',sans-serif}
+    .final-cta{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:40px clamp(20px,5vw,76px);background:var(--yellow);color:var(--ink)}
+    .final-cta-inner{display:flex;justify-content:space-between;align-items:center;gap:25px;width:min(1180px,100%);margin:auto}
+    .final-cta h2{margin:0 0 5px;font:600 25px 'Space Grotesk',sans-serif}
+    .final-cta p{margin:0;color:#4b6158;font-size:13px}
+    .final-cta .button{flex:none;background:var(--ink);color:#fff}
+    .site-footer{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:25px clamp(20px,5vw,76px);background:#102d28;color:#c8d9d2;font-size:11px}
+    .footer-links{display:flex;gap:18px;flex-wrap:wrap}
+    .footer-links a{color:#dce8e3;text-decoration:none}
+    .footer-links a:hover{text-decoration:underline}
+    @media(max-width:980px){.plans{grid-template-columns:repeat(2,minmax(0,1fr))}.section-heading{align-items:start;flex-direction:column}.pricing .section-heading{flex-direction:row}.hero{min-height:610px}.module-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:980px){.preview-layout{grid-template-columns:1fr;gap:30px}.preview-copy h2{max-width:680px}.dashboard-demo{max-width:760px}}
+    @media(max-width:640px){.site-header{height:66px;padding:0 16px}.site-nav{gap:12px}.site-nav a{display:none}.header-login{padding:9px 11px;font-size:12px}.hero{min-height:620px;align-items:end}.hero-photo{object-position:58% center}.hero-shade{background:rgba(12,54,46,.78)}.hero-inner{padding:70px 22px 72px}.hero h1{font-size:46px}.hero-lead{font-size:25px}.hero-copy{font-size:14px}.hero-proof{gap:10px 16px}.section{padding:68px 20px}.preview-layout{gap:25px}.preview-copy h2{font-size:30px}.demo-bar{padding:12px}.demo-content{padding:13px}.demo-heading strong{font-size:15px}.demo-metric{padding:10px 7px}.demo-metric strong{font-size:16px}.section-heading h2{font-size:30px}.module-grid{grid-template-columns:1fr}.module{min-height:0;padding:20px}.module-index{margin-bottom:14px}.capabilities{grid-template-columns:1fr;gap:0}.capability strong{min-width:130px}.plans{grid-template-columns:1fr}.plan{min-height:0;padding:22px}.plan-featured{padding:21px}.pricing .section-heading{flex-direction:column;gap:12px}.pricing-currency{margin-top:0}.workflow-grid{grid-template-columns:1fr;gap:25px}.limit-grid{grid-template-columns:1fr}.final-cta,.final-cta-inner{align-items:flex-start;flex-direction:column}.final-cta{padding:32px 20px}.site-footer{align-items:flex-start;flex-direction:column;padding:23px 20px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.button{transition:none}}
   </style>
 </head>
 <body>
-  <main class="landing">
-    <section class="landing-copy">
-      <div class="landing-brand"><span class="landing-mark">A</span>ALBA-STOCK</div>
-      <h1>La gestion de stock, <em>enfin simple.</em></h1>
-      <p>Gérez vos produits, succursales, ventes, caisses, approvisionnements et comptabilité depuis un seul espace de travail.</p>
-      <div class="landing-points"><span>Stock multi-succursales</span><span>Ventes & caisse</span><span>Approvisionnements</span><span>Rapports</span></div>
+  <header class="site-header">
+    <a class="brand" href="#accueil" aria-label="ALBA-STOCK, accueil"><span class="brand-mark">A</span><span>ALBA-STOCK</span></a>
+    <nav class="site-nav" aria-label="Navigation principale">
+      <a href="#modules">Modules</a>
+      <a href="#offres">Offres</a>
+      <a href="#fonctionnement">Fonctionnement</a>
+    </nav>
+    <a class="header-login" href="front/login.html">Connexion</a>
+  </header>
+
+  <main>
+    <section class="hero" id="accueil" aria-labelledby="hero-title">
+      <img class="hero-photo" src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&amp;fit=crop&amp;w=2200&amp;q=85" alt="Rayonnages de stockage dans un entrepôt" fetchpriority="high">
+      <div class="hero-shade" aria-hidden="true"></div>
+      <div class="hero-inner">
+        <p class="eyebrow">Gestion commerciale et opérationnelle</p>
+        <h1 id="hero-title">ALBA-STOCK</h1>
+        <p class="hero-lead">Votre activité, du stock à la caisse.</p>
+        <p class="hero-copy">Suivez vos produits, approvisionnements, ventes, règlements et succursales depuis un seul espace de travail. Les données de votre entreprise restent organisées par site, par monnaie et selon les droits de chaque utilisateur.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#offres">Découvrir les offres</a>
+          <a class="button button-light" href="front/register.html">Créer une entreprise</a>
+        </div>
+        <div class="hero-proof" aria-label="Fonctions principales">
+          <span>Stock multi-succursales</span>
+          <span>Ventes et paiements</span>
+          <span>Caisses à solde suivi</span>
+        </div>
+      </div>
     </section>
-    <section class="landing-card">
-      <h2>Commencer avec ALBA-STOCK</h2>
-      <p>Créez votre entreprise ou connectez-vous à un espace existant.</p>
-      <a class="landing-action primary" href="front/register.html">Créer mon entreprise</a>
-      <a class="landing-action secondary" href="front/login.html">Se connecter</a>
-      <a class="landing-action admin-link" href="front/superadmin-login.html">Accès super administrateur</a>
-      <p class="landing-note">Toute nouvelle entreprise doit être activée par le super administrateur.</p>
+
+    <section class="section product-preview" aria-labelledby="preview-title">
+      <div class="preview-layout">
+        <div class="preview-copy">
+          <p class="section-kicker">Une vue, plusieurs opérations</p>
+          <h2 id="preview-title">Sachez ce qui bouge et ce qui reste.</h2>
+          <p>Retrouvez en un coup d’œil les indicateurs de stock, les articles à surveiller et l’activité de vos succursales.</p>
+          <a class="button button-dark" href="front/login.html">Entrer dans mon espace</a>
+        </div>
+        <div class="dashboard-demo" role="img" aria-label="Exemple de tableau de bord ALBA-STOCK avec indicateurs et liste de produits">
+          <div class="demo-bar"><span class="demo-brand">ALBA-STOCK</span><span class="demo-branch">Succursale centrale　⌄</span></div>
+          <div class="demo-content">
+            <div class="demo-heading"><strong>État du stock</strong><span class="demo-label">Exemple visuel</span></div>
+            <div class="demo-metrics"><div class="demo-metric"><span>Références actives</span><strong>248</strong></div><div class="demo-metric"><span>Alertes de seuil</span><strong>06</strong></div><div class="demo-metric"><span>Lots à surveiller</span><strong>03</strong></div></div>
+            <div class="demo-table-wrap"><table class="demo-table"><thead><tr><th>Article</th><th>Site</th><th>Disponible</th><th>État</th></tr></thead><tbody><tr><td>Riz parfumé · 25 kg</td><td>Central</td><td>86 sacs</td><td class="demo-status">En stock</td></tr><tr><td>Huile végétale · 5 L</td><td>Marché</td><td>12 bidons</td><td class="demo-status">À surveiller</td></tr><tr><td>Farine de blé · 10 kg</td><td>Central</td><td>34 sacs</td><td class="demo-status">En stock</td></tr></tbody></table></div>
+            <p class="demo-foot">Illustration de présentation · valeurs fictives</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section modules" id="modules" aria-labelledby="modules-title">
+      <div class="section-inner">
+        <div class="section-heading">
+          <div class="section-heading-copy">
+            <p class="section-kicker">Un espace de travail connecté</p>
+            <h2 id="modules-title">Les opérations importantes, au même endroit.</h2>
+          </div>
+          <p>Choisissez les modules autorisés pour votre entreprise. Chaque utilisateur ne voit que les écrans permis par son rôle et son périmètre.</p>
+        </div>
+        <div class="module-grid">
+          <article class="module"><span class="module-index">01 / STOCK</span><h3>Stock et lots</h3><p>Consultez les quantités par succursale, suivez les seuils et gérez les produits périssables par lot et date d’expiration.</p></article>
+          <article class="module"><span class="module-index">02 / ACHATS</span><h3>Approvisionnements</h3><p>Enregistrez les entrées fournisseur et sorties motivées, validez leur effet sur le stock et consultez les bons.</p></article>
+          <article class="module"><span class="module-index">03 / VENTES</span><h3>Ventes et clients</h3><p>Préparez des factures multi-produits, appliquez des remises, suivez les paiements et retrouvez les reçus.</p></article>
+          <article class="module"><span class="module-index">04 / TRÉSORERIE</span><h3>Caisse et banque</h3><p>Ouvrez et clôturez des caisses, suivez leur montant courant, enregistrez les mouvements et référencez les opérations bancaires.</p></article>
+          <article class="module"><span class="module-index">05 / COMPTABILITÉ</span><h3>Comptabilité SYSCOHADA</h3><p>Créez le plan comptable, saisissez des écritures équilibrées et générez journal, grand livre, balance et états financiers.</p></article>
+          <article class="module"><span class="module-index">06 / PILOTAGE</span><h3>Succursales et rapports</h3><p>Gérez plusieurs points de vente, séparez les stocks par site et consultez les rapports disponibles selon vos accès.</p></article>
+        </div>
+        <div class="capabilities" aria-label="Fonctions transversales">
+          <div class="capability"><strong>Plusieurs monnaies</strong><span>Totaux et règlements conservés par monnaie.</span></div>
+          <div class="capability"><strong>Utilisateurs et rôles</strong><span>Permissions attribuées par fonction.</span></div>
+          <div class="capability"><strong>Fiches de stock</strong><span>Historique des quantités et ajustements.</span></div>
+          <div class="capability"><strong>Rapports imprimables</strong><span>Filtres et exports selon l’écran disponible.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section pricing" id="offres" aria-labelledby="pricing-title">
+      <div class="section-inner">
+        <div class="section-heading">
+          <div class="section-heading-copy">
+            <p class="section-kicker">Tarification proposée</p>
+            <h2 id="pricing-title">Une formule pour chaque étape.</h2>
+            <p style="margin-top:12px">Des limites et modules adaptés à la taille de votre activité.</p>
+          </div>
+          <span class="pricing-currency">Prix mensuels en USD</span>
+        </div>
+        <div class="plans">
+          <article class="plan">
+            <h3 class="plan-name">Gratuit</h3><p class="plan-tagline">Pour découvrir les fonctions essentielles.</p>
+            <p class="plan-price">0 $</p><p class="plan-period">par mois</p>
+            <p class="plan-trial">Essai de 14 jours</p><hr class="plan-rule">
+            <div class="plan-limit"><span>Utilisateurs</span><strong>1</strong></div><div class="plan-limit"><span>Sites</span><strong>1</strong></div><div class="plan-limit"><span>Produits</span><strong>10</strong></div>
+            <ul class="plan-features"><li>Clients</li><li>Ventes</li><li>Stock</li><li>Caisse</li></ul>
+            <a class="button button-outline" href="front/register.html">Créer mon entreprise</a>
+          </article>
+          <article class="plan">
+            <h3 class="plan-name">Starter</h3><p class="plan-tagline">Pour démarrer et structurer les opérations.</p>
+            <p class="plan-price">14,98 $</p><p class="plan-period">par mois</p>
+            <p class="plan-trial">Essai de 14 jours</p><hr class="plan-rule">
+            <div class="plan-limit"><span>Utilisateurs</span><strong>5</strong></div><div class="plan-limit"><span>Sites</span><strong>2</strong></div><div class="plan-limit"><span>Produits</span><strong>500</strong></div>
+            <ul class="plan-features"><li>Ventes et clients</li><li>Stock et approvisionnements</li><li>Caisse et rapports</li><li>Paramètres</li></ul>
+            <a class="button button-outline" href="front/register.html">Créer une demande</a>
+          </article>
+          <article class="plan plan-featured">
+            <span class="plan-badge">Équilibre recommandé</span>
+            <h3 class="plan-name">Business</h3><p class="plan-tagline">Pour accélérer sur plusieurs points de vente.</p>
+            <p class="plan-price">19,85 $</p><p class="plan-period">par mois</p>
+            <p class="plan-trial">Essai de 14 jours</p><hr class="plan-rule">
+            <div class="plan-limit"><span>Utilisateurs</span><strong>20</strong></div><div class="plan-limit"><span>Sites</span><strong>5</strong></div><div class="plan-limit"><span>Produits</span><strong>5 000</strong></div>
+            <ul class="plan-features"><li>Ventes, clients et caisse</li><li>Stock et rapports</li><li>Banque</li><li>Paramètres</li></ul>
+            <a class="button button-dark" href="front/register.html">Créer une demande</a>
+          </article>
+          <article class="plan">
+            <h3 class="plan-name">Enterprise</h3><p class="plan-tagline">Pour piloter une organisation étendue.</p>
+            <p class="plan-price">29,99 $</p><p class="plan-period">par mois</p>
+            <p class="plan-trial">Essai de 30 jours</p><hr class="plan-rule">
+            <div class="plan-limit"><span>Utilisateurs</span><strong>Selon accord</strong></div><div class="plan-limit"><span>Sites</span><strong>Selon accord</strong></div><div class="plan-limit"><span>Produits</span><strong>Selon accord</strong></div>
+            <ul class="plan-features"><li>Clients, ventes et stock</li><li>Caisse et banque</li><li>Comptabilité et rapports</li><li>Paramètres</li></ul>
+            <a class="button button-outline" href="front/register.html">Créer une demande</a>
+          </article>
+        </div>
+        <p class="pricing-note"><strong>À propos des offres :</strong> ces tarifs et plafonds sont des propositions commerciales. La version actuelle ne facture pas les abonnements et n’impose pas automatiquement les quotas. Les boutons ouvrent le formulaire général d’inscription sans transmettre le forfait choisi; l’activation des entreprises et des modules est administrée séparément.</p>
+      </div>
+    </section>
+
+    <section class="section workflow" id="fonctionnement" aria-labelledby="workflow-title">
+      <div class="section-inner">
+        <div class="section-heading">
+          <div class="section-heading-copy"><p class="section-kicker">Prise en main</p><h2 id="workflow-title">De l’inscription au pilotage.</h2></div>
+          <p>Les données opérationnelles sont cloisonnées par entreprise et les accès sont attribués par rôle.</p>
+        </div>
+        <div class="workflow-grid">
+          <article class="workflow-step"><span>ÉTAPE 01</span><h3>Créez votre espace</h3><p>Envoyez les informations de votre entreprise et de son administrateur.</p></article>
+          <article class="workflow-step"><span>ÉTAPE 02</span><h3>Faites activer les modules</h3><p>Un super administrateur valide l’entreprise et autorise les modules disponibles.</p></article>
+          <article class="workflow-step"><span>ÉTAPE 03</span><h3>Configurez vos opérations</h3><p>Ajoutez vos succursales, produits, utilisateurs, monnaies et caisses selon vos besoins.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section limits" aria-labelledby="limits-title">
+      <div class="section-inner">
+        <div class="section-heading">
+          <div class="section-heading-copy"><p class="section-kicker">Périmètre actuel</p><h2 id="limits-title">Une information claire avant de commencer.</h2></div>
+          <p>Les fonctions ci-dessous sont prévues dans les offres proposées, mais ne sont pas encore disponibles dans cette version.</p>
+        </div>
+        <div class="limit-grid">
+          <div class="limit-item"><strong>Abonnements et paiement en ligne</strong>Les tarifs sont affichés à titre de proposition; la facturation n’est pas automatisée.</div>
+          <div class="limit-item"><strong>Quotas d’offre</strong>Les plafonds d’utilisateurs, de sites et de produits ne sont pas encore appliqués automatiquement.</div>
+          <div class="limit-item"><strong>Taux de change</strong>Les montants sont suivis par monnaie, sans conversion automatique entre devises.</div>
+          <div class="limit-item"><strong>Sauvegarde automatique</strong>La planification, le transfert et la restauration de sauvegardes ne sont pas fournis par l’interface actuelle.</div>
+          <div class="limit-item"><strong>Comptabilisation automatique</strong>Les opérations de vente, d’achat et de caisse ne génèrent pas automatiquement d’écritures comptables.</div>
+          <div class="limit-item"><strong>Transferts inter-sites</strong>Le transfert de stock entre succursales n’est pas exposé comme un parcours utilisateur complet dans cette version.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="final-cta" aria-label="Créer un compte ou se connecter">
+      <div class="final-cta-inner">
+        <div><h2>Prêt à organiser vos opérations ?</h2><p>Créez une demande d’entreprise ou ouvrez votre espace existant.</p></div>
+        <div class="hero-actions"><a class="button" href="front/register.html">Créer une entreprise</a><a class="button" href="front/login.html">Se connecter</a></div>
+      </div>
     </section>
   </main>
+
+  <footer class="site-footer">
+    <a class="brand" href="#accueil"><span class="brand-mark">A</span><span>ALBA-STOCK</span></a>
+    <span>Gestion de stock, ventes et trésorerie</span>
+    <nav class="footer-links" aria-label="Liens de pied de page"><a href="front/login.html">Connexion</a><a href="front/register.html">Créer une entreprise</a><a href="front/superadmin-login.html">Super administration</a></nav>
+  </footer>
 </body>
 </html>
