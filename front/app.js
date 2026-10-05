@@ -1232,14 +1232,14 @@ async function openAccountingEntryForm() {
     const createLineRow = (index = 0) => `
       <div class="accounting-entry-line" style="display:grid;grid-template-columns:1.8fr 1.1fr 1.1fr 1.3fr 0.5fr;gap:8px;align-items:end;padding:10px 0;border-top:1px solid #e8efeb;">
         <label>Compte<select name="line_compte_${index}" required>${accounts.map(account => `<option value="${Number(account.compte_id)}">${escapeHtml(account.code)} — ${escapeHtml(account.intitule)}</option>`).join('')}</select></label>
-        <label>Libellé<input name="line_label_${index}" maxlength="255" required></label>
+        <label>Libellé de ligne<input name="line_label_${index}" maxlength="255" placeholder="Libellé général par défaut"></label>
         <label>Débit<input type="number" min="0" step="0.01" name="line_debit_${index}" value="0"></label>
         <label>Crédit<input type="number" min="0" step="0.01" name="line_credit_${index}" value="0"></label>
         <button type="button" class="icon-action-button" data-account-line-remove="${index}" aria-label="Supprimer cette ligne">×</button>
       </div>`;
     const modal = document.createElement('div');
     modal.className = 'entity-modal';
-    modal.innerHTML = `<section class="entity-dialog"><h2>Nouvelle écriture comptable</h2><form class="entity-form"><label>Date<input type="date" name="date_ecriture" required></label><label>Journal<input name="journal_code" maxlength="12" required placeholder="Ex. ACH, VTE, CFI"></label><label>Référence<input name="reference" maxlength="120" required></label><label>Monnaie<select name="monnaie" required>${[currency].map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</select></label><label class="full">Libellé<input name="libelle" maxlength="255" required></label><div class="full" id="accounting-entry-lines">${[0, 1].map(createLineRow).join('')}</div><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button type="button" class="text-button" id="accounting-entry-add-line">+ Ajouter une ligne</button><button class="modal-submit">Valider l’écriture</button></div></form></section>`;
+    modal.innerHTML = `<section class="entity-dialog"><h2>Nouvelle écriture comptable</h2><form class="entity-form"><label>Date<input type="date" name="date_ecriture" value="${localDateInputValue(new Date())}" required></label><label>Journal<input name="journal_code" maxlength="12" required placeholder="Ex. ACH, VTE, CFI"></label><label>Référence<input name="reference" maxlength="120" required></label><label>Monnaie<select name="monnaie" required>${[currency].map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</select></label><label class="full">Libellé<input name="libelle" maxlength="255" required></label><div class="full" id="accounting-entry-lines">${[0, 1].map(createLineRow).join('')}</div><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button type="button" class="text-button" id="accounting-entry-add-line">+ Ajouter une ligne</button><button class="modal-submit">Valider l’écriture</button></div></form></section>`;
     document.body.appendChild(modal);
     const form = modal.querySelector('form');
     const linesContainer = modal.querySelector('#accounting-entry-lines');
@@ -1279,7 +1279,7 @@ async function openAccountingEntryForm() {
       const cleaned = lines.filter(line => line && (line.compte || line.label || line.debit || line.credit));
       const prepared = cleaned.map(line => ({
         compte_id: Number(line.compte || 0),
-        libelle: String(line.label || '').trim(),
+        libelle: String(line.label || '').trim() || String(formData.get('libelle') || '').trim(),
         debit: Number(line.debit || 0),
         credit: Number(line.credit || 0)
       })).filter(line => line.compte_id > 0 && (line.libelle || line.debit || line.credit));

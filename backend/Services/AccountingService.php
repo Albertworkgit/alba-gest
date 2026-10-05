@@ -93,9 +93,12 @@ final class AccountingService
         $label = trim((string) ($data['libelle'] ?? ''));
         $currency = strtoupper(trim((string) ($data['monnaie'] ?? '')));
         $lines = $data['lines'] ?? [];
-        if (!$this->isDate($date) || !preg_match('/^[A-Z0-9_-]{1,12}$/', $journal) || $reference === '' || mb_strlen($reference, 'UTF-8') > 120 || $label === '' || mb_strlen($label, 'UTF-8') > 255 || $currency === '' || !is_array($lines) || count($lines) < 2) {
-            throw new RuntimeException('Date, journal, référence, libellé, monnaie et au moins deux lignes sont requis.');
-        }
+        if (!$this->isDate($date)) throw new RuntimeException('La date de l’écriture est obligatoire ou invalide.');
+        if (!preg_match('/^[A-Z0-9_-]{1,12}$/', $journal)) throw new RuntimeException('Le journal est obligatoire et doit contenir au plus 12 caractères.');
+        if ($reference === '' || mb_strlen($reference, 'UTF-8') > 120) throw new RuntimeException('La référence est obligatoire et doit contenir au plus 120 caractères.');
+        if ($label === '' || mb_strlen($label, 'UTF-8') > 255) throw new RuntimeException('Le libellé de l’écriture est obligatoire et doit contenir au plus 255 caractères.');
+        if ($currency === '') throw new RuntimeException('Choisissez la monnaie de l’écriture.');
+        if (!is_array($lines) || count($lines) < 2) throw new RuntimeException('Une écriture doit contenir au moins deux lignes.');
         $this->assertCurrency($currency);
 
         $preparedLines = [];
@@ -104,7 +107,8 @@ final class AccountingService
         foreach ($lines as $line) {
             if (!is_array($line)) throw new RuntimeException('Une ligne d’écriture est invalide.');
             $accountId = (int) ($line['compte_id'] ?? 0);
-            $lineLabel = trim((string) ($line['libelle'] ?? $label));
+            $lineLabel = trim((string) ($line['libelle'] ?? ''));
+            if ($lineLabel === '') $lineLabel = $label;
             $debit = round((float) ($line['debit'] ?? 0), 2);
             $credit = round((float) ($line['credit'] ?? 0), 2);
             if ($accountId < 1 || $lineLabel === '' || mb_strlen($lineLabel, 'UTF-8') > 255 || !is_finite($debit) || !is_finite($credit) || $debit < 0 || $credit < 0 || ($debit > 0 && $credit > 0) || ($debit === 0.0 && $credit === 0.0)) {
