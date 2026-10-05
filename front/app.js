@@ -7,7 +7,7 @@ const views = {
   users: {label:"Utilisateurs et rôles", kicker:"GESTION DES ACCÈS", title:"Les bonnes personnes, <em>les bons accès.</em>", description:"Gérez les comptes utilisateurs et leurs droits d’accès.", action:"+ Ajouter un utilisateur", html:`<div class="view-layout"><section class="panel"><div class="panel-header"><div><h2>Utilisateurs</h2><p class="panel-subtitle">Comptes enregistrés dans votre entreprise</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Nom complet</th><th>Nom d’utilisateur</th><th>Adresse électronique</th><th>Rôle</th><th>Succursale</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="user-rows"><tr><td colspan="7">Chargement des utilisateurs…</td></tr></tbody></table></div></section><aside class="panel"><h2>Rôles et autorisations</h2><div id="role-list"><p class="empty-note">Chargement des rôles…</p></div><button class="primary-button role-create-action" data-create-role style="width:100%;margin-top:17px"><span aria-hidden="true">+</span> Créer un rôle</button></aside></div>`},
   branches: {label:"Succursales", kicker:"ADMINISTRATION", title:"Vos <em>succursales.</em>", description:"Succursales enregistrées dans la base de données.", action:"+ Créer une succursale", html:`<section class="panel"><div style="overflow:auto"><table class="data-table"><thead><tr><th>Nom</th><th>Code</th><th>Succursale mère</th><th>Adresse</th><th>Téléphone</th><th>Actions</th></tr></thead><tbody id="branch-rows"><tr><td colspan="6">Chargement…</td></tr></tbody></table></div></section>`},
   clients: {label:"Clients", kicker:"RELATION CLIENT", title:"Vos <em>clients.</em>", description:"Clients enregistrés dans la base de données.", action:"", html:`<section class="panel"><div style="overflow:auto"><table class="data-table"><thead><tr><th>Nom</th><th>Adresse électronique</th><th>Téléphone</th><th>Adresse</th></tr></thead><tbody id="client-rows"><tr><td colspan="4">Chargement…</td></tr></tbody></table></div></section>`},
-  requests: {label:"Demandes reçues", kicker:"ESPACE SUCCURSALE", title:"Demandes reçues", description:"Les demandes clients ne sont pas gérées par le schéma actuel.", action:"", html:`<p class="empty-note">Aucune donnée n’est disponible pour ce module.</p>`},
+  requests: {label:"Demandes reçues", kicker:"ADMINISTRATION", title:"Demandes reçues", description:"Examinez et traitez les demandes transmises à votre entreprise.", action:"", html:`<section class="panel" data-accounting-cancellation-inbox hidden><div class="panel-header"><div><h2>Demandes d’annulation comptable</h2><p class="panel-subtitle">Une écriture reste active jusqu’à votre approbation.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Écriture</th><th>Demandeur</th><th>Motif</th><th>Décision</th></tr></thead><tbody id="accounting-cancellation-rows"><tr><td colspan="5">Chargement des demandes…</td></tr></tbody></table></div></section><section class="panel" data-cash-cancellation-inbox hidden><div class="panel-header"><div><h2>Demandes d’annulation de caisse</h2><p class="panel-subtitle">L’opération est compensée seulement après votre approbation.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Caisse</th><th>Opération</th><th>Demandeur</th><th>Motif</th><th>Décision</th></tr></thead><tbody id="cash-cancellation-rows"><tr><td colspan="6">Chargement des demandes…</td></tr></tbody></table></div></section><p class="empty-note" data-no-company-requests hidden>Aucune demande reçue.</p>`},
   "branch-dashboard": {label:"Vue de la succursale", kicker:"ESPACE SUCCURSALE", title:"Activité de la <em>succursale.</em>", description:"Indicateurs calculés à partir du stock.", action:"", html:`<div class="dashboard-grid"><article class="stat-card"><span class="stat-label">Produits en stock</span><div class="stat-value" id="branch-product-count">—</div></article><article class="stat-card"><span class="stat-label">Stock disponible par unité</span><div class="stat-value" id="branch-quantity">—</div></article><article class="stat-card"><span class="stat-label">Alertes de seuil</span><div class="stat-value" id="branch-alerts">—</div></article></div>`},
   settings: {label:"Paramètres", kicker:"CONFIGURATION", title:"Votre <em>entreprise.</em>", description:"Modifiez votre profil et votre mot de passe.", action:"", html:`<div class="view-layout"><section class="panel"><h2>Mon profil</h2><p class="panel-subtitle">Entreprise : <strong data-settings-company>—</strong> · Rôle : <strong data-settings-role>—</strong></p><form id="profile-form" class="entity-form" style="margin-top:18px"><label>Nom complet<input name="full_name" data-profile-full-name required></label><label>Nom utilisateur<input name="username" data-profile-username></label><label class="full">Adresse email<input name="email" type="email" data-profile-email required></label><div class="entity-modal-actions full"><button class="modal-submit">Enregistrer le profil</button></div></form></section><section class="panel" id="company-profile-panel" hidden><h2>Profil de l’entreprise</h2><p class="panel-subtitle">Ces informations et images apparaîtront sur les rapports et les bons de l’entreprise et de ses succursales.</p><form id="company-profile-form" class="entity-form company-profile-form" enctype="multipart/form-data"><label>Nom de l’entreprise<input name="name" data-company-name required maxlength="100"></label><label>Adresse électronique<input name="email" type="email" data-company-email maxlength="100"></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"></label><label class="full">Adresse<textarea name="address" data-company-address></textarea></label><label>RCCM<input name="rccm" data-company-rccm maxlength="100"></label><label>Boîte postale (BP)<input name="boite_postale" data-company-bp maxlength="100"></label><div class="company-image-field"><label>Logo de l’entreprise<input type="file" name="logo" accept="image/*" data-company-logo-file><small>Format image accepté, 8 Mo maximum.</small></label><img class="company-image-preview" data-company-logo-preview alt="Logo de l’entreprise" hidden><label class="company-remove-image"><input type="checkbox" name="remove_logo" value="1"> Supprimer le logo actuel</label></div><div class="company-image-field"><label>Sceau / cachet<input type="file" name="cachet" accept="image/png" data-company-stamp-file><small>PNG uniquement, 8 Mo maximum.</small></label><img class="company-image-preview company-stamp-preview" data-company-stamp-preview alt="Cachet de l’entreprise" hidden><label class="company-remove-image"><input type="checkbox" name="remove_cachet" value="1"> Supprimer le cachet actuel</label></div><div class="entity-modal-actions full"><button class="modal-submit">Enregistrer le profil entreprise</button></div></form></section><section class="panel"><h2>Modifier mon mot de passe</h2><p class="panel-subtitle">Confirmez votre mot de passe actuel avant de choisir le nouveau.</p><form id="password-form" class="entity-form" style="margin-top:18px"><label class="full">Mot de passe actuel<input name="current_password" type="password" autocomplete="current-password" required></label><label>Nouveau mot de passe<input name="new_password" type="password" minlength="8" autocomplete="new-password" required></label><label>Confirmer le nouveau mot de passe<input name="confirm_password" type="password" minlength="8" autocomplete="new-password" required></label><div class="entity-modal-actions full"><button class="modal-submit">Modifier le mot de passe</button></div></form></section></div>`},
   procurement: {label:"Approvisionnements", kicker:"ACHATS", title:"Vos <em>approvisionnements.</em>", description:"Enregistrez les entrées et sorties de stock fournisseur.", action:"+ Nouvel approvisionnement", html:`<div class="dashboard-grid procurement-summary"><article class="stat-card"><span class="stat-label">Quantités entrées (validées)</span><div class="stat-value" id="purchase-total-in">0</div></article><article class="stat-card"><span class="stat-label">Quantités sorties (validées)</span><div class="stat-value" id="purchase-total-out">0</div></article><article class="stat-card"><span class="stat-label">Solde net</span><div class="stat-value" id="purchase-balance">0</div></article></div><section class="panel"><div class="panel-header"><div><h2>Approvisionnements enregistr&eacute;s</h2><p class="panel-subtitle">Entr&eacute;es et sorties de stock par p&eacute;riode</p></div><button type="button" class="movement-report-button" data-stock-movement-report>Fiche de stock</button></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Référence</th><th>Motif</th><th>Date</th><th>Quantité</th><th>Quantité sortie</th><th>Quantité entrée</th><th>Solde du lot</th><th>Total</th><th>Statut</th><th>Bon</th></tr></thead><tbody id="purchase-rows"><tr><td colspan="10">Chargement…</td></tr></tbody></table></div></section>`},
@@ -106,14 +106,18 @@ function renderView(viewName) {
       actionHeader.textContent = 'Annulation';
       entriesTable.tHead.rows[0].append(actionHeader);
     }
-    if (sessionUser?.is_company_admin) {
-      const inbox = document.createElement('section');
-      inbox.className = 'panel';
-      inbox.dataset.accountingCancellationInbox = '';
-      inbox.innerHTML = '<div class="panel-header"><div><h2>Demandes d’annulation</h2><p class="panel-subtitle">Une écriture n’est annulée qu’après votre approbation.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Écriture</th><th>Demandeur</th><th>Motif</th><th>Décision</th></tr></thead><tbody id="accounting-cancellation-rows"><tr><td colspan="5">Chargement des demandes…</td></tr></tbody></table></div>';
-      const entriesPanel = entriesTable?.closest('.panel');
-      if (entriesPanel) entriesPanel.insertAdjacentElement('beforebegin', inbox);
-      else container.append(inbox);
+  }
+  if (viewName === 'requests') {
+    const inbox = container.querySelector('[data-accounting-cancellation-inbox]');
+    const cashInbox = container.querySelector('[data-cash-cancellation-inbox]');
+    const emptyMessage = container.querySelector('[data-no-company-requests]');
+    const isCompanyAdmin = Boolean(sessionUser?.is_company_admin);
+    if (inbox) inbox.hidden = !isCompanyAdmin;
+    if (cashInbox) cashInbox.hidden = !isCompanyAdmin;
+    if (emptyMessage) emptyMessage.hidden = isCompanyAdmin;
+    if (isCompanyAdmin) {
+      loadEntryCancellationRequests();
+      loadCashMovementCancellationRequests();
     }
   }
   const categoryButton = container.querySelector('[data-create-category]');
@@ -748,6 +752,21 @@ async function loadCashRows(page = 1, movementPage = 1) {
       cashSummaryBox.querySelectorAll('tbody tr').forEach(row=>{const currency=row.cells[0]?.textContent||'';if(balanceByCurrency.has(currency)&&row.cells[3])row.cells[3].textContent=moneyCurrencyLabel(balanceByCurrency.get(currency),currency);});
     }
     addSalePaymentReceiptActions(document.getElementById('cash-movement-rows'), movementResult.rows);
+    const cashMovementRowsBody = document.getElementById('cash-movement-rows');
+    movementResult.rows.forEach((movement, index) => {
+      const row = cashMovementRowsBody?.rows[index];
+      const actionCell = row?.cells[row.cells.length - 1];
+      if (!actionCell || !hasAccess('modifier_caisse') || movement.reference_id !== null || movement.caisse_statut !== 'OUVERTE') return;
+      if (movement.annulation_demande_id || movement.annulation_statut === 'EN_ATTENTE') {
+        actionCell.innerHTML = '<span class="status warning">En attente</span>';
+        return;
+      }
+      if (movement.annulation_statut === 'APPROUVEE') {
+        actionCell.innerHTML = '<span class="status danger">Annulée</span>';
+        return;
+      }
+      actionCell.innerHTML = `<button type="button" class="icon-action-button icon-action-danger" title="Demander l’annulation de cette opération" aria-label="Demander l’annulation de l’opération ${Number(movement.mouvement_id)}" data-cash-cancellation-request="${Number(movement.mouvement_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`;
+    });
     addSalePaymentReceiptActions(document.getElementById('external-payment-rows'), externalPayments);
     ensureBankPanels();await loadBanks();
     if(hasAccess('modifier_caisse'))loadPendingSales();
@@ -868,16 +887,39 @@ async function loadAccountingData() {
   await populateAccountingCurrencies();
   await loadAccountingAccounts();
   await loadAccountingEntryRows();
-  if (sessionUser?.is_company_admin) await loadEntryCancellationRequests();
+}
+let accountingCancellationCount = 0;
+let cashCancellationCount = 0;
+function updateRequestsBadge() {
+  const badge = document.querySelector('.nav-item[data-view="requests"] .nav-badge');
+  const total = accountingCancellationCount + cashCancellationCount;
+  if (badge) {
+    badge.textContent = String(total);
+    badge.hidden = total === 0;
+  }
 }
 async function loadEntryCancellationRequests() {
   const rows = document.getElementById('accounting-cancellation-rows');
   if (!rows || !sessionUser?.is_company_admin) return;
   try {
     const requests = await fetchReportData('accounting-cancellation-requests');
+    accountingCancellationCount = requests.length;
+    updateRequestsBadge();
     rows.innerHTML = requests.length ? requests.map(request => `<tr><td>${escapeHtml(dateLabel(request.created_at))}</td><td>${escapeHtml(request.reference)} · ${escapeHtml(request.libelle)}</td><td>${escapeHtml(request.demandeur || 'Compte supprimé')}</td><td>${escapeHtml(request.motif)}</td><td><div class="user-action-group"><button type="button" class="icon-action-button icon-action-success" title="Approuver l’annulation" aria-label="Approuver l’annulation de ${escapeHtml(request.reference)}" data-entry-cancellation-decision="APPROUVER" data-cancellation-request-id="${Number(request.demande_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button><button type="button" class="icon-action-button icon-action-danger" title="Refuser la demande" aria-label="Refuser la demande pour ${escapeHtml(request.reference)}" data-entry-cancellation-decision="REFUSER" data-cancellation-request-id="${Number(request.demande_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div></td></tr>`).join('') : '<tr><td colspan="5">Aucune demande d’annulation en attente.</td></tr>';
   } catch (error) {
     rows.innerHTML = `<tr><td colspan="5">${escapeHtml(error.message)}</td></tr>`;
+  }
+}
+async function loadCashMovementCancellationRequests() {
+  const rows = document.getElementById('cash-cancellation-rows');
+  if (!rows || !sessionUser?.is_company_admin) return;
+  try {
+    const requests = await fetchReportData('cash-cancellation-requests');
+    cashCancellationCount = requests.length;
+    updateRequestsBadge();
+    rows.innerHTML = requests.length ? requests.map(request => `<tr><td>${escapeHtml(dateLabel(request.created_at))}</td><td>${escapeHtml(request.cash_name)} · ${escapeHtml(request.currency)}</td><td>${escapeHtml(request.type === 'ENTREE' ? 'Entrée' : 'Sortie')} · ${moneyCurrencyLabel(request.amount, request.currency)}<br><small>${escapeHtml(request.reason || '—')}</small></td><td>${escapeHtml(request.demandeur || 'Compte supprimé')}</td><td>${escapeHtml(request.motif)}</td><td><div class="user-action-group"><button type="button" class="icon-action-button icon-action-success" title="Approuver l’annulation" aria-label="Approuver l’annulation de l’opération ${Number(request.mouvement_id)}" data-cash-cancellation-decision="APPROUVER" data-cancellation-request-id="${Number(request.demande_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button><button type="button" class="icon-action-button icon-action-danger" title="Refuser la demande" aria-label="Refuser la demande ${Number(request.demande_id)}" data-cash-cancellation-decision="REFUSER" data-cancellation-request-id="${Number(request.demande_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div></td></tr>`).join('') : '<tr><td colspan="6">Aucune demande d’annulation de caisse en attente.</td></tr>';
+  } catch (error) {
+    rows.innerHTML = `<tr><td colspan="6">${escapeHtml(error.message)}</td></tr>`;
   }
 }
 function openEntryCancellationRequest(entryId) {
@@ -898,6 +940,32 @@ function openEntryCancellationRequest(entryId) {
       modal.remove();
       await loadAccountingEntryRows();
       if (sessionUser?.is_company_admin) await loadEntryCancellationRequests();
+      showToast('Demande d’annulation envoyée à l’administrateur.');
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      if (submitButton.isConnected) submitButton.disabled = false;
+    }
+  });
+}
+function openCashMovementCancellationRequest(movementId) {
+  const modal = document.createElement('div');
+  modal.className = 'entity-modal';
+  modal.innerHTML = `<section class="entity-dialog"><h2>Demander l’annulation de l’opération</h2><p>La demande sera transmise à l’administrateur de l’entreprise. Le solde ne changera qu’après son approbation.</p><form class="entity-form"><label class="full">Motif de l’annulation<textarea name="motif" maxlength="500" required></textarea></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Envoyer la demande</button></div></form></section>`;
+  document.body.appendChild(modal);
+  const form = modal.querySelector('form');
+  modal.querySelector('.modal-cancel').addEventListener('click', () => modal.remove());
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const submitButton = form.querySelector('.modal-submit');
+    submitButton.disabled = true;
+    try {
+      const response = await fetch('../backend/public/report-data.php?action=cash-cancellation-request', {method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify({mouvement_id: movementId, motif: form.elements.namedItem('motif').value.trim()})});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Envoi de la demande impossible.');
+      modal.remove();
+      await loadCashRows();
+      if (sessionUser?.is_company_admin) await loadCashMovementCancellationRequests();
       showToast('Demande d’annulation envoyée à l’administrateur.');
     } catch (error) {
       showToast(error.message);
@@ -2299,6 +2367,24 @@ document.addEventListener('click', async event => {
   const salePaymentReceiptButton=event.target.closest('[data-sale-payment-receipt]');
   if(salePaymentReceiptButton){await printSalePaymentReceipt(salePaymentReceiptButton);return;}
   const cashMovementButton=event.target.closest('[data-cash-movement-open]');if(cashMovementButton){openCashMovementForm(cashMovementButton.dataset.cashMovementOpen);return;}
+  const cashCancellationRequestButton = event.target.closest('[data-cash-cancellation-request]');
+  if (cashCancellationRequestButton) { openCashMovementCancellationRequest(Number(cashCancellationRequestButton.dataset.cashCancellationRequest)); return; }
+  const cashCancellationDecisionButton = event.target.closest('[data-cash-cancellation-decision]');
+  if (cashCancellationDecisionButton) {
+    const decision = cashCancellationDecisionButton.dataset.cashCancellationDecision;
+    const approve = decision === 'APPROUVER';
+    if (!window.confirm(approve ? 'Approuver cette annulation créera une contre-opération et ajustera le solde de la caisse. Continuer ?' : 'Refuser cette demande d’annulation ?')) return;
+    try {
+      const response = await fetch('../backend/public/report-data.php?action=cash-cancellation-decision', {method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify({demande_id: Number(cashCancellationDecisionButton.dataset.cancellationRequestId), decision})});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Décision impossible.');
+      await Promise.all([loadCashMovementCancellationRequests(), loadCashRows()]);
+      showToast(approve ? 'Opération de caisse annulée.' : 'Demande refusée.');
+    } catch (error) {
+      showToast(error.message);
+    }
+    return;
+  }
   const cashReopenButton=event.target.closest('[data-cash-reopen]');
   if(cashReopenButton){openCashForm({name:cashReopenButton.dataset.cashName,succursale_id:Number(cashReopenButton.dataset.cashBranch),monais:cashReopenButton.dataset.cashCurrency,mode_paiement_id:Number(cashReopenButton.dataset.cashMode),banque_id:Number(cashReopenButton.dataset.cashBank||0)});return;}
   const cashDeleteButton=event.target.closest('[data-cash-delete]');if(cashDeleteButton){if(!window.confirm('Supprimer cette caisse clôturée ? Les caisses avec des opérations ne peuvent pas être supprimées.'))return;try{const response=await fetch('../backend/public/auth.php?action=delete-cash',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({caisse_id:Number(cashDeleteButton.dataset.cashDelete)})});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Suppression impossible.');showToast('Caisse supprimée.');loadCashRows();}catch(error){showToast(error.message);}return;}

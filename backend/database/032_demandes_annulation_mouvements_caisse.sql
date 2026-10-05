@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS demandes_annulation_mouvements_caisse (
+    demande_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    mouvement_id INT NOT NULL,
+    demandeur_id INT NULL,
+    motif VARCHAR(500) NOT NULL,
+    statut ENUM('EN_ATTENTE', 'APPROUVEE', 'REFUSEE') NOT NULL DEFAULT 'EN_ATTENTE',
+    decision_par INT NULL,
+    motif_decision VARCHAR(500) NULL,
+    mouvement_compensation_id INT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    decision_at DATETIME NULL,
+    KEY idx_demande_caisse_statut (entreprise_id, statut, created_at),
+    KEY idx_demande_caisse_mouvement (entreprise_id, mouvement_id, statut),
+    CONSTRAINT fk_demande_caisse_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE,
+    CONSTRAINT fk_demande_caisse_mouvement FOREIGN KEY (mouvement_id) REFERENCES mouvements_caisse(mouvement_id) ON DELETE CASCADE,
+    CONSTRAINT fk_demande_caisse_demandeur FOREIGN KEY (demandeur_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    CONSTRAINT fk_demande_caisse_decisionnaire FOREIGN KEY (decision_par) REFERENCES users(user_id) ON DELETE SET NULL,
+    CONSTRAINT fk_demande_caisse_compensation FOREIGN KEY (mouvement_compensation_id) REFERENCES mouvements_caisse(mouvement_id) ON DELETE SET NULL
+) ENGINE=InnoDB;

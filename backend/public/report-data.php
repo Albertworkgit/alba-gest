@@ -7,12 +7,14 @@ require_once __DIR__ . '/../Core/Session.php';
 require_once __DIR__ . '/../Core/AuthGuard.php';
 require_once __DIR__ . '/../Core/Authorization.php';
 require_once __DIR__ . '/../Services/AccountingService.php';
+require_once __DIR__ . '/../Services/CashMovementService.php';
 
 use AlbaStock\Core\AuthGuard;
 use AlbaStock\Core\Authorization;
 use AlbaStock\Core\Database;
 use AlbaStock\Core\JsonResponse;                                                                                                                                                                                                                                                                                                                                                                                                                                                 
 use AlbaStock\Services\AccountingService;
+use AlbaStock\Services\CashMovementService;
 
 try {
     $user = AuthGuard::requireAuthenticated();
@@ -21,6 +23,7 @@ try {
     $branchId = Authorization::branchId($user, isset($_GET['succursale_id']) ? (int) $_GET['succursale_id'] : null);
     $db = Database::connection();
     $accountingService = new AccountingService($db);
+    $cashMovementService = new CashMovementService($db);
     $attachCurrencyTotals = static function (array $sales) use ($db, $enterpriseId): array {
         if ($sales === []) return $sales;
         $saleIds = array_values(array_filter(array_unique(array_map('intval', array_column($sales, 'vente_id'))), static fn (int $id): bool => $id > 0));
@@ -196,9 +199,48 @@ try {
         $summaryBranchFilter=$branchId!==null?' AND c.succursale_id=?':'';
         $summarySql='SELECT t.code AS monais,COALESCE(SUM(mov.entrees),0) AS entrees,COALESCE(SUM(mov.sorties),0) AS sorties,COALESCE(SUM(CASE WHEN c.statut="OUVERTE" THEN c.montant ELSE 0 END),0) AS solde,COALESCE(SUM(mov.operations),0) AS operations FROM caisses c JOIN types_caisses t ON t.type_caisse_id=c.type_caisse_id AND t.entreprise_id=c.entreprise_id LEFT JOIN (SELECT entreprise_id,caisse_id,SUM(CASE WHEN type="ENTREE" THEN amount ELSE 0 END) AS entrees,SUM(CASE WHEN type="SORTIE" THEN amount ELSE 0 END) AS sorties,COUNT(*) AS operations FROM mouvements_caisse WHERE entreprise_id=? GROUP BY entreprise_id,caisse_id) mov ON mov.caisse_id=c.caisse_id AND mov.entreprise_id=c.entreprise_id WHERE c.entreprise_id=?'.$summaryBranchFilter.' GROUP BY t.code ORDER BY t.code';
         $summary=$db->prepare($summarySql);if($branchId===null)$summary->bind_param('ii',$enterpriseId,$enterpriseId);else$summary->bind_param('iii',$enterpriseId,$enterpriseId,$branchId);$summary->execute();$summaryRows=$summary->get_result()->fetch_all(MYSQLI_ASSOC);
-        $sql='SELECT m.mouvement_id,m.type,m.amount,m.reason,m.reference_id,m.bank_reference,m.movement_date,pm.name AS payment_mode,b.name AS bank_name,c.name AS cash_name,t.code AS monais,t.symbole AS currency_symbol,u.full_name AS cashier,sv.vente_id AS vente_id,sv.invoice_no AS invoice_no FROM mouvements_caisse m JOIN caisses c ON c.caisse_id=m.caisse_id JOIN types_caisses t ON t.type_caisse_id=c.type_caisse_id AND t.entreprise_id=c.entreprise_id LEFT JOIN modes_paiement pm ON pm.mode_paiement_id=m.mode_paiement_id LEFT JOIN banques b ON b.banque_id=m.banque_id LEFT JOIN users u ON u.user_id=m.user_id LEFT JOIN ventes sv ON sv.vente_id=m.reference_id AND sv.entreprise_id=m.entreprise_id AND m.reason LIKE \'Paiement vente %\' WHERE '.$where.' ORDER BY m.movement_date DESC,m.mouvement_id DESC LIMIT ? OFFSET ?';
+        $sql='SELECT m.mouvement_id,m.type,m.amount,m.reason,m.reference_id,m.bank_reference,m.movement_date,pm.name AS payment_mode,b.name AS bank_name,c.name AS cash_name,c.statut AS caisse_statut,t.code AS monais,t.symbole AS currency_symbol,u.full_name AS cashier,sv.vente_id AS vente_id,sv.invoice_no AS invoice_no,(SELECT r.statut FROM demandes_annulation_mouvements_caisse r WHERE r.entreprise_id=m.entreprise_id AND r.mouvement_id=m.mouvement_id ORDER BY r.demande_id DESC LIMIT 1) AS annulation_statut,(SELECT r.demande_id FROM demandes_annulation_mouvements_caisse r WHERE r.entreprise_id=m.entreprise_id AND r.mouvement_id=m.mouvement_id AND r.statut=\'EN_ATTENTE\' LIMIT 1) AS annulation_demande_id FROM mouvements_caisse m JOIN caisses c ON c.caisse_id=m.caisse_id JOIN types_caisses t ON t.type_caisse_id=c.type_caisse_id AND t.entreprise_id=c.entreprise_id LEFT JOIN modes_paiement pm ON pm.mode_paiement_id=m.mode_paiement_id LEFT JOIN banques b ON b.banque_id=m.banque_id LEFT JOIN users u ON u.user_id=m.user_id LEFT JOIN ventes sv ON sv.vente_id=m.reference_id AND sv.entreprise_id=m.entreprise_id AND m.reason LIKE \'Paiement vente %\' WHERE '.$where.' ORDER BY m.movement_date DESC,m.mouvement_id DESC LIMIT ? OFFSET ?';
         $q=$db->prepare($sql);if($branchId===null)$q->bind_param('iii',$enterpriseId,$perPage,$offset);else$q->bind_param('iiii',$enterpriseId,$branchId,$perPage,$offset);$q->execute();
         JsonResponse::send(['success'=>true,'data'=>$q->get_result()->fetch_all(MYSQLI_ASSOC),'summary'=>$summaryRows,'pagination'=>['page'=>$page,'per_page'=>$perPage,'total'=>$total,'pages'=>max(1,(int)ceil($total/$perPage))]]);
+    }
+
+    if ($action === 'cash-cancellation-request' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        Authorization::requirePermission($user, 'modifier_caisse');
+        $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
+        $requestId = $cashMovementService->requestCancellation(
+            $enterpriseId,
+            (int) ($user['id'] ?? 0),
+            (int) ($body['mouvement_id'] ?? 0),
+            (string) ($body['motif'] ?? ''),
+            $branchId
+        );
+        JsonResponse::send(['success' => true, 'data' => ['demande_id' => $requestId]], 201);
+    }
+
+    if ($action === 'cash-cancellation-requests' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        Authorization::requirePermission($user, 'voir_caisse');
+        if (($user['type'] ?? '') !== 'user' || empty($user['is_company_admin'])) {
+            JsonResponse::error('Accès réservé à l’administrateur de l’entreprise.', 403);
+        }
+        JsonResponse::send(['success' => true, 'data' => $cashMovementService->cancellationRequests($enterpriseId)]);
+    }
+
+    if ($action === 'cash-cancellation-decision' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        Authorization::requirePermission($user, 'modifier_caisse');
+        if (($user['type'] ?? '') !== 'user' || empty($user['is_company_admin'])) {
+            JsonResponse::error('Seul l’administrateur de l’entreprise peut décider de cette demande.', 403);
+        }
+        $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
+        $decision = (string) ($body['decision'] ?? '');
+        if (!in_array($decision, ['APPROUVER', 'REFUSER'], true)) JsonResponse::error('Choisissez une approbation ou un refus.', 422);
+        $cashMovementService->decideCancellation(
+            $enterpriseId,
+            (int) ($user['id'] ?? 0),
+            (int) ($body['demande_id'] ?? 0),
+            $decision === 'APPROUVER',
+            (string) ($body['motif_decision'] ?? '')
+        );
+        JsonResponse::send(['success' => true, 'message' => $decision === 'APPROUVER' ? 'Opération de caisse annulée.' : 'Demande refusée.']);
     }
 
     if ($action === 'bank-operations') {
