@@ -100,6 +100,21 @@ function renderView(viewName) {
     const accountButton = container.querySelector('[data-account-create-open]');
     if (entryButton) entryButton.hidden = !hasAccess('creer_comptabilite');
     if (accountButton) accountButton.hidden = !hasAccess('modifier_comptabilite');
+    const entriesTable = container.querySelector('#accounting-entry-rows')?.closest('table');
+    if (entriesTable?.tHead?.rows[0]) {
+      const actionHeader = document.createElement('th');
+      actionHeader.textContent = 'Annulation';
+      entriesTable.tHead.rows[0].append(actionHeader);
+    }
+    if (sessionUser?.is_company_admin) {
+      const inbox = document.createElement('section');
+      inbox.className = 'panel';
+      inbox.dataset.accountingCancellationInbox = '';
+      inbox.innerHTML = '<div class="panel-header"><div><h2>Demandes d’annulation</h2><p class="panel-subtitle">Une écriture n’est annulée qu’après votre approbation.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Écriture</th><th>Demandeur</th><th>Motif</th><th>Décision</th></tr></thead><tbody id="accounting-cancellation-rows"><tr><td colspan="5">Chargement des demandes…</td></tr></tbody></table></div>';
+      const entriesPanel = entriesTable?.closest('.panel');
+      if (entriesPanel) entriesPanel.insertAdjacentElement('beforebegin', inbox);
+      else container.append(inbox);
+    }
   }
   const categoryButton = container.querySelector('[data-create-category]');
   if (categoryButton) categoryButton.hidden = !hasAccess('modifier_stock');
@@ -539,7 +554,7 @@ function showPagination(body, key, info, onPage) {
   if (!controls) return;
   const page = Number(info?.page || 1), pages = Number(info?.pages || 1), total = Number(info?.total || 0);
   paginationLoaders.set(key, onPage);
-  controls.innerHTML = `<span>Page ${page} sur ${pages} · ${total.toLocaleString('fr-FR')} résultat${total === 1 ? '' : 's'}</span><div><button type="button" data-page-key="${key}" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>â€¹ Précédent</button><button type="button" data-page-key="${key}" data-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>Suivant â€º</button></div>`;
+  controls.innerHTML = `<span>Page ${page} sur ${pages} · ${total.toLocaleString('fr-FR')} résultat${total === 1 ? '' : 's'}</span><div><button type="button" data-page-key="${key}" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>&#8249; Précédent</button><button type="button" data-page-key="${key}" data-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>Suivant &#8250;</button></div>`;
 }
 let stockData = {products:[], stocks:[], categories:[], branches:[], units:[]};
 let unitManagerModal = null;
@@ -853,6 +868,43 @@ async function loadAccountingData() {
   await populateAccountingCurrencies();
   await loadAccountingAccounts();
   await loadAccountingEntryRows();
+  if (sessionUser?.is_company_admin) await loadEntryCancellationRequests();
+}
+async function loadEntryCancellationRequests() {
+  const rows = document.getElementById('accounting-cancellation-rows');
+  if (!rows || !sessionUser?.is_company_admin) return;
+  try {
+    const requests = await fetchReportData('accounting-cancellation-requests');
+    rows.innerHTML = requests.length ? requests.map(request => `<tr><td>${escapeHtml(dateLabel(request.created_at))}</td><td>${escapeHtml(request.reference)} · ${escapeHtml(request.libelle)}</td><td>${escapeHtml(request.demandeur || 'Compte supprimé')}</td><td>${escapeHtml(request.motif)}</td><td><div class="user-action-group"><button type="button" class="icon-action-button icon-action-success" title="Approuver l’annulation" aria-label="Approuver l’annulation de ${escapeHtml(request.reference)}" data-entry-cancellation-decision="APPROUVER" data-cancellation-request-id="${Number(request.demande_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button><button type="button" class="icon-action-button icon-action-danger" title="Refuser la demande" aria-label="Refuser la demande pour ${escapeHtml(request.reference)}" data-entry-cancellation-decision="REFUSER" data-cancellation-request-id="${Number(request.demande_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div></td></tr>`).join('') : '<tr><td colspan="5">Aucune demande d’annulation en attente.</td></tr>';
+  } catch (error) {
+    rows.innerHTML = `<tr><td colspan="5">${escapeHtml(error.message)}</td></tr>`;
+  }
+}
+function openEntryCancellationRequest(entryId) {
+  const modal = document.createElement('div');
+  modal.className = 'entity-modal';
+  modal.innerHTML = `<section class="entity-dialog"><h2>Demander l’annulation</h2><p>La demande sera transmise à l’administrateur de l’entreprise. L’écriture restera active jusqu’à sa décision.</p><form class="entity-form"><label class="full">Motif de l’annulation<textarea name="motif" maxlength="500" required></textarea></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Envoyer la demande</button></div></form></section>`;
+  document.body.appendChild(modal);
+  const form = modal.querySelector('form');
+  modal.querySelector('.modal-cancel').addEventListener('click', () => modal.remove());
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const submitButton = form.querySelector('.modal-submit');
+    submitButton.disabled = true;
+    try {
+      const response = await fetch('../backend/public/report-data.php?action=accounting-cancellation-request', {method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify({ecriture_id: entryId, motif: form.elements.namedItem('motif').value.trim()})});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Envoi de la demande impossible.');
+      modal.remove();
+      await loadAccountingEntryRows();
+      if (sessionUser?.is_company_admin) await loadEntryCancellationRequests();
+      showToast('Demande d’annulation envoyée à l’administrateur.');
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      if (submitButton.isConnected) submitButton.disabled = false;
+    }
+  });
 }
 function setAccountingDateDefaults() {
   const fromInput = document.getElementById('accounting-from');
@@ -889,14 +941,21 @@ async function populateAccountingCurrencies() {
     showToast(error.message);
   }
 }
-async function loadAccountingAccounts() {
+let accountingAccountPage = 1;
+async function loadAccountingAccounts(page = accountingAccountPage) {
   const accountSelect = document.getElementById('accounting-account');
   const accountRows = document.getElementById('accounting-account-rows');
   if (!accountSelect && !accountRows) return;
   try {
     const accounts = await fetchReportData('accounting-accounts');
     if (accountSelect) accountSelect.innerHTML = '<option value="">Sélectionner un compte</option>' + accounts.map(account => `<option value="${Number(account.compte_id)}">${escapeHtml(account.code)} — ${escapeHtml(account.intitule)}</option>`).join('');
-    if (accountRows) accountRows.innerHTML = accounts.length ? accounts.map(account => `<tr><td>${escapeHtml(account.code)}</td><td>${escapeHtml(account.intitule)}</td><td>${Number(account.classe)}</td><td>${escapeHtml(account.nature)}</td><td>${escapeHtml(account.parent_code ? `${account.parent_code} — ${account.parent_intitule}` : '—')}</td><td>${Number(account.is_active) ? 'Actif' : 'Inactif'}</td><td>${Number(account.is_system) ? 'Système' : '—'}</td></tr>`).join('') : '<tr><td colspan="7">Aucun compte comptable. Créez d’abord les comptes nécessaires aux écritures.</td></tr>';
+    const totalPages = Math.max(1, Math.ceil(accounts.length / PAGE_SIZE));
+    accountingAccountPage = Math.min(Math.max(1, page), totalPages);
+    const visibleAccounts = accounts.slice((accountingAccountPage - 1) * PAGE_SIZE, accountingAccountPage * PAGE_SIZE);
+    if (accountRows) {
+      accountRows.innerHTML = visibleAccounts.length ? visibleAccounts.map(account => `<tr><td>${escapeHtml(account.code)}</td><td>${escapeHtml(account.intitule)}</td><td>${Number(account.classe)}</td><td>${escapeHtml(account.nature)}</td><td>${escapeHtml(account.parent_code ? `${account.parent_code} — ${account.parent_intitule}` : '—')}</td><td>${Number(account.is_active) ? 'Actif' : 'Inactif'}</td><td>${Number(account.is_system) ? 'Système' : hasAccess('modifier_comptabilite') ? `<div class="user-action-group"><button type="button" class="icon-action-button" title="Modifier le compte ${escapeHtml(account.code)}" aria-label="Modifier le compte ${escapeHtml(account.code)}" data-account-edit="${Number(account.compte_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4 4M4 20l4.5-1L19 8.5 15.5 5 5 15.5 4 20Z"/></svg></button><button type="button" class="icon-action-button icon-action-danger" title="Supprimer le compte ${escapeHtml(account.code)}" aria-label="Supprimer le compte ${escapeHtml(account.code)}" data-account-delete="${Number(account.compte_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button></div>` : '—'}</td></tr>`).join('') : '<tr><td colspan="7">Aucun compte comptable. Créez d’abord les comptes nécessaires aux écritures.</td></tr>';
+      showPagination(accountRows, 'accounting-accounts', {page: accountingAccountPage, per_page: PAGE_SIZE, total: accounts.length, pages: totalPages}, loadAccountingAccounts);
+    }
     const reportType = document.getElementById('accounting-report-type')?.value;
     const showAccountFilter = reportType === 'grand-livre';
     const filterWrapper = document.getElementById('accounting-account-filter');
@@ -918,14 +977,14 @@ async function loadAccountingEntryRows() {
   const to = document.getElementById('accounting-to')?.value;
   const currency = document.getElementById('accounting-currency')?.value;
   if (!from || !to || !currency) {
-    rowsTarget.innerHTML = '<tr><td colspan="7">Choisissez une période et une monnaie pour afficher le journal.</td></tr>';
+    rowsTarget.innerHTML = '<tr><td colspan="8">Choisissez une période et une monnaie pour afficher le journal.</td></tr>';
     return;
   }
   try {
     const entries = await fetchReportData('accounting-entries', {date_debut: from, date_fin: to, monnaie: currency});
-    rowsTarget.innerHTML = entries.length ? entries.map(entry => `<tr><td>${escapeHtml(dateLabel(entry.date_ecriture))}</td><td>${escapeHtml(entry.journal_code)}</td><td>${escapeHtml(entry.reference)}</td><td>${escapeHtml(entry.libelle)}</td><td>${Number(entry.line_count)}</td><td>${moneyCurrencyLabel(entry.debit_total, entry.monnaie)}</td><td>${moneyCurrencyLabel(entry.credit_total, entry.monnaie)}</td></tr>`).join('') : '<tr><td colspan="7">Aucune écriture validée pour cette période et cette monnaie.</td></tr>';
+    rowsTarget.innerHTML = entries.length ? entries.map(entry => `<tr><td>${escapeHtml(dateLabel(entry.date_ecriture))}</td><td>${escapeHtml(entry.journal_code)}</td><td>${escapeHtml(entry.reference)}</td><td>${escapeHtml(entry.libelle)}</td><td>${Number(entry.line_count)}</td><td>${moneyCurrencyLabel(entry.debit_total, entry.monnaie)}</td><td>${moneyCurrencyLabel(entry.credit_total, entry.monnaie)}</td><td>${entry.annulation_demande_id ? '<span class="status warning">En attente</span>' : `<button type="button" class="icon-action-button icon-action-danger" title="Demander l’annulation de l’écriture ${escapeHtml(entry.reference)}" aria-label="Demander l’annulation de l’écriture ${escapeHtml(entry.reference)}" data-entry-cancellation-request="${Number(entry.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`}</td></tr>`).join('') : '<tr><td colspan="8">Aucune écriture validée pour cette période et cette monnaie.</td></tr>';
   } catch (error) {
-    rowsTarget.innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`;
+    rowsTarget.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
   }
 }
 function toggleAccountingAccountFilter() {
@@ -1048,12 +1107,18 @@ async function loadAccountingReport() {
     showToast(error.message);
   }
 }
-async function openAccountingAccountForm() {
+async function openAccountingAccountForm(accountId = null) {
   try {
     const accounts = await fetchReportData('accounting-accounts');
+    const editingAccount = accountId === null ? null : accounts.find(account => Number(account.compte_id) === accountId);
+    if (accountId !== null && (!editingAccount || Number(editingAccount.is_system))) throw new Error('Ce compte ne peut pas être modifié.');
     const modal = document.createElement('div');
     modal.className = 'entity-modal';
-    modal.innerHTML = `<section class="entity-dialog"><h2>Créer un compte comptable</h2><form class="entity-form"><label>Code<input name="code" maxlength="20" required placeholder="Ex. 101100"></label><label>Intitulé<input name="intitule" maxlength="160" required></label><label>Classe<select name="classe" required><option value="1">1 — Ressources durables</option><option value="2">2 — Immobilisations</option><option value="3">3 — Stocks</option><option value="4">4 — Tiers</option><option value="5">5 — Trésorerie</option><option value="6">6 — Charges</option><option value="7">7 — Produits</option><option value="8">8 — Autres charges et produits</option><option value="9">9 — Comptabilité analytique</option></select></label><label>Nature<select name="nature" required><option value="DEBIT">Débit</option><option value="CREDIT">Crédit</option></select></label><label>Compte parent<select name="parent_id"><option value="">Aucun parent</option>${accounts.map(account => `<option value="${Number(account.compte_id)}">${escapeHtml(account.code)} — ${escapeHtml(account.intitule)}</option>`).join('')}</select></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Enregistrer</button></div></form></section>`;
+    const classOptions = '<option value="1">1 — Ressources durables</option><option value="2">2 — Immobilisations</option><option value="3">3 — Stocks</option><option value="4">4 — Tiers</option><option value="5">5 — Trésorerie</option><option value="6">6 — Charges</option><option value="7">7 — Produits</option><option value="8">8 — Autres charges et produits</option><option value="9">9 — Comptabilité analytique</option>';
+    const accountFields = editingAccount
+      ? `<label>Code<input value="${escapeHtml(editingAccount.code)}" disabled></label><label>Classe<input value="${Number(editingAccount.classe)}" disabled></label>`
+      : `<label>Code<input name="code" maxlength="20" required placeholder="Ex. 101100"></label><label>Classe<select name="classe" required>${classOptions}</select></label><label>Compte parent<select name="parent_id"><option value="">Aucun parent</option>${accounts.map(account => `<option value="${Number(account.compte_id)}">${escapeHtml(account.code)} — ${escapeHtml(account.intitule)}</option>`).join('')}</select></label>`;
+    modal.innerHTML = `<section class="entity-dialog"><h2>${editingAccount ? 'Modifier un compte comptable' : 'Créer un compte comptable'}</h2><form class="entity-form">${accountFields}<label>Intitulé<input name="intitule" maxlength="160" required value="${escapeHtml(editingAccount?.intitule || '')}"></label><label>Nature<select name="nature" required><option value="DEBIT"${editingAccount?.nature === 'DEBIT' ? ' selected' : ''}>Débit</option><option value="CREDIT"${editingAccount?.nature === 'CREDIT' ? ' selected' : ''}>Crédit</option></select></label>${editingAccount ? `<label>Statut<select name="is_active"><option value="1"${Number(editingAccount.is_active) ? ' selected' : ''}>Actif</option><option value="0"${!Number(editingAccount.is_active) ? ' selected' : ''}>Inactif</option></select></label>` : ''}<div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Enregistrer</button></div></form></section>`;
     document.body.appendChild(modal);
     const form = modal.querySelector('form');
     modal.querySelector('.modal-cancel').addEventListener('click', () => modal.remove());
@@ -1063,14 +1128,21 @@ async function openAccountingAccountForm() {
       submitButton.disabled = true;
       try {
         const payload = Object.fromEntries(new FormData(form));
-        payload.classe = Number(payload.classe);
-        payload.parent_id = payload.parent_id ? Number(payload.parent_id) : null;
-        const response = await fetch('../backend/public/report-data.php?action=accounting-accounts', {method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify(payload)});
+        const endpoint = editingAccount
+          ? `../backend/public/report-data.php?action=accounting-account&compte_id=${Number(editingAccount.compte_id)}`
+          : '../backend/public/report-data.php?action=accounting-accounts';
+        const method = editingAccount ? 'PATCH' : 'POST';
+        if (editingAccount) payload.is_active = form.elements.namedItem('is_active').checked ? 1 : 0;
+        else {
+          payload.classe = Number(payload.classe);
+          payload.parent_id = payload.parent_id ? Number(payload.parent_id) : null;
+        }
+        const response = await fetch(endpoint, {method, headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify(payload)});
         const result = await readJson(response);
         if (!response.ok || !result.success) throw new Error(result.message || 'Création du compte impossible.');
         modal.remove();
         await loadAccountingAccounts();
-        showToast('Compte comptable créé.');
+        showToast(editingAccount ? 'Compte comptable modifié.' : 'Compte comptable créé.');
       } catch (error) {
         showToast(error.message);
       } finally {
@@ -2166,8 +2238,42 @@ async function printStockCard(button) {
 document.addEventListener('click', async event => {
   const accountingEntryButton = event.target.closest('[data-account-entry-open]');
   if (accountingEntryButton) { await openAccountingEntryForm(); return; }
+  const entryCancellationButton = event.target.closest('[data-entry-cancellation-request]');
+  if (entryCancellationButton) { openEntryCancellationRequest(Number(entryCancellationButton.dataset.entryCancellationRequest)); return; }
+  const cancellationDecisionButton = event.target.closest('[data-entry-cancellation-decision]');
+  if (cancellationDecisionButton) {
+    const decision = cancellationDecisionButton.dataset.entryCancellationDecision;
+    const approve = decision === 'APPROUVER';
+    if (!window.confirm(approve ? 'Approuver cette demande annulera définitivement l’écriture des états comptables. Continuer ?' : 'Refuser cette demande d’annulation ?')) return;
+    try {
+      const response = await fetch('../backend/public/report-data.php?action=accounting-cancellation-decision', {method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify({demande_id: Number(cancellationDecisionButton.dataset.cancellationRequestId), decision})});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Décision impossible.');
+      await Promise.all([loadEntryCancellationRequests(), loadAccountingEntryRows()]);
+      showToast(approve ? 'Écriture annulée.' : 'Demande refusée.');
+    } catch (error) {
+      showToast(error.message);
+    }
+    return;
+  }
   const accountingCreateButton = event.target.closest('[data-account-create-open]');
   if (accountingCreateButton) { await openAccountingAccountForm(); return; }
+  const accountingEditButton = event.target.closest('[data-account-edit]');
+  if (accountingEditButton) { await openAccountingAccountForm(Number(accountingEditButton.dataset.accountEdit)); return; }
+  const accountingDeleteButton = event.target.closest('[data-account-delete]');
+  if (accountingDeleteButton) {
+    if (!window.confirm('Supprimer ce compte comptable ? Les comptes système, parents ou utilisés dans des écritures ne peuvent pas être supprimés.')) return;
+    try {
+      const response = await fetch(`../backend/public/report-data.php?action=accounting-account&compte_id=${encodeURIComponent(accountingDeleteButton.dataset.accountDelete)}`, {method: 'DELETE', credentials: 'include'});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Suppression du compte impossible.');
+      await loadAccountingAccounts();
+      showToast('Compte comptable supprimé.');
+    } catch (error) {
+      showToast(error.message);
+    }
+    return;
+  }
   const accountingReportButton = event.target.closest('[data-account-report-load]');
   if (accountingReportButton) { await loadAccountingReport(); return; }
   const accountingPrintButton = event.target.closest('[data-account-report-print]');
@@ -2354,7 +2460,7 @@ document.addEventListener('submit', async event => {
 });
 action.addEventListener('click', () => { if (currentViewName === 'stock') openEntityForm('product'); else if (currentViewName === 'users') openEntityForm('user'); else if (currentViewName === 'branches') openEntityForm('branch'); else if (currentViewName === 'procurement') openEntityForm('purchase'); else if (currentViewName === 'sales') openSaleForm(); else if (currentViewName === 'cash') openCashForm(); else if (action.textContent.trim()) showToast(`${action.textContent.trim()} : fenêtre prête à être connectée`); });
 document.addEventListener('click', event => { const pageButton = event.target.closest('[data-page-key]'); if (pageButton && !pageButton.disabled) { const loader = paginationLoaders.get(pageButton.dataset.pageKey); if (loader) loader(Number(pageButton.dataset.page)); return; } if (event.target.closest('[data-create-role]')) openEntityForm('role'); if (event.target.closest('[data-create-category]')) openEntityForm('category'); if (event.target.closest('[data-create-unit]') && sessionUser?.is_company_admin) openUnitManager(); if (event.target.closest('[data-stock-movement-report]')) openStockMovementsReport(); });
-document.addEventListener('click', event => { if (event.target.closest('.text-button') && !event.target.closest('[data-product-edit],[data-product-delete],[data-category-edit],[data-category-delete],[data-branch-edit],[data-branch-delete],[data-stock-edit],[data-stock-card],[data-role-edit],[data-role-delete],[data-user-edit],[data-user-delete],[data-stock-section],[data-toggle-categories],[data-create-unit],[data-create-category],[data-create-supplier],[data-create-purchase],[data-supplier-edit],[data-supplier-delete],[data-purchase-voucher],[data-report-action],[data-report-close],[data-bank-form-open],[data-account-create-open],[data-account-report-print],#accounting-entry-add-line,#purchase-add-supplier')) showToast('Rapport mis à jour'); });
+document.addEventListener('click', event => { if (event.target.closest('.text-button') && !event.target.closest('[data-product-edit],[data-product-delete],[data-category-edit],[data-category-delete],[data-branch-edit],[data-branch-delete],[data-stock-edit],[data-stock-card],[data-role-edit],[data-role-delete],[data-user-edit],[data-user-delete],[data-stock-section],[data-toggle-categories],[data-create-unit],[data-create-category],[data-create-supplier],[data-create-purchase],[data-supplier-edit],[data-supplier-delete],[data-purchase-voucher],[data-report-action],[data-report-close],[data-bank-form-open],[data-account-create-open],[data-account-edit],[data-account-delete],[data-account-report-print],#accounting-entry-add-line,#purchase-add-supplier')) showToast('Rapport mis à jour'); });
 document.addEventListener('click', event => {
   const stockButton = event.target.closest('[data-stock-edit]');
   if (stockButton) {

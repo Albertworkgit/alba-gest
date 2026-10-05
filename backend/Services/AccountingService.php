@@ -59,6 +59,32 @@ final class AccountingService
         }
     }
 
+    public function deleteAccount(int $enterpriseId, int $accountId): void
+    {
+        if ($accountId < 1) throw new RuntimeException('Compte comptable invalide.');
+        $account = $this->db->prepare('SELECT is_system FROM comptes_comptables WHERE compte_id=? AND entreprise_id=? LIMIT 1');
+        $account->bind_param('ii', $accountId, $enterpriseId);
+        $account->execute();
+        $row = $account->get_result()->fetch_assoc();
+        if (!$row) throw new RuntimeException('Compte comptable introuvable.');
+        if ((int) $row['is_system'] === 1) throw new RuntimeException('Un compte système ne peut pas être supprimé.');
+
+        $children = $this->db->prepare('SELECT compte_id FROM comptes_comptables WHERE entreprise_id=? AND parent_id=? LIMIT 1');
+        $children->bind_param('ii', $enterpriseId, $accountId);
+        $children->execute();
+        if ($children->get_result()->fetch_assoc()) throw new RuntimeException('Ce compte possède des sous-comptes; réaffectez-les avant de le supprimer.');
+
+        $usage = $this->db->prepare('SELECT ligne_id FROM lignes_ecritures_comptables WHERE entreprise_id=? AND compte_id=? LIMIT 1');
+        $usage->bind_param('ii', $enterpriseId, $accountId);
+        $usage->execute();
+        if ($usage->get_result()->fetch_assoc()) throw new RuntimeException('Ce compte est utilisé dans des écritures et ne peut pas être supprimé.');
+
+        $delete = $this->db->prepare('DELETE FROM comptes_comptables WHERE compte_id=? AND entreprise_id=? AND is_system=0');
+        $delete->bind_param('ii', $accountId, $enterpriseId);
+        $delete->execute();
+        if ($delete->affected_rows !== 1) throw new RuntimeException('Suppression du compte impossible.');
+    }
+
     public function createEntry(int $enterpriseId, int $userId, array $data): int
     {
         $date = trim((string) ($data['date_ecriture'] ?? ''));
@@ -116,10 +142,83 @@ final class AccountingService
     public function entries(int $enterpriseId, string $from, string $to, string $currency): array
     {
         $this->validatePeriod($from, $to, $currency);
-        $query = $this->db->prepare('SELECT e.ecriture_id,e.date_ecriture,e.journal_code,e.reference,e.libelle,e.monnaie,e.statut,u.full_name AS auteur,COUNT(l.ligne_id) AS line_count,SUM(l.debit) AS debit_total,SUM(l.credit) AS credit_total FROM ecritures_comptables e JOIN lignes_ecritures_comptables l ON l.ecriture_id=e.ecriture_id AND l.entreprise_id=e.entreprise_id LEFT JOIN users u ON u.user_id=e.user_id AND u.entreprise_id=e.entreprise_id WHERE e.entreprise_id=? AND e.statut=\'VALIDEE\' AND e.date_ecriture BETWEEN ? AND ? AND e.monnaie=? GROUP BY e.ecriture_id ORDER BY e.date_ecriture DESC,e.ecriture_id DESC');
+        $query = $this->db->prepare('SELECT e.ecriture_id,e.date_ecriture,e.journal_code,e.reference,e.libelle,e.monnaie,e.statut,u.full_name AS auteur,MAX(r.demande_id) AS annulation_demande_id,MAX(r.motif) AS annulation_motif,COUNT(l.ligne_id) AS line_count,SUM(l.debit) AS debit_total,SUM(l.credit) AS credit_total FROM ecritures_comptables e JOIN lignes_ecritures_comptables l ON l.ecriture_id=e.ecriture_id AND l.entreprise_id=e.entreprise_id LEFT JOIN users u ON u.user_id=e.user_id AND u.entreprise_id=e.entreprise_id LEFT JOIN demandes_annulation_ecritures r ON r.entreprise_id=e.entreprise_id AND r.ecriture_id=e.ecriture_id AND r.statut=\'EN_ATTENTE\' WHERE e.entreprise_id=? AND e.statut=\'VALIDEE\' AND e.date_ecriture BETWEEN ? AND ? AND e.monnaie=? GROUP BY e.ecriture_id ORDER BY e.date_ecriture DESC,e.ecriture_id DESC');
         $query->bind_param('isss', $enterpriseId, $from, $to, $currency);
         $query->execute();
         return $query->get_result()->fetch_all(MYSQLI_ASSOC);
+    }
+
+    public function requestEntryCancellation(int $enterpriseId, int $userId, int $entryId, string $reason): int
+    {
+        $reason = trim($reason);
+        if ($entryId < 1 || $reason === '' || mb_strlen($reason, 'UTF-8') > 500) {
+            throw new RuntimeException('Une écriture valide et un motif de 1 à 500 caractères sont requis.');
+        }
+
+        $this->db->begin_transaction();
+        try {
+            $entry = $this->db->prepare('SELECT ecriture_id FROM ecritures_comptables WHERE entreprise_id=? AND ecriture_id=? AND statut=\'VALIDEE\' LIMIT 1 FOR UPDATE');
+            $entry->bind_param('ii', $enterpriseId, $entryId);
+            $entry->execute();
+            if (!$entry->get_result()->fetch_assoc()) throw new RuntimeException('Cette écriture n’est pas disponible pour une demande d’annulation.');
+
+            $pending = $this->db->prepare('SELECT demande_id FROM demandes_annulation_ecritures WHERE entreprise_id=? AND ecriture_id=? AND statut=\'EN_ATTENTE\' LIMIT 1');
+            $pending->bind_param('ii', $enterpriseId, $entryId);
+            $pending->execute();
+            if ($pending->get_result()->fetch_assoc()) throw new RuntimeException('Une demande d’annulation est déjà en attente pour cette écriture.');
+
+            $status = 'EN_ATTENTE';
+            $insert = $this->db->prepare('INSERT INTO demandes_annulation_ecritures (entreprise_id,ecriture_id,demandeur_id,motif,statut) VALUES (?,?,?,?,?)');
+            $insert->bind_param('iiiss', $enterpriseId, $entryId, $userId, $reason, $status);
+            $insert->execute();
+            $requestId = (int) $this->db->insert_id;
+            $this->db->commit();
+            return $requestId;
+        } catch (\Throwable $exception) {
+            $this->db->rollback();
+            throw $exception;
+        }
+    }
+
+    public function entryCancellationRequests(int $enterpriseId): array
+    {
+        $query = $this->db->prepare('SELECT r.demande_id,r.ecriture_id,r.motif,r.created_at,e.date_ecriture,e.journal_code,e.reference,e.libelle,e.monnaie,u.full_name AS demandeur FROM demandes_annulation_ecritures r JOIN ecritures_comptables e ON e.ecriture_id=r.ecriture_id AND e.entreprise_id=r.entreprise_id LEFT JOIN users u ON u.user_id=r.demandeur_id WHERE r.entreprise_id=? AND r.statut=\'EN_ATTENTE\' ORDER BY r.created_at,r.demande_id');
+        $query->bind_param('i', $enterpriseId);
+        $query->execute();
+        return $query->get_result()->fetch_all(MYSQLI_ASSOC);
+    }
+
+    public function decideEntryCancellation(int $enterpriseId, int $adminId, int $requestId, bool $approve, string $decisionReason = ''): void
+    {
+        $decisionReason = trim($decisionReason);
+        if ($requestId < 1 || mb_strlen($decisionReason, 'UTF-8') > 500) throw new RuntimeException('Décision ou demande invalide.');
+
+        $this->db->begin_transaction();
+        try {
+            $request = $this->db->prepare('SELECT ecriture_id FROM demandes_annulation_ecritures WHERE entreprise_id=? AND demande_id=? AND statut=\'EN_ATTENTE\' LIMIT 1 FOR UPDATE');
+            $request->bind_param('ii', $enterpriseId, $requestId);
+            $request->execute();
+            $row = $request->get_result()->fetch_assoc();
+            if (!$row) throw new RuntimeException('Cette demande est introuvable ou a déjà été traitée.');
+
+            if ($approve) {
+                $entryId = (int) $row['ecriture_id'];
+                $cancel = $this->db->prepare('UPDATE ecritures_comptables SET statut=\'ANNULEE\' WHERE entreprise_id=? AND ecriture_id=? AND statut=\'VALIDEE\'');
+                $cancel->bind_param('ii', $enterpriseId, $entryId);
+                $cancel->execute();
+                if ($cancel->affected_rows !== 1) throw new RuntimeException('L’écriture ne peut plus être annulée.');
+            }
+
+            $status = $approve ? 'APPROUVEE' : 'REFUSEE';
+            $update = $this->db->prepare('UPDATE demandes_annulation_ecritures SET statut=?,decision_par=?,motif_decision=?,decision_at=NOW() WHERE entreprise_id=? AND demande_id=? AND statut=\'EN_ATTENTE\'');
+            $update->bind_param('sisii', $status, $adminId, $decisionReason, $enterpriseId, $requestId);
+            $update->execute();
+            if ($update->affected_rows !== 1) throw new RuntimeException('La décision n’a pas pu être enregistrée.');
+            $this->db->commit();
+        } catch (\Throwable $exception) {
+            $this->db->rollback();
+            throw $exception;
+        }
     }
 
     public function report(int $enterpriseId, string $type, string $from, string $to, string $currency, ?int $accountId = null): array

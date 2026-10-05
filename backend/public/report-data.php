@@ -58,10 +58,15 @@ try {
         JsonResponse::error('Méthode non autorisée pour le plan comptable.', 405);
     }
 
-    if ($action === 'accounting-account' && in_array($_SERVER['REQUEST_METHOD'], ['PATCH', 'PUT'], true)) {
+    if ($action === 'accounting-account' && in_array($_SERVER['REQUEST_METHOD'], ['PATCH', 'PUT', 'DELETE'], true)) {
         Authorization::requirePermission($user, 'modifier_comptabilite');
+        $accountId = (int) ($_GET['compte_id'] ?? 0);
+        if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+            $accountingService->deleteAccount($enterpriseId, $accountId);
+            JsonResponse::send(['success' => true, 'message' => 'Compte comptable supprimé.']);
+        }
         $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
-        $accountingService->updateAccount($enterpriseId, (int) ($_GET['compte_id'] ?? 0), $body);
+        $accountingService->updateAccount($enterpriseId, $accountId, $body);
         JsonResponse::send(['success' => true, 'message' => 'Compte comptable mis à jour.']);
     }
 
@@ -78,6 +83,46 @@ try {
         $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
         $entryId = $accountingService->createEntry($enterpriseId, (int) ($user['id'] ?? 0), $body);
         JsonResponse::send(['success' => true, 'data' => ['ecriture_id' => $entryId]], 201);
+    }
+
+    if ($action === 'accounting-cancellation-request' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        Authorization::requirePermission($user, 'voir_comptabilite');
+        $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
+        $requestId = $accountingService->requestEntryCancellation(
+            $enterpriseId,
+            (int) ($user['id'] ?? 0),
+            (int) ($body['ecriture_id'] ?? 0),
+            (string) ($body['motif'] ?? '')
+        );
+        JsonResponse::send(['success' => true, 'data' => ['demande_id' => $requestId]], 201);
+    }
+
+    if ($action === 'accounting-cancellation-requests' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        Authorization::requirePermission($user, 'voir_comptabilite');
+        if (($user['type'] ?? '') !== 'user' || empty($user['is_company_admin'])) {
+            JsonResponse::error('Accès réservé à l’administrateur de l’entreprise.', 403);
+        }
+        JsonResponse::send(['success' => true, 'data' => $accountingService->entryCancellationRequests($enterpriseId)]);
+    }
+
+    if ($action === 'accounting-cancellation-decision' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        Authorization::requirePermission($user, 'modifier_comptabilite');
+        if (($user['type'] ?? '') !== 'user' || empty($user['is_company_admin'])) {
+            JsonResponse::error('Seul l’administrateur de l’entreprise peut décider de cette demande.', 403);
+        }
+        $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
+        $decision = (string) ($body['decision'] ?? '');
+        if (!in_array($decision, ['APPROUVER', 'REFUSER'], true)) {
+            JsonResponse::error('Choisissez une approbation ou un refus.', 422);
+        }
+        $accountingService->decideEntryCancellation(
+            $enterpriseId,
+            (int) ($user['id'] ?? 0),
+            (int) ($body['demande_id'] ?? 0),
+            $decision === 'APPROUVER',
+            (string) ($body['motif_decision'] ?? '')
+        );
+        JsonResponse::send(['success' => true, 'message' => $decision === 'APPROUVER' ? 'Écriture annulée.' : 'Demande refusée.']);
     }
 
     if ($action === 'accounting-report' && $_SERVER['REQUEST_METHOD'] === 'GET') {
