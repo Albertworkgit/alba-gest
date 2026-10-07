@@ -81,6 +81,46 @@ try {
         JsonResponse::send(['success' => true, 'data' => $accountingService->entries($enterpriseId, $from, $to, $currency)]);
     }
 
+    if ($action === 'accounting-drafts' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        Authorization::requirePermission($user, 'voir_comptabilite');
+        JsonResponse::send(['success' => true, 'data' => $accountingService->draftEntries($enterpriseId)]);
+    }
+
+    if ($action === 'accounting-draft' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        Authorization::requirePermission($user, 'voir_comptabilite');
+        $entryId = (int) ($_GET['ecriture_id'] ?? 0);
+        JsonResponse::send(['success' => true, 'data' => $accountingService->draftEntry($enterpriseId, $entryId)]);
+    }
+
+    if ($action === 'accounting-draft' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        Authorization::requirePermission($user, 'creer_comptabilite');
+        $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
+        $entryId = $accountingService->createDraftEntry($enterpriseId, (int) ($user['id'] ?? 0), $body);
+        JsonResponse::send(['success' => true, 'data' => ['ecriture_id' => $entryId]], 201);
+    }
+
+    if ($action === 'accounting-draft' && $_SERVER['REQUEST_METHOD'] === 'PUT') {
+        Authorization::requirePermission($user, 'creer_comptabilite');
+        $entryId = (int) ($_GET['ecriture_id'] ?? 0);
+        $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
+        $accountingService->updateDraftEntry($enterpriseId, $entryId, $body);
+        JsonResponse::send(['success' => true, 'message' => 'Brouillon comptable mis à jour.']);
+    }
+
+    if ($action === 'accounting-draft' && $_SERVER['REQUEST_METHOD'] === 'DELETE') {
+        Authorization::requirePermission($user, 'creer_comptabilite');
+        $entryId = (int) ($_GET['ecriture_id'] ?? 0);
+        $accountingService->deleteDraftEntry($enterpriseId, $entryId);
+        JsonResponse::send(['success' => true, 'message' => 'Brouillon comptable supprimé.']);
+    }
+
+    if ($action === 'accounting-draft-validate' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        Authorization::requirePermission($user, 'creer_comptabilite');
+        $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
+        $accountingService->validateDraftEntry($enterpriseId, (int) ($body['ecriture_id'] ?? 0));
+        JsonResponse::send(['success' => true, 'message' => 'Brouillon comptable validé.']);
+    }
+
     if ($action === 'accounting-entry' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         Authorization::requirePermission($user, 'creer_comptabilite');
         $body = json_decode((string) file_get_contents('php://input'), true) ?: [];

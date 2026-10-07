@@ -87,6 +87,97 @@ final class AccountingService
 
     public function createEntry(int $enterpriseId, int $userId, array $data): int
     {
+        $entry = $this->prepareEntry($enterpriseId, $data, true);
+        return $this->insertEntry($enterpriseId, $userId, $entry, 'VALIDEE');
+    }
+
+    public function createDraftEntry(int $enterpriseId, int $userId, array $data): int
+    {
+        $entry = $this->prepareEntry($enterpriseId, $data, false);
+        return $this->insertEntry($enterpriseId, $userId, $entry, 'BROUILLON');
+    }
+
+    public function updateDraftEntry(int $enterpriseId, int $entryId, array $data): void
+    {
+        if ($entryId < 1) throw new RuntimeException('Brouillon comptable invalide.');
+        $entry = $this->prepareEntry($enterpriseId, $data, false);
+
+        $this->db->begin_transaction();
+        try {
+            $this->lockDraft($enterpriseId, $entryId);
+            $update = $this->db->prepare('UPDATE ecritures_comptables SET date_ecriture=?,journal_code=?,reference=?,libelle=?,monnaie=? WHERE entreprise_id=? AND ecriture_id=? AND statut=\'BROUILLON\'');
+            $update->bind_param('sssssii', $entry['date_ecriture'], $entry['journal_code'], $entry['reference'], $entry['libelle'], $entry['monnaie'], $enterpriseId, $entryId);
+            $update->execute();
+
+            $deleteLines = $this->db->prepare('DELETE FROM lignes_ecritures_comptables WHERE entreprise_id=? AND ecriture_id=?');
+            $deleteLines->bind_param('ii', $enterpriseId, $entryId);
+            $deleteLines->execute();
+            $this->insertEntryLines($enterpriseId, $entryId, $entry['lines']);
+            $this->db->commit();
+        } catch (\Throwable $exception) {
+            $this->db->rollback();
+            throw $exception;
+        }
+    }
+
+    public function draftEntries(int $enterpriseId): array
+    {
+        $query = $this->db->prepare('SELECT e.ecriture_id,e.date_ecriture,e.journal_code,e.reference,e.libelle,e.monnaie,e.user_id,u.full_name AS auteur,COUNT(l.ligne_id) AS line_count,COALESCE(SUM(l.debit),0) AS debit_total,COALESCE(SUM(l.credit),0) AS credit_total FROM ecritures_comptables e LEFT JOIN lignes_ecritures_comptables l ON l.ecriture_id=e.ecriture_id AND l.entreprise_id=e.entreprise_id LEFT JOIN users u ON u.user_id=e.user_id AND u.entreprise_id=e.entreprise_id WHERE e.entreprise_id=? AND e.statut=\'BROUILLON\' GROUP BY e.ecriture_id ORDER BY e.date_ecriture DESC,e.ecriture_id DESC');
+        $query->bind_param('i', $enterpriseId);
+        $query->execute();
+        return $query->get_result()->fetch_all(MYSQLI_ASSOC);
+    }
+
+    public function draftEntry(int $enterpriseId, int $entryId): array
+    {
+        if ($entryId < 1) throw new RuntimeException('Brouillon comptable invalide.');
+        $query = $this->db->prepare('SELECT ecriture_id,date_ecriture,journal_code,reference,libelle,monnaie FROM ecritures_comptables WHERE entreprise_id=? AND ecriture_id=? AND statut=\'BROUILLON\' LIMIT 1');
+        $query->bind_param('ii', $enterpriseId, $entryId);
+        $query->execute();
+        $entry = $query->get_result()->fetch_assoc();
+        if (!$entry) throw new RuntimeException('Brouillon comptable introuvable ou déjà validé.');
+
+        $lines = $this->db->prepare('SELECT compte_id AS compte_id,libelle,debit,credit FROM lignes_ecritures_comptables WHERE entreprise_id=? AND ecriture_id=? ORDER BY ligne_id');
+        $lines->bind_param('ii', $enterpriseId, $entryId);
+        $lines->execute();
+        $entry['lines'] = $lines->get_result()->fetch_all(MYSQLI_ASSOC);
+        return $entry;
+    }
+
+    public function validateDraftEntry(int $enterpriseId, int $entryId): void
+    {
+        if ($entryId < 1) throw new RuntimeException('Brouillon comptable invalide.');
+        $this->db->begin_transaction();
+        try {
+            $entry = $this->lockDraft($enterpriseId, $entryId);
+            $lineQuery = $this->db->prepare('SELECT compte_id,libelle,debit,credit FROM lignes_ecritures_comptables WHERE entreprise_id=? AND ecriture_id=? ORDER BY ligne_id');
+            $lineQuery->bind_param('ii', $enterpriseId, $entryId);
+            $lineQuery->execute();
+            $entry['lines'] = $lineQuery->get_result()->fetch_all(MYSQLI_ASSOC);
+            $this->prepareEntry($enterpriseId, $entry, true);
+
+            $update = $this->db->prepare('UPDATE ecritures_comptables SET statut=\'VALIDEE\' WHERE entreprise_id=? AND ecriture_id=? AND statut=\'BROUILLON\'');
+            $update->bind_param('ii', $enterpriseId, $entryId);
+            $update->execute();
+            if ($update->affected_rows !== 1) throw new RuntimeException('La validation du brouillon a échoué.');
+            $this->db->commit();
+        } catch (\Throwable $exception) {
+            $this->db->rollback();
+            throw $exception;
+        }
+    }
+
+    public function deleteDraftEntry(int $enterpriseId, int $entryId): void
+    {
+        if ($entryId < 1) throw new RuntimeException('Brouillon comptable invalide.');
+        $delete = $this->db->prepare('DELETE FROM ecritures_comptables WHERE entreprise_id=? AND ecriture_id=? AND statut=\'BROUILLON\'');
+        $delete->bind_param('ii', $enterpriseId, $entryId);
+        $delete->execute();
+        if ($delete->affected_rows !== 1) throw new RuntimeException('Brouillon introuvable ou déjà validé.');
+    }
+
+    private function prepareEntry(int $enterpriseId, array $data, bool $requireBalanced): array
+    {
         $date = trim((string) ($data['date_ecriture'] ?? ''));
         $journal = strtoupper(trim((string) ($data['journal_code'] ?? '')));
         $reference = trim((string) ($data['reference'] ?? ''));
@@ -94,11 +185,13 @@ final class AccountingService
         $currency = strtoupper(trim((string) ($data['monnaie'] ?? '')));
         $lines = $data['lines'] ?? [];
         if (!$this->isDate($date)) throw new RuntimeException('La date de l’écriture est obligatoire ou invalide.');
-        if (!preg_match('/^[A-Z0-9_-]{1,12}$/', $journal)) throw new RuntimeException('Le journal est obligatoire et doit contenir au plus 12 caractères.');
+        if ($journal === '') throw new RuntimeException('Saisissez le code du journal (ex. OD, ACH ou VTE).');
+        if (strlen($journal) > 12) throw new RuntimeException('Le code du journal ne peut pas dépasser 12 caractères.');
+        if (!preg_match('/^[A-Z0-9_-]+$/', $journal)) throw new RuntimeException('Le code du journal accepte uniquement des lettres sans accent, des chiffres, tirets et tirets bas, sans espace.');
         if ($reference === '' || mb_strlen($reference, 'UTF-8') > 120) throw new RuntimeException('La référence est obligatoire et doit contenir au plus 120 caractères.');
         if ($label === '' || mb_strlen($label, 'UTF-8') > 255) throw new RuntimeException('Le libellé de l’écriture est obligatoire et doit contenir au plus 255 caractères.');
         if ($currency === '') throw new RuntimeException('Choisissez la monnaie de l’écriture.');
-        if (!is_array($lines) || count($lines) < 2) throw new RuntimeException('Une écriture doit contenir au moins deux lignes.');
+        if (!is_array($lines) || ($requireBalanced && count($lines) < 2)) throw new RuntimeException('Une écriture validée doit contenir au moins deux lignes.');
         $this->assertCurrency($currency);
 
         $preparedLines = [];
@@ -111,7 +204,7 @@ final class AccountingService
             if ($lineLabel === '') $lineLabel = $label;
             $debit = round((float) ($line['debit'] ?? 0), 2);
             $credit = round((float) ($line['credit'] ?? 0), 2);
-            if ($accountId < 1 || $lineLabel === '' || mb_strlen($lineLabel, 'UTF-8') > 255 || !is_finite($debit) || !is_finite($credit) || $debit < 0 || $credit < 0 || ($debit > 0 && $credit > 0) || ($debit === 0.0 && $credit === 0.0)) {
+            if ($accountId < 1 || $lineLabel === '' || mb_strlen($lineLabel, 'UTF-8') > 255 || !is_finite($debit) || !is_finite($credit) || $debit < 0 || $credit < 0 || ($debit > 0 && $credit > 0) || ($requireBalanced && $debit === 0.0 && $credit === 0.0)) {
                 throw new RuntimeException('Chaque ligne doit avoir un compte et un montant au débit ou au crédit.');
             }
             $this->assertAccount($enterpriseId, $accountId, true);
@@ -119,28 +212,47 @@ final class AccountingService
             $creditTotal = round($creditTotal + $credit, 2);
             $preparedLines[] = ['compte_id' => $accountId, 'libelle' => $lineLabel, 'debit' => $debit, 'credit' => $credit];
         }
-        if ($debitTotal <= 0 || abs($debitTotal - $creditTotal) > 0.009) {
+        if ($requireBalanced && ($debitTotal <= 0 || abs($debitTotal - $creditTotal) > 0.009)) {
             throw new RuntimeException('L’écriture doit être équilibrée : le total débit doit égaler le total crédit.');
         }
 
+        return ['date_ecriture' => $date, 'journal_code' => $journal, 'reference' => $reference, 'libelle' => $label, 'monnaie' => $currency, 'lines' => $preparedLines];
+    }
+
+    private function insertEntry(int $enterpriseId, int $userId, array $entryData, string $status): int
+    {
         $this->db->begin_transaction();
         try {
-            $status = 'VALIDEE';
             $entry = $this->db->prepare('INSERT INTO ecritures_comptables (entreprise_id,date_ecriture,journal_code,reference,libelle,monnaie,statut,user_id) VALUES (?,?,?,?,?,?,?,?)');
-            $entry->bind_param('issssssi', $enterpriseId, $date, $journal, $reference, $label, $currency, $status, $userId);
+            $entry->bind_param('issssssi', $enterpriseId, $entryData['date_ecriture'], $entryData['journal_code'], $entryData['reference'], $entryData['libelle'], $entryData['monnaie'], $status, $userId);
             $entry->execute();
             $entryId = (int) $this->db->insert_id;
-            $lineInsert = $this->db->prepare('INSERT INTO lignes_ecritures_comptables (entreprise_id,ecriture_id,compte_id,libelle,debit,credit) VALUES (?,?,?,?,?,?)');
-            foreach ($preparedLines as $line) {
-                $lineInsert->bind_param('iiisdd', $enterpriseId, $entryId, $line['compte_id'], $line['libelle'], $line['debit'], $line['credit']);
-                $lineInsert->execute();
-            }
+            $this->insertEntryLines($enterpriseId, $entryId, $entryData['lines']);
             $this->db->commit();
             return $entryId;
         } catch (\Throwable $exception) {
             $this->db->rollback();
             throw $exception;
         }
+    }
+
+    private function insertEntryLines(int $enterpriseId, int $entryId, array $lines): void
+    {
+        $lineInsert = $this->db->prepare('INSERT INTO lignes_ecritures_comptables (entreprise_id,ecriture_id,compte_id,libelle,debit,credit) VALUES (?,?,?,?,?,?)');
+        foreach ($lines as $line) {
+            $lineInsert->bind_param('iiisdd', $enterpriseId, $entryId, $line['compte_id'], $line['libelle'], $line['debit'], $line['credit']);
+            $lineInsert->execute();
+        }
+    }
+
+    private function lockDraft(int $enterpriseId, int $entryId): array
+    {
+        $query = $this->db->prepare('SELECT date_ecriture,journal_code,reference,libelle,monnaie FROM ecritures_comptables WHERE entreprise_id=? AND ecriture_id=? AND statut=\'BROUILLON\' LIMIT 1 FOR UPDATE');
+        $query->bind_param('ii', $enterpriseId, $entryId);
+        $query->execute();
+        $entry = $query->get_result()->fetch_assoc();
+        if (!$entry) throw new RuntimeException('Brouillon comptable introuvable ou déjà validé.');
+        return $entry;
     }
 
     public function entries(int $enterpriseId, string $from, string $to, string $currency): array
@@ -241,13 +353,23 @@ final class AccountingService
         $reportData = match ($type) {
             'journal' => ['rows' => $rows, 'totals' => $this->totals($rows)],
             'grand-livre' => $this->ledgerReport($enterpriseId, $accountId, $from, $currency, $rows),
-            'balance' => ['rows' => $this->trialBalance($enterpriseId, $summary, $from, $currency), 'totals' => $this->summaryTotals($summary)],
+            'balance' => ['rows' => $trialBalance = $this->trialBalance($enterpriseId, $summary, $from, $currency), 'totals' => $this->summaryTotals($summary)],
             'bilan' => ['rows' => array_values(array_filter($summary, static fn (array $row): bool => in_array((int) $row['classe'], [1, 2, 3, 4, 5], true))), 'totals' => $this->summaryTotals($summary)],
             'resultat' => $this->incomeStatement($summary),
             'flux-tresorerie' => $this->cashFlow($rows),
             'annexes' => ['rows' => $summary, 'totals' => $this->summaryTotals($summary)],
         };
-        return ['type' => $type, 'date_debut' => $from, 'date_fin' => $to, 'monnaie' => $currency] + $reportData;
+        $balanceCheck = null;
+        if ($type === 'balance') {
+            $debit = round(array_sum(array_column($trialBalance, 'solde_debit')), 2);
+            $credit = round(array_sum(array_column($trialBalance, 'solde_credit')), 2);
+            $balanceCheck = ['debit' => $debit, 'credit' => $credit, 'difference' => round($debit - $credit, 2), 'balanced' => abs($debit - $credit) <= 0.009];
+        } elseif (in_array($type, ['journal', 'bilan', 'annexes'], true)) {
+            $debit = (float) $reportData['totals']['debit'];
+            $credit = (float) $reportData['totals']['credit'];
+            $balanceCheck = ['debit' => $debit, 'credit' => $credit, 'difference' => round($debit - $credit, 2), 'balanced' => abs($debit - $credit) <= 0.009];
+        }
+        return ['type' => $type, 'date_debut' => $from, 'date_fin' => $to, 'monnaie' => $currency, 'balance_check' => $balanceCheck] + $reportData;
     }
 
     private function reportRows(int $enterpriseId, string $from, string $to, string $currency, ?int $accountId): array

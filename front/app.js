@@ -3,7 +3,7 @@ const views = {
   stock: {label:"Stock", kicker:"GESTION DES ARTICLES", title:"Votre stock, <em>toujours maîtrisé.</em>", description:"Suivez les niveaux et les alertes de vos produits.", action:"+ Créer un produit", html:`<section class="panel"><div class="filter-bar"><input class="search-field" id="stock-search" placeholder="Rechercher un article ou une référence"><select class="select-field" id="stock-branch"><option value="">Toutes les succursales</option></select><button class="text-button" data-create-category>+ Créer une catégorie</button><button type="button" class="unit-admin-button" data-create-unit hidden aria-label="G&eacute;rer les unit&eacute;s de mesure"><span class="unit-admin-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5 7.5 4l12.5 12.5-3.5 3.5L4 7.5Z"/><path d="m8 8 2-2m1 5 2-2m1 5 2-2m1 5 2-2"/></svg></span><span class="unit-admin-copy"><strong>G&eacute;rer les unit&eacute;s</strong><small>Unit&eacute;s et symboles</small></span><span class="unit-admin-arrow" aria-hidden="true">&#8250;</span></button><button class="text-button" data-toggle-categories>Gérer les catégories</button></div><div class="panel-header"><div><h2>Catalogue produits</h2><p class="panel-subtitle" id="stock-count">Chargement…</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Référence</th><th>Produit</th><th>Catégorie</th><th>Prix vente</th><th>Unité</th><th>Stock</th><th>Seuil</th><th>État</th><th>Actions</th></tr></thead><tbody id="stock-rows"><tr><td colspan="9">Chargement…</td></tr></tbody></table></div></section><section class="panel" id="category-admin-panel" hidden><div class="panel-header"><div><h2>Catégories de produits</h2><p class="panel-subtitle">Modifiez ou supprimez les catégories de votre entreprise.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Catégorie</th><th>Description</th><th>Actions</th></tr></thead><tbody id="category-rows"></tbody></table></div></section>`},
   sales: {label:"Ventes", kicker:"ACTIVITÉ COMMERCIALE", title:"Vos <em>ventes.</em>", description:"Créez des factures multi-produits avec remise et suivi des lots.", action:"+ Nouvelle vente", html:`<section class="panel"><p class="panel-subtitle" id="sales-count">Chargement…</p><div style="overflow:auto"><table class="data-table"><thead><tr><th>Facture</th><th>Client</th><th>Succursale</th><th>Caissier</th><th>Date</th><th>Articles</th><th>Total</th><th>Payé</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="sales-rows"><tr><td colspan="10">Chargement…</td></tr></tbody></table></div></section>`},
   cash: {label:"Caisse", kicker:"TRÉSORERIE", title:"Vos <em>caisses.</em>", description:"Ouvrez, suivez et clôturez les caisses de vos succursales.", action:"＋ Ouvrir une caisse", html:`<section class="panel"><div class="panel-header"><div><h2>Caisses</h2></div><div class="cash-manual-actions"><button type="button" class="cash-action-button cash-action-in" data-cash-movement-open="ENTREE"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-7-7h14"/></svg><span>Entrée manuelle</span></button><button type="button" class="cash-action-button cash-action-out" data-cash-movement-open="SORTIE"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg><span>Sortie manuelle</span></button></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Caisse</th><th>Succursale</th><th>Monnaie / mode</th><th>Ouverture</th><th>Solde initial</th><th>Solde courant</th><th>Solde clôturé</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="cash-rows"><tr><td colspan="9">Chargement…</td></tr></tbody></table></div></section><section class="panel table-panel"><div class="panel-header"><div><h2>Journal de caisse</h2><p class="panel-subtitle">Encaissements de vente, entrées et sorties</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Caisse</th><th>Type</th><th>Mode</th><th>Motif</th><th>Référence</th><th>Montant</th></tr></thead><tbody id="cash-movement-rows"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div></section><section class="panel"><div class="panel-header"><div><h2>Paiements Mobile Money et Banque</h2><p class="panel-subtitle">Règlements Mobile Money et banque enregistrés dans leurs caisses ouvertes.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Opération</th><th>Document</th><th>Succursale</th><th>Mode</th><th>Réf. transaction</th><th>Montant</th></tr></thead><tbody id="external-payment-rows"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div></section>`},
-  accounting: {label:"Comptabilité", kicker:"COMPTABILITÉ SYSCOHADA", title:"Vos <em>états financiers.</em>", description:"Consultez les états à partir des écritures comptables validées.", action:"", html:`<section class="panel"><div class="panel-header"><div><h2>Générer un état</h2><p class="panel-subtitle">Les montants sont toujours présentés par monnaie.</p></div><div><button type="button" class="primary-button" data-account-entry-open>Nouvelle écriture</button> <button type="button" class="text-button" data-account-create-open>Créer un compte</button></div></div><div class="filter-bar"><label>État<select id="accounting-report-type"><option value="bilan">Bilan</option><option value="resultat">Compte de résultat</option><option value="flux-tresorerie">Tableau de flux de trésorerie</option><option value="balance">Balance générale</option><option value="journal">Journal</option><option value="grand-livre">Grand livre</option><option value="annexes">États annexes</option></select></label><label>Du<input id="accounting-from" type="date" required></label><label>Au<input id="accounting-to" type="date" required></label><label>Monnaie<select id="accounting-currency" required></select></label><label id="accounting-account-filter" hidden>Compte<select id="accounting-account"><option value="">Sélectionner un compte</option></select></label><button type="button" class="primary-button" data-account-report-load>Générer</button><button type="button" class="text-button" data-account-report-print disabled>Imprimer l’état</button></div></section><section class="panel" id="accounting-report-panel"><div class="panel-header"><div><h2 id="accounting-report-title">État financier</h2><p class="panel-subtitle" id="accounting-report-meta">Sélectionnez une période, une monnaie et un état.</p></div></div><div id="accounting-report-result"><p class="empty-note">Aucun état généré.</p></div></section><section class="panel"><div class="panel-header"><div><h2>Journal comptable</h2><p class="panel-subtitle">Écritures validées sur la période et dans la monnaie choisies.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Journal</th><th>Référence</th><th>Libellé</th><th>Lignes</th><th>Total débit</th><th>Total crédit</th></tr></thead><tbody id="accounting-entry-rows"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div></section><section class="panel"><div class="panel-header"><div><h2>Plan comptable</h2><p class="panel-subtitle">Comptes de l’entreprise; les comptes système ne peuvent pas être désactivés.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Compte</th><th>Intitulé</th><th>Classe</th><th>Nature</th><th>Compte parent</th><th>Statut</th><th>Action</th></tr></thead><tbody id="accounting-account-rows"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div></section>`},
+  accounting: {label:"Comptabilité", kicker:"COMPTABILITÉ SYSCOHADA", title:"Vos <em>états financiers.</em>", description:"Consultez les états à partir des écritures comptables validées.", action:"", html:`<section class="panel"><div class="panel-header"><div><h2>Générer un état</h2><p class="panel-subtitle">Les montants sont toujours présentés par monnaie.</p></div><div><button type="button" class="primary-button" data-account-entry-open>Nouvelle écriture</button> <button type="button" class="text-button" data-account-create-open>Créer un compte</button></div></div><div class="filter-bar"><label>État<select id="accounting-report-type"><option value="bilan">Bilan</option><option value="resultat">Compte de résultat</option><option value="flux-tresorerie">Tableau de flux de trésorerie</option><option value="balance">Balance générale</option><option value="journal">Journal</option><option value="grand-livre">Grand livre</option><option value="annexes">États annexes</option></select></label><label>Du<input id="accounting-from" type="date" required></label><label>Au<input id="accounting-to" type="date" required></label><label>Monnaie<select id="accounting-currency" required></select></label><label id="accounting-account-filter" hidden>Compte<select id="accounting-account"><option value="">Sélectionner un compte</option></select></label><button type="button" class="primary-button" data-account-report-load>Générer</button><button type="button" class="text-button" data-account-report-print disabled>Imprimer le rapport choisi</button></div></section><section class="panel" id="accounting-report-panel"><div class="panel-header"><div><h2 id="accounting-report-title">État financier</h2><p class="panel-subtitle" id="accounting-report-meta">Sélectionnez une période, une monnaie et un état.</p></div></div><div id="accounting-report-result"><p class="empty-note">Aucun état généré.</p></div></section><section class="panel"><div class="panel-header"><div><h2>Journal comptable</h2><p class="panel-subtitle">Écritures validées sur la période et dans la monnaie choisies.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Journal</th><th>Référence</th><th>Libellé</th><th>Lignes</th><th>Total débit</th><th>Total crédit</th></tr></thead><tbody id="accounting-entry-rows"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div></section><section class="panel"><div class="panel-header"><div><h2>Plan comptable</h2><p class="panel-subtitle">Comptes de l’entreprise; les comptes système ne peuvent pas être désactivés.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Compte</th><th>Intitulé</th><th>Classe</th><th>Nature</th><th>Compte parent</th><th>Statut</th><th>Action</th></tr></thead><tbody id="accounting-account-rows"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div></section>`},
   users: {label:"Utilisateurs et rôles", kicker:"GESTION DES ACCÈS", title:"Les bonnes personnes, <em>les bons accès.</em>", description:"Gérez les comptes utilisateurs et leurs droits d’accès.", action:"+ Ajouter un utilisateur", html:`<div class="view-layout"><section class="panel"><div class="panel-header"><div><h2>Utilisateurs</h2><p class="panel-subtitle">Comptes enregistrés dans votre entreprise</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Nom complet</th><th>Nom d’utilisateur</th><th>Adresse électronique</th><th>Rôle</th><th>Succursale</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="user-rows"><tr><td colspan="7">Chargement des utilisateurs…</td></tr></tbody></table></div></section><aside class="panel"><h2>Rôles et autorisations</h2><div id="role-list"><p class="empty-note">Chargement des rôles…</p></div><button class="primary-button role-create-action" data-create-role style="width:100%;margin-top:17px"><span aria-hidden="true">+</span> Créer un rôle</button></aside></div>`},
   branches: {label:"Succursales", kicker:"ADMINISTRATION", title:"Vos <em>succursales.</em>", description:"Succursales enregistrées dans la base de données.", action:"+ Créer une succursale", html:`<section class="panel"><div style="overflow:auto"><table class="data-table"><thead><tr><th>Nom</th><th>Code</th><th>Succursale mère</th><th>Adresse</th><th>Téléphone</th><th>Actions</th></tr></thead><tbody id="branch-rows"><tr><td colspan="6">Chargement…</td></tr></tbody></table></div></section>`},
   clients: {label:"Clients", kicker:"RELATION CLIENT", title:"Vos <em>clients.</em>", description:"Clients enregistrés dans la base de données.", action:"", html:`<section class="panel"><div style="overflow:auto"><table class="data-table"><thead><tr><th>Nom</th><th>Adresse électronique</th><th>Téléphone</th><th>Adresse</th></tr></thead><tbody id="client-rows"><tr><td colspan="4">Chargement…</td></tr></tbody></table></div></section>`},
@@ -93,6 +93,7 @@ function renderView(viewName) {
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === viewName));
   kicker.textContent = view.kicker; title.innerHTML = view.title; description.textContent = view.description; breadcrumb.textContent = view.label; action.innerHTML = view.action; action.hidden = !view.action || (viewName === 'stock' && !hasAccess('creer_produit')) || (viewName === 'procurement' && !hasAccess('creer_approvisionnements')) || (viewName === 'sales' && !hasAccess('creer_ventes')) || (viewName === 'cash' && !hasAccess('creer_caisse')) || (viewName === 'users' && !hasAccess('gerer_utilisateurs')) || (viewName === 'branches' && !hasAccess('*')); action.classList.toggle('user-create-action', viewName === 'users');
   container.innerHTML = view.html;
+  if (viewName === 'accounting') renderAccountingDraftPanel(container);
   if (viewName === 'stock') configureStockWorkspace();
   configureReportToolbar(viewName);
   if (viewName === 'accounting') {
@@ -886,7 +887,15 @@ async function loadAccountingData() {
   setAccountingDateDefaults();
   await populateAccountingCurrencies();
   await loadAccountingAccounts();
-  await loadAccountingEntryRows();
+  await Promise.all([loadAccountingEntryRows(), loadAccountingDrafts()]);
+}
+function renderAccountingDraftPanel(container) {
+  const entriesSection = container.querySelector('#accounting-entry-rows')?.closest('.panel');
+  if (!entriesSection) return;
+  const panel = document.createElement('section');
+  panel.className = 'panel';
+  panel.innerHTML = `<div class="panel-header"><div><h2>Brouillons comptables</h2><p class="panel-subtitle">Enregistrez vos saisies, reprenez-les plus tard et validez-les lorsqu’elles sont prêtes.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Journal</th><th>Référence</th><th>Libellé</th><th>Lignes</th><th>Total débit</th><th>Total crédit</th><th>Actions</th></tr></thead><tbody id="accounting-draft-rows"><tr><td colspan="8">Chargement…</td></tr></tbody></table></div>`;
+  entriesSection.before(panel);
 }
 let accountingCancellationCount = 0;
 let cashCancellationCount = 0;
@@ -1055,6 +1064,16 @@ async function loadAccountingEntryRows() {
     rowsTarget.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
   }
 }
+async function loadAccountingDrafts() {
+  const target = document.getElementById('accounting-draft-rows');
+  if (!target) return;
+  try {
+    const drafts = await fetchReportData('accounting-drafts');
+    target.innerHTML = drafts.length ? drafts.map(draft => `<tr><td>${escapeHtml(dateLabel(draft.date_ecriture))}</td><td>${escapeHtml(draft.journal_code)}</td><td>${escapeHtml(draft.reference)}</td><td>${escapeHtml(draft.libelle)}</td><td>${Number(draft.line_count)}</td><td>${escapeHtml(moneyCurrencyLabel(draft.debit_total, draft.monnaie))}</td><td>${escapeHtml(moneyCurrencyLabel(draft.credit_total, draft.monnaie))}</td><td>${hasAccess('creer_comptabilite') ? `<div class="user-action-group"><button type="button" class="icon-action-button" title="Modifier le brouillon" aria-label="Modifier le brouillon" data-accounting-draft-edit="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4 4M4 20l4.5-1L19 8.5 15.5 5 5 15.5 4 20Z"/></svg></button><button type="button" class="icon-action-button icon-action-success" title="Valider le brouillon" aria-label="Valider le brouillon" data-accounting-draft-validate="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button><button type="button" class="icon-action-button icon-action-danger" title="Supprimer le brouillon" aria-label="Supprimer le brouillon" data-accounting-draft-delete="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button></div>` : '—'}</td></tr>`).join('') : '<tr><td colspan="8">Aucun brouillon comptable enregistré.</td></tr>';
+  } catch (error) {
+    target.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
+  }
+}
 function toggleAccountingAccountFilter() {
   const reportType = document.getElementById('accounting-report-type')?.value || 'bilan';
   const filterWrapper = document.getElementById('accounting-account-filter');
@@ -1089,8 +1108,10 @@ function renderAccountingReportTable(report) {
       <div class="stat-card"><span class="stat-label">Crédit</span><div class="stat-value">${moneyCurrencyLabel(totals.credit, report?.monnaie || '')}</div></div>
     </div>`;
   }
+  const balanceCheck = report?.balance_check;
+  const balanceHtml = balanceCheck ? `<p class="status ${balanceCheck.balanced ? 'success' : 'warning'}" role="status"><strong>${balanceCheck.balanced ? 'Équilibre respecté' : 'Équilibre non respecté'}</strong> · Débit : ${escapeHtml(moneyCurrencyLabel(balanceCheck.debit, report?.monnaie || ''))} · Crédit : ${escapeHtml(moneyCurrencyLabel(balanceCheck.credit, report?.monnaie || ''))} · Écart : ${escapeHtml(moneyCurrencyLabel(Math.abs(Number(balanceCheck.difference)), report?.monnaie || ''))}</p>` : '';
   if (!rows.length) {
-    output.innerHTML = `${summaryHtml}<p class="empty-note">Aucune donnée pour cet état.</p>`;
+    output.innerHTML = `${balanceHtml}${summaryHtml}<p class="empty-note">Aucune donnée pour cet état.</p>`;
     return;
   }
   const allowedKeys = new Set(['section', 'code', 'compte_code', 'compte_id', 'journal_code', 'reference', 'libelle', 'ecriture_libelle', 'date_ecriture', 'monnaie', 'intitule', 'compte_intitule', 'classe', 'nature', 'debit', 'credit', 'solde_cumulatif', 'ouverture_debit', 'ouverture_credit', 'debit_periode', 'credit_periode', 'solde_debit', 'solde_credit', 'total_charges', 'total_produits', 'resultat_net', 'total_entrees', 'total_sorties', 'variation_nette']);
@@ -1101,7 +1122,7 @@ function renderAccountingReportTable(report) {
     const values = labels.length ? labels.map(key => `<td>${escapeHtml(valueForAccountingCell(row[key]))}</td>`).join('') : `<td>${escapeHtml(Object.values(row).map(value => String(value ?? '')).join(' — '))}</td>`;
     return `<tr>${values}</tr>`;
   }).join('');
-  output.innerHTML = `${summaryHtml}<div style="overflow:auto"><table class="data-table"><thead><tr>${headerMarkup}</tr></thead><tbody>${rowMarkup || '<tr><td colspan="' + tableHeaders.length + '">Aucune ligne pour cet état.</td></tr>'}</tbody></table></div>`;
+  output.innerHTML = `${balanceHtml}${summaryHtml}<div style="overflow:auto"><table class="data-table"><thead><tr>${headerMarkup}</tr></thead><tbody>${rowMarkup || '<tr><td colspan="' + tableHeaders.length + '">Aucune ligne pour cet état.</td></tr>'}</tbody></table></div>`;
 }
 function labelForAccountingKey(key) {
   const labels = {
@@ -1143,6 +1164,8 @@ function valueForAccountingCell(value) {
   return String(value);
 }
 async function loadAccountingReport() {
+  const printButton = document.querySelector('[data-account-report-print]');
+  if (printButton) printButton.disabled = true;
   const reportType = document.getElementById('accounting-report-type')?.value || 'bilan';
   const from = document.getElementById('accounting-from')?.value;
   const to = document.getElementById('accounting-to')?.value;
@@ -1165,12 +1188,10 @@ async function loadAccountingReport() {
     if (title) title.textContent = report?.type ? {journal:'Journal', 'grand-livre':'Grand livre', balance:'Balance générale', bilan:'Bilan', resultat:'Compte de résultat', 'flux-tresorerie':'Tableau de flux de trésorerie', annexes:'États annexes'}[report.type] || 'État financier' : 'État financier';
     if (meta) meta.textContent = `${dateLabel(from)} au ${dateLabel(to)} · ${currency}`;
     renderAccountingReportTable(report);
-    const printButton = document.querySelector('[data-account-report-print]');
     if (printButton) printButton.disabled = false;
   } catch (error) {
     const output = document.getElementById('accounting-report-result');
     if (output) output.innerHTML = `<p class="empty-note">${escapeHtml(error.message)}</p>`;
-    const printButton = document.querySelector('[data-account-report-print]');
     if (printButton) printButton.disabled = true;
     showToast(error.message);
   }
@@ -1221,38 +1242,70 @@ async function openAccountingAccountForm(accountId = null) {
     showToast(error.message);
   }
 }
-async function openAccountingEntryForm() {
+function accountingEntryPayload(form) {
+  const formData = new FormData(form);
+  const lines = [];
+  for (const [name, value] of formData.entries()) {
+    const match = name.match(/^line_(compte|label|debit|credit)_(\d+)$/);
+    if (!match) continue;
+    const [, field, index] = match;
+    if (!lines[Number(index)]) lines[Number(index)] = {};
+    lines[Number(index)][field] = value;
+  }
+  const prepared = lines.filter(line => line && (
+    String(line.label || '').trim() !== '' ||
+    (line.debit !== undefined && Number(line.debit) !== 0) ||
+    (line.credit !== undefined && Number(line.credit) !== 0)
+  )).map(line => ({
+    compte_id: Number(line.compte || 0),
+    libelle: String(line.label || '').trim() || String(formData.get('libelle') || '').trim(),
+    debit: Number(line.debit || 0),
+    credit: Number(line.credit || 0)
+  }));
+  return {
+    date_ecriture: String(formData.get('date_ecriture') || ''),
+    journal_code: String(formData.get('journal_code') || '').trim().toUpperCase(),
+    reference: String(formData.get('reference') || '').trim(),
+    libelle: String(formData.get('libelle') || '').trim(),
+    monnaie: String(formData.get('monnaie') || '').trim().toUpperCase(),
+    lines: prepared
+  };
+}
+async function openAccountingEntryForm(draftId = null) {
   try {
-    const accounts = await fetchReportData('accounting-accounts');
+    const [accounts, draft] = await Promise.all([
+      fetchReportData('accounting-accounts'),
+      draftId ? fetchReportData('accounting-draft', {ecriture_id: draftId}) : Promise.resolve(null)
+    ]);
     if (!accounts.length) {
       showToast('Créez d’abord au moins deux comptes comptables pour saisir une écriture.');
       return;
     }
     const currency = document.getElementById('accounting-currency')?.value || 'USD';
-    const createLineRow = (index = 0) => `
+    const draftLines = draft?.lines || [];
+    const rowCount = Math.max(2, draftLines.length);
+    const createLineRow = (index, line = {}) => `
       <div class="accounting-entry-line" style="display:grid;grid-template-columns:1.8fr 1.1fr 1.1fr 1.3fr 0.5fr;gap:8px;align-items:end;padding:10px 0;border-top:1px solid #e8efeb;">
-        <label>Compte<select name="line_compte_${index}" required>${accounts.map(account => `<option value="${Number(account.compte_id)}">${escapeHtml(account.code)} — ${escapeHtml(account.intitule)}</option>`).join('')}</select></label>
-        <label>Libellé de ligne<input name="line_label_${index}" maxlength="255" placeholder="Libellé général par défaut"></label>
-        <label>Débit<input type="number" min="0" step="0.01" name="line_debit_${index}" value="0"></label>
-        <label>Crédit<input type="number" min="0" step="0.01" name="line_credit_${index}" value="0"></label>
+        <label>Compte<select name="line_compte_${index}" required>${accounts.map(account => `<option value="${Number(account.compte_id)}" ${Number(line.compte_id) === Number(account.compte_id) ? 'selected' : ''}>${escapeHtml(account.code)} — ${escapeHtml(account.intitule)}</option>`).join('')}</select></label>
+        <label>Libellé de ligne<input name="line_label_${index}" maxlength="255" value="${escapeHtml(line.libelle || '')}" placeholder="Libellé général par défaut"></label>
+        <label>Débit<input type="number" min="0" step="0.01" name="line_debit_${index}" value="${Number(line.debit || 0)}"></label>
+        <label>Crédit<input type="number" min="0" step="0.01" name="line_credit_${index}" value="${Number(line.credit || 0)}"></label>
         <button type="button" class="icon-action-button" data-account-line-remove="${index}" aria-label="Supprimer cette ligne">×</button>
       </div>`;
+    const currencyOptions = [...new Set([currency, draft?.monnaie].filter(Boolean))];
     const modal = document.createElement('div');
     modal.className = 'entity-modal';
-    modal.innerHTML = `<section class="entity-dialog"><h2>Nouvelle écriture comptable</h2><form class="entity-form"><label>Date<input type="date" name="date_ecriture" value="${localDateInputValue(new Date())}" required></label><label>Journal<input name="journal_code" maxlength="12" required placeholder="Ex. ACH, VTE, CFI"></label><label>Référence<input name="reference" maxlength="120" required></label><label>Monnaie<select name="monnaie" required>${[currency].map(m => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('')}</select></label><label class="full">Libellé<input name="libelle" maxlength="255" required></label><div class="full" id="accounting-entry-lines">${[0, 1].map(createLineRow).join('')}</div><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button type="button" class="text-button" id="accounting-entry-add-line">+ Ajouter une ligne</button><button class="modal-submit">Valider l’écriture</button></div></form></section>`;
+    modal.innerHTML = `<section class="entity-dialog"><h2>${draft ? 'Modifier le brouillon comptable' : 'Nouvelle écriture comptable'}</h2><form class="entity-form"><label>Date<input type="date" name="date_ecriture" value="${escapeHtml(draft?.date_ecriture || localDateInputValue(new Date()))}" required></label><label>Code du journal<input name="journal_code" value="${escapeHtml(draft?.journal_code || 'OD')}" maxlength="12" pattern="[A-Za-z0-9_-]{1,12}" title="Utilisez un code de 1 à 12 lettres ou chiffres, sans espace (ex. OD, ACH, VTE)." required placeholder="Ex. OD, ACH, VTE"></label><label>Référence<input name="reference" maxlength="120" value="${escapeHtml(draft?.reference || '')}" required></label><label>Monnaie<select name="monnaie" required>${currencyOptions.map(m => `<option value="${escapeHtml(m)}" ${String(m) === String(draft?.monnaie || currency) ? 'selected' : ''}>${escapeHtml(m)}</option>`).join('')}</select></label><label class="full">Libellé<input name="libelle" maxlength="255" value="${escapeHtml(draft?.libelle || '')}" required></label><div class="full" id="accounting-entry-lines">${Array.from({length: rowCount}, (_, index) => createLineRow(index, draftLines[index] || {})).join('')}</div><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button type="button" class="text-button" id="accounting-entry-save-draft">Enregistrer le brouillon</button><button type="button" class="text-button" id="accounting-entry-add-line">+ Ajouter une ligne</button><button class="modal-submit">${draft ? 'Valider le brouillon' : 'Valider l’écriture'}</button></div></form></section>`;
     document.body.appendChild(modal);
     const form = modal.querySelector('form');
     const linesContainer = modal.querySelector('#accounting-entry-lines');
-    let nextLineIndex = 2;
-    const addLine = () => {
+    let nextLineIndex = rowCount;
+    modal.querySelector('#accounting-entry-add-line').addEventListener('click', () => {
       linesContainer.insertAdjacentHTML('beforeend', createLineRow(nextLineIndex++));
-    };
-    modal.querySelector('#accounting-entry-add-line').addEventListener('click', addLine);
+    });
     linesContainer.addEventListener('click', event => {
       const removeButton = event.target.closest('[data-account-line-remove]');
-      if (!removeButton) return;
-      const row = removeButton.closest('.accounting-entry-line');
-      if (row) row.remove();
+      if (removeButton) removeButton.closest('.accounting-entry-line')?.remove();
     });
     linesContainer.addEventListener('input', event => {
       const amountInput = event.target.closest('input[name^="line_debit_"], input[name^="line_credit_"]');
@@ -1262,56 +1315,58 @@ async function openAccountingEntryForm() {
       if (otherInput) otherInput.value = '0';
     });
     modal.querySelector('.modal-cancel').addEventListener('click', () => modal.remove());
+    const saveDraftButton = modal.querySelector('#accounting-entry-save-draft');
+    saveDraftButton.addEventListener('click', async () => {
+      saveDraftButton.disabled = true;
+      try {
+        const url = `../backend/public/report-data.php?action=accounting-draft${draftId ? `&ecriture_id=${encodeURIComponent(draftId)}` : ''}`;
+        const response = await fetch(url, {method: draftId ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify(accountingEntryPayload(form))});
+        const result = await readJson(response);
+        if (!response.ok || !result.success) throw new Error(result.message || 'Enregistrement du brouillon impossible.');
+        modal.remove();
+        await loadAccountingDrafts();
+        showToast('Brouillon comptable enregistré.');
+      } catch (error) {
+        showToast(error.message);
+      } finally {
+        if (saveDraftButton.isConnected) saveDraftButton.disabled = false;
+      }
+    });
     form.addEventListener('submit', async event => {
       event.preventDefault();
       const submitButton = form.querySelector('.modal-submit');
       submitButton.disabled = true;
       try {
-      const formData = new FormData(form);
-      const lines = [];
-      for (const [name, value] of formData.entries()) {
-        const match = name.match(/^line_(compte|label|debit|credit)_(\d+)$/);
-        if (!match) continue;
-        const [, field, index] = match;
-        if (!lines[Number(index)]) lines[Number(index)] = {};
-        lines[Number(index)][field] = value;
-      }
-      const cleaned = lines.filter(line => line && (line.compte || line.label || line.debit || line.credit));
-      const prepared = cleaned.map(line => ({
-        compte_id: Number(line.compte || 0),
-        libelle: String(line.label || '').trim() || String(formData.get('libelle') || '').trim(),
-        debit: Number(line.debit || 0),
-        credit: Number(line.credit || 0)
-      })).filter(line => line.compte_id > 0 && (line.libelle || line.debit || line.credit));
-      if (prepared.length < 2) {
-        showToast('Ajoutez au moins deux lignes à l’écriture comptable.');
-        return;
-      }
-      if (prepared.some(line => !Number.isFinite(line.debit) || !Number.isFinite(line.credit) || line.debit < 0 || line.credit < 0 || (line.debit > 0 && line.credit > 0) || (line.debit === 0 && line.credit === 0))) {
-        showToast('Chaque ligne doit porter un montant au débit ou au crédit, jamais les deux.');
-        return;
-      }
-      const debitTotal = prepared.reduce((total, line) => total + line.debit, 0);
-      const creditTotal = prepared.reduce((total, line) => total + line.credit, 0);
-      if (debitTotal <= 0 || Math.abs(debitTotal - creditTotal) > 0.009) {
-        showToast(`Écriture non équilibrée. Débit : ${moneyCurrencyLabel(debitTotal, currency)} · Crédit : ${moneyCurrencyLabel(creditTotal, currency)}.`);
-        return;
-      }
-      const payload = {
-        date_ecriture: formData.get('date_ecriture'),
-        journal_code: String(formData.get('journal_code') || '').trim().toUpperCase(),
-        reference: String(formData.get('reference') || '').trim(),
-        libelle: String(formData.get('libelle') || '').trim(),
-        monnaie: String(formData.get('monnaie') || '').trim().toUpperCase(),
-        lines: prepared
-      };
-      const response = await fetch('../backend/public/report-data.php?action=accounting-entry', {method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify(payload)});
-      const result = await readJson(response);
-      if (!response.ok || !result.success) throw new Error(result.message || 'Validation de l’écriture impossible.');
-      modal.remove();
-      await loadAccountingEntryRows();
-      await loadAccountingReport();
-      showToast('Écriture comptable enregistrée.');
+        const payload = accountingEntryPayload(form);
+        if (payload.lines.length < 2) {
+          showToast('Ajoutez au moins deux lignes à l’écriture comptable.');
+          return;
+        }
+        if (payload.lines.some(line => !Number.isFinite(line.debit) || !Number.isFinite(line.credit) || line.debit < 0 || line.credit < 0 || (line.debit > 0 && line.credit > 0) || (line.debit === 0 && line.credit === 0))) {
+          showToast('Chaque ligne doit porter un montant au débit ou au crédit, jamais les deux.');
+          return;
+        }
+        const debitTotal = payload.lines.reduce((total, line) => total + line.debit, 0);
+        const creditTotal = payload.lines.reduce((total, line) => total + line.credit, 0);
+        if (debitTotal <= 0 || Math.abs(debitTotal - creditTotal) > 0.009) {
+          showToast(`Écriture non équilibrée. Débit : ${moneyCurrencyLabel(debitTotal, payload.monnaie)} · Crédit : ${moneyCurrencyLabel(creditTotal, payload.monnaie)}.`);
+          return;
+        }
+        if (draftId) {
+          const updateResponse = await fetch(`../backend/public/report-data.php?action=accounting-draft&ecriture_id=${encodeURIComponent(draftId)}`, {method: 'PUT', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify(payload)});
+          const updateResult = await readJson(updateResponse);
+          if (!updateResponse.ok || !updateResult.success) throw new Error(updateResult.message || 'Mise à jour du brouillon impossible.');
+          const response = await fetch('../backend/public/report-data.php?action=accounting-draft-validate', {method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify({ecriture_id: draftId})});
+          const result = await readJson(response);
+          if (!response.ok || !result.success) throw new Error(result.message || 'Validation du brouillon impossible.');
+        } else {
+          const response = await fetch('../backend/public/report-data.php?action=accounting-entry', {method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify(payload)});
+          const result = await readJson(response);
+          if (!response.ok || !result.success) throw new Error(result.message || 'Validation de l’écriture impossible.');
+        }
+        modal.remove();
+        await Promise.all([loadAccountingEntryRows(), loadAccountingDrafts(), loadAccountingReport()]);
+        showToast(draftId ? 'Brouillon comptable validé.' : 'Écriture comptable enregistrée.');
       } catch (error) {
         showToast(error.message);
       } finally {
@@ -2304,6 +2359,39 @@ async function printStockCard(button) {
   } catch (error) { printWindow.close(); showToast(error.message); }
 }
 document.addEventListener('click', async event => {
+  const accountingDraftEdit = event.target.closest('[data-accounting-draft-edit]');
+  if (accountingDraftEdit) {
+    await openAccountingEntryForm(Number(accountingDraftEdit.dataset.accountingDraftEdit));
+    return;
+  }
+  const accountingDraftDelete = event.target.closest('[data-accounting-draft-delete]');
+  if (accountingDraftDelete) {
+    if (!window.confirm('Supprimer définitivement ce brouillon comptable ?')) return;
+    try {
+      const response = await fetch(`../backend/public/report-data.php?action=accounting-draft&ecriture_id=${encodeURIComponent(accountingDraftDelete.dataset.accountingDraftDelete)}`, {method: 'DELETE', credentials: 'include'});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Suppression du brouillon impossible.');
+      await loadAccountingDrafts();
+      showToast('Brouillon comptable supprimé.');
+    } catch (error) {
+      showToast(error.message);
+    }
+    return;
+  }
+  const accountingDraftValidate = event.target.closest('[data-accounting-draft-validate]');
+  if (accountingDraftValidate) {
+    if (!window.confirm('Valider cette écriture la rendra définitive et l’ajoutera aux états comptables. Continuer ?')) return;
+    try {
+      const response = await fetch('../backend/public/report-data.php?action=accounting-draft-validate', {method: 'POST', headers: {'Content-Type': 'application/json'}, credentials: 'include', body: JSON.stringify({ecriture_id: Number(accountingDraftValidate.dataset.accountingDraftValidate)})});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Validation du brouillon impossible.');
+      await Promise.all([loadAccountingDrafts(), loadAccountingEntryRows(), loadAccountingReport()]);
+      showToast('Brouillon comptable validé.');
+    } catch (error) {
+      showToast(error.message);
+    }
+    return;
+  }
   const accountingEntryButton = event.target.closest('[data-account-entry-open]');
   if (accountingEntryButton) { await openAccountingEntryForm(); return; }
   const entryCancellationButton = event.target.closest('[data-entry-cancellation-request]');
@@ -2346,8 +2434,14 @@ document.addEventListener('click', async event => {
   if (accountingReportButton) { await loadAccountingReport(); return; }
   const accountingPrintButton = event.target.closest('[data-account-report-print]');
   if (accountingPrintButton) {
-    const report = document.getElementById('accounting-report-result')?.textContent?.trim();
-    if (report && report !== 'Aucun état généré.') window.print();
+    const output = document.getElementById('accounting-report-result');
+    const content = output?.innerHTML.trim();
+    if (!content || output.textContent.trim() === 'Aucun état généré.') return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) { showToast('Autorisez les fenêtres contextuelles pour imprimer le rapport choisi.'); return; }
+    const title = document.getElementById('accounting-report-title')?.textContent || 'État financier';
+    const meta = document.getElementById('accounting-report-meta')?.textContent || '';
+    printReportInWindow(printWindow, title, `<p><strong>Période et monnaie :</strong> ${escapeHtml(meta)}</p>${content}`, '', 'landscape');
     return;
   }
   const supplierPaymentButton=event.target.closest('[data-supplier-payment]');if(supplierPaymentButton){await openSupplierPayment(supplierPaymentButton);return;}
@@ -2486,6 +2580,10 @@ document.addEventListener('input', event => {
   if (event.target.matches('[data-report-from],[data-report-to],[data-report-search]')) filterCurrentReport();
 });
 document.addEventListener('change', event => {
+  if (event.target.matches('#accounting-report-type, #accounting-from, #accounting-to, #accounting-currency, #accounting-account')) {
+    const printButton = document.querySelector('[data-account-report-print]');
+    if (printButton) printButton.disabled = true;
+  }
   if (event.target.matches('#accounting-report-type')) {
     toggleAccountingAccountFilter();
   }

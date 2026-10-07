@@ -133,11 +133,17 @@ Comptabilite SYSCOHADA
   - Saisir une ecriture avec date, journal, reference, libelle, monnaie et au
     moins deux lignes. Chaque ligne porte un montant au debit OU au credit,
     jamais les deux. Le total des debits doit etre egal au total des credits.
+  - Enregistrer une ecriture comme brouillon pour la reprendre plus tard. Un
+    brouillon n'apparait pas dans les etats; sa validation exige une ecriture
+    complete et equilibree. Les brouillons peuvent etre modifies ou supprimes.
   - Consulter le journal comptable, le plan comptable et les ecritures par
     periode et monnaie.
   - Generer les sept etats disponibles : journal, grand livre, balance
     generale, bilan, compte de resultat, tableau de flux de tresorerie et
     annexes. Le grand livre necessite la selection d'un compte.
+  - La balance generale indique si les soldes debit et credit sont equilibres.
+    Chaque etat genere peut etre imprime separement depuis le bouton
+    d'impression du rapport choisi.
   - Les etats sont produits a partir des ecritures comptables validees.
   - Important : la migration cree les tables comptables, mais ne precharge pas
     de plan comptable. Les comptes doivent etre crees avant de saisir une
