@@ -78,11 +78,23 @@ try {
         $from = trim((string) ($_GET['date_debut'] ?? ''));
         $to = trim((string) ($_GET['date_fin'] ?? ''));
         $currency = strtoupper(trim((string) ($_GET['monnaie'] ?? '')));
+        if (isset($_GET['page'])) {
+            $page = max(1, (int) $_GET['page']);
+            $perPage = min(100, max(1, (int) ($_GET['per_page'] ?? 10)));
+            $result = $accountingService->entriesPage($enterpriseId, $from, $to, $currency, $page, $perPage);
+            JsonResponse::send(['success' => true, 'data' => $result['rows'], 'pagination' => $result['pagination']]);
+        }
         JsonResponse::send(['success' => true, 'data' => $accountingService->entries($enterpriseId, $from, $to, $currency)]);
     }
 
     if ($action === 'accounting-drafts' && $_SERVER['REQUEST_METHOD'] === 'GET') {
         Authorization::requirePermission($user, 'voir_comptabilite');
+        if (isset($_GET['page'])) {
+            $page = max(1, (int) $_GET['page']);
+            $perPage = min(100, max(1, (int) ($_GET['per_page'] ?? 10)));
+            $result = $accountingService->draftEntriesPage($enterpriseId, $page, $perPage);
+            JsonResponse::send(['success' => true, 'data' => $result['rows'], 'pagination' => $result['pagination']]);
+        }
         JsonResponse::send(['success' => true, 'data' => $accountingService->draftEntries($enterpriseId)]);
     }
 
@@ -304,36 +316,76 @@ try {
     if ($action === 'sales-list') {
         Authorization::requirePermission($user,'voir_ventes');$page=max(1,(int)($_GET['page']??1));$perPage=min(100,max(1,(int)($_GET['per_page']??10)));$offset=($page-1)*$perPage;
         $where='v.entreprise_id=?'.($branchId!==null?' AND v.succursale_id=?':'');$count=$db->prepare('SELECT COUNT(*) AS total FROM ventes v WHERE '.$where);if($branchId===null)$count->bind_param('i',$enterpriseId);else$count->bind_param('ii',$enterpriseId,$branchId);$count->execute();$total=(int)($count->get_result()->fetch_assoc()['total']??0);
-        $sql='SELECT v.vente_id,v.invoice_no,v.sale_date,v.total_amount,v.monais,v.amount_paid,v.status,v.succursale_id,s.name AS branch_name,COALESCE(NULLIF(v.client_comptoir_name, \'\'),c.name) AS client_name,u.full_name AS cashier,COALESCE(d.item_count,0) AS item_count FROM ventes v JOIN succursales s ON s.succursale_id=v.succursale_id AND s.entreprise_id=v.entreprise_id LEFT JOIN clients c ON c.client_id=v.client_id AND c.entreprise_id=v.entreprise_id LEFT JOIN users u ON u.user_id=v.user_id AND u.entreprise_id=v.entreprise_id LEFT JOIN (SELECT entreprise_id,vente_id,SUM(quantity) AS item_count FROM vente_details GROUP BY entreprise_id,vente_id) d ON d.entreprise_id=v.entreprise_id AND d.vente_id=v.vente_id WHERE '.$where.' ORDER BY v.sale_date DESC,v.vente_id DESC LIMIT ? OFFSET ?';$query=$db->prepare($sql);if($branchId===null)$query->bind_param('iii',$enterpriseId,$perPage,$offset);else$query->bind_param('iiii',$enterpriseId,$branchId,$perPage,$offset);$query->execute();$salesRows=$attachCurrencyTotals($query->get_result()->fetch_all(MYSQLI_ASSOC));JsonResponse::send(['success'=>true,'data'=>$salesRows,'pagination'=>['page'=>$page,'per_page'=>$perPage,'total'=>$total,'pages'=>max(1,(int)ceil($total/$perPage))]]);
+        $sql='SELECT v.vente_id,v.invoice_no,v.sale_date,v.total_amount,v.monais,v.amount_paid,v.status,v.succursale_id,s.name AS branch_name,COALESCE(NULLIF(v.client_comptoir_name, \'\'),c.name) AS client_name,u.full_name AS cashier,0 AS item_count FROM ventes v JOIN succursales s ON s.succursale_id=v.succursale_id AND s.entreprise_id=v.entreprise_id LEFT JOIN clients c ON c.client_id=v.client_id AND c.entreprise_id=v.entreprise_id LEFT JOIN users u ON u.user_id=v.user_id AND u.entreprise_id=v.entreprise_id WHERE '.$where.' ORDER BY v.sale_date DESC,v.vente_id DESC LIMIT ? OFFSET ?';$query=$db->prepare($sql);if($branchId===null)$query->bind_param('iii',$enterpriseId,$perPage,$offset);else$query->bind_param('iiii',$enterpriseId,$branchId,$perPage,$offset);$query->execute();$salesRows=$query->get_result()->fetch_all(MYSQLI_ASSOC);
+        if ($salesRows !== []) {
+            $saleIds = implode(',', array_map(static fn (array $row): int => (int) $row['vente_id'], $salesRows));
+            $detailsQuery = $db->prepare('SELECT vente_id,SUM(quantity) AS item_count FROM vente_details WHERE entreprise_id=? AND vente_id IN (' . $saleIds . ') GROUP BY vente_id');
+            $detailsQuery->bind_param('i', $enterpriseId);
+            $detailsQuery->execute();
+            $itemCounts = [];
+            foreach ($detailsQuery->get_result()->fetch_all(MYSQLI_ASSOC) as $detail) $itemCounts[(int) $detail['vente_id']] = (int) $detail['item_count'];
+            foreach ($salesRows as &$saleRow) $saleRow['item_count'] = $itemCounts[(int) $saleRow['vente_id']] ?? 0;
+            unset($saleRow);
+        }
+        $salesRows = $attachCurrencyTotals($salesRows);
+        JsonResponse::send(['success'=>true,'data'=>$salesRows,'pagination'=>['page'=>$page,'per_page'=>$perPage,'total'=>$total,'pages'=>max(1,(int)ceil($total/$perPage))]]);
     }
 
     if ($action === 'pending-sales') {
         Authorization::requirePermission($user,'modifier_caisse');$page=max(1,(int)($_GET['page']??1));$perPage=min(100,max(1,(int)($_GET['per_page']??10)));$offset=($page-1)*$perPage;$where="v.entreprise_id=? AND v.status IN ('PENDING','PARTIAL')".($branchId!==null?' AND v.succursale_id=?':'');$count=$db->prepare('SELECT COUNT(*) AS total FROM ventes v WHERE '.$where);if($branchId===null)$count->bind_param('i',$enterpriseId);else$count->bind_param('ii',$enterpriseId,$branchId);$count->execute();$total=(int)($count->get_result()->fetch_assoc()['total']??0);$sql='SELECT v.vente_id,v.invoice_no,v.sale_date,v.total_amount,v.amount_paid,v.monais,v.status,v.succursale_id,COALESCE(NULLIF(v.client_comptoir_name, \'\'),cl.name) AS client_name,u.full_name AS seller FROM ventes v LEFT JOIN clients cl ON cl.client_id=v.client_id AND cl.entreprise_id=v.entreprise_id LEFT JOIN users u ON u.user_id=v.user_id AND u.entreprise_id=v.entreprise_id WHERE '.$where.' ORDER BY v.sale_date ASC,v.vente_id ASC LIMIT ? OFFSET ?';$q=$db->prepare($sql);if($branchId===null)$q->bind_param('iii',$enterpriseId,$perPage,$offset);else$q->bind_param('iiii',$enterpriseId,$branchId,$perPage,$offset);$q->execute();$salesRows=$attachCurrencyTotals($q->get_result()->fetch_all(MYSQLI_ASSOC));JsonResponse::send(['success'=>true,'data'=>$salesRows,'pagination'=>['page'=>$page,'per_page'=>$perPage,'total'=>$total,'pages'=>max(1,(int)ceil($total/$perPage))]]);
     }
 
+    if ($action === 'procurement-summary') {
+        Authorization::requirePermission($user, 'voir_approvisionnements');
+        $dateFrom = trim((string) ($_GET['date_debut'] ?? ''));
+        $dateTo = trim((string) ($_GET['date_fin'] ?? ''));
+        $search = trim((string) ($_GET['recherche'] ?? ''));
+        $validDate = static fn (string $date): bool => $date === '' || (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) === 1 && checkdate((int) substr($date, 5, 2), (int) substr($date, 8, 2), (int) substr($date, 0, 4)));
+        if (!$validDate($dateFrom) || !$validDate($dateTo) || ($dateFrom !== '' && $dateTo !== '' && $dateFrom > $dateTo) || mb_strlen($search, 'UTF-8') > 120) {
+            JsonResponse::error('Les filtres du résumé des approvisionnements sont invalides.', 422);
+        }
+        $branchFilter = $branchId ?? 0;
+        $searchPattern = '%' . $search . '%';
+        $sql = 'SELECT a.movement_type, SUM(ad.quantity) AS total_quantity, MAX(u.name) AS unit_name, MAX(u.symbole) AS unit_abbreviation FROM achats a JOIN achat_details ad ON ad.entreprise_id = a.entreprise_id AND ad.achat_id = a.achat_id JOIN produits p ON p.entreprise_id = ad.entreprise_id AND p.produit_id = ad.produit_id LEFT JOIN unites_mesure u ON u.entreprise_id = p.entreprise_id AND u.unite_mesure_id = p.unite_de_mesure JOIN succursales s ON s.entreprise_id = a.entreprise_id AND s.succursale_id = a.succursale_id LEFT JOIN fournisseurs f ON f.entreprise_id = a.entreprise_id AND f.fournisseur_id = a.fournisseur_id WHERE a.entreprise_id = ? AND a.status = \'RECEIVED\' AND (? = 0 OR a.succursale_id = ?) AND (? = \'\' OR a.purchase_date >= ?) AND (? = \'\' OR a.purchase_date < DATE_ADD(?, INTERVAL 1 DAY)) AND (? = \'\' OR (a.purchase_no LIKE ? OR s.name LIKE ? OR COALESCE(f.name, \'\') LIKE ? OR COALESCE(a.motif_sortie, \'\') LIKE ? OR a.movement_type LIKE ?)) GROUP BY a.movement_type, p.unite_de_mesure, u.name, u.symbole ORDER BY a.movement_type, u.name';
+        $summary = $db->prepare($sql);
+        $summary->bind_param('iii' . str_repeat('s', 10), $enterpriseId, $branchFilter, $branchFilter, $dateFrom, $dateFrom, $dateTo, $dateTo, $search, $searchPattern, $searchPattern, $searchPattern, $searchPattern, $searchPattern);
+        $summary->execute();
+        JsonResponse::send(['success' => true, 'data' => $summary->get_result()->fetch_all(MYSQLI_ASSOC)]);
+    }
+
     if ($action === 'procurement-list') {
         Authorization::requirePermission($user, 'voir_approvisionnements');
-        $sql = 'SELECT a.achat_id, a.purchase_no, a.purchase_date, a.validation_date, a.total_amount, a.movement_type, a.motif_sortie, a.status, a.fournisseur_id, f.name AS supplier_name, s.name AS branch_name, COALESCE(d.total_quantity, 0) AS total_quantity, d.unit_name, d.unit_abbreviation, d.monais FROM achats a JOIN succursales s ON s.succursale_id = a.succursale_id AND s.entreprise_id = a.entreprise_id LEFT JOIN fournisseurs f ON f.fournisseur_id = a.fournisseur_id AND f.entreprise_id = a.entreprise_id LEFT JOIN (SELECT ad.entreprise_id, ad.achat_id, SUM(ad.quantity) AS total_quantity, MAX(u.name) AS unit_name, MAX(u.symbole) AS unit_abbreviation, MAX(p.monais) AS monais FROM achat_details ad JOIN produits p ON p.produit_id = ad.produit_id AND p.entreprise_id = ad.entreprise_id LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id GROUP BY ad.entreprise_id, ad.achat_id) d ON d.entreprise_id = a.entreprise_id AND d.achat_id = a.achat_id WHERE a.entreprise_id = ?';
+        $sql = 'SELECT a.achat_id, a.purchase_no, a.purchase_date, a.validation_date, a.total_amount, a.movement_type, a.motif_sortie, a.status, a.fournisseur_id, f.name AS supplier_name, s.name AS branch_name FROM achats a JOIN succursales s ON s.succursale_id = a.succursale_id AND s.entreprise_id = a.entreprise_id LEFT JOIN fournisseurs f ON f.fournisseur_id = a.fournisseur_id AND f.entreprise_id = a.entreprise_id WHERE a.entreprise_id = ?';
         if ($branchId !== null) $sql .= ' AND a.succursale_id = ?';
         $countSql = 'SELECT COUNT(*) AS total FROM achats a WHERE a.entreprise_id = ?' . ($branchId !== null ? ' AND a.succursale_id = ?' : '');
         $countQuery = $db->prepare($countSql);
         if ($branchId === null) $countQuery->bind_param('i', $enterpriseId); else $countQuery->bind_param('ii', $enterpriseId, $branchId);
         $countQuery->execute();
         $total = (int) ($countQuery->get_result()->fetch_assoc()['total'] ?? 0);
-        $paged = isset($_GET['page']);
         $page = max(1, (int) ($_GET['page'] ?? 1));
         $perPage = min(100, max(1, (int) ($_GET['per_page'] ?? 10)));
         $offset = ($page - 1) * $perPage;
-        $sql .= ' ORDER BY a.purchase_date DESC, a.achat_id DESC' . ($paged ? ' LIMIT ? OFFSET ?' : '');
+        $sql .= ' ORDER BY a.purchase_date DESC, a.achat_id DESC LIMIT ? OFFSET ?';
         $query = $db->prepare($sql);
-        if ($branchId === null && $paged) $query->bind_param('iii', $enterpriseId, $perPage, $offset);
-        elseif ($branchId !== null && $paged) $query->bind_param('iiii', $enterpriseId, $branchId, $perPage, $offset);
-        elseif ($branchId === null) $query->bind_param('i', $enterpriseId);
-        else $query->bind_param('ii', $enterpriseId, $branchId);
+        if ($branchId === null) $query->bind_param('iii', $enterpriseId, $perPage, $offset);
+        else $query->bind_param('iiii', $enterpriseId, $branchId, $perPage, $offset);
         $query->execute();
         $response = ['success' => true, 'data' => $query->get_result()->fetch_all(MYSQLI_ASSOC)];
         if ($response['data'] !== []) {
             $purchaseIds = implode(',', array_map(static fn (array $row): int => (int) $row['achat_id'], $response['data']));
+            $detailsQuery = $db->prepare('SELECT ad.achat_id, SUM(ad.quantity) AS total_quantity, MAX(u.name) AS unit_name, MAX(u.symbole) AS unit_abbreviation, MAX(p.monais) AS monais FROM achat_details ad JOIN produits p ON p.produit_id = ad.produit_id AND p.entreprise_id = ad.entreprise_id LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE ad.entreprise_id = ? AND ad.achat_id IN (' . $purchaseIds . ') GROUP BY ad.achat_id');
+            $detailsQuery->bind_param('i', $enterpriseId);
+            $detailsQuery->execute();
+            $purchaseDetails = [];
+            foreach ($detailsQuery->get_result()->fetch_all(MYSQLI_ASSOC) as $detail) $purchaseDetails[(int) $detail['achat_id']] = $detail;
+            foreach ($response['data'] as &$purchaseRow) {
+                $details = $purchaseDetails[(int) $purchaseRow['achat_id']] ?? [];
+                $purchaseRow['total_quantity'] = (int) ($details['total_quantity'] ?? 0);
+                $purchaseRow['unit_name'] = $details['unit_name'] ?? null;
+                $purchaseRow['unit_abbreviation'] = $details['unit_abbreviation'] ?? null;
+                $purchaseRow['monais'] = $details['monais'] ?? null;
+            }
+            unset($purchaseRow);
             $lotQuery = $db->prepare('SELECT achat_id, MAX(date_expiration) AS date_expiration, SUM(quantity_out) AS quantity_out, SUM(quantity) AS lot_quantity FROM achat_details WHERE entreprise_id = ? AND achat_id IN (' . $purchaseIds . ') GROUP BY achat_id');
             $lotQuery->bind_param('i', $enterpriseId);
             $lotQuery->execute();
@@ -349,7 +401,7 @@ try {
             }
             unset($purchaseRow);
         }
-        if ($paged) $response['pagination'] = ['page' => $page, 'per_page' => $perPage, 'total' => $total, 'pages' => max(1, (int) ceil($total / $perPage))];
+        $response['pagination'] = ['page' => $page, 'per_page' => $perPage, 'total' => $total, 'pages' => max(1, (int) ceil($total / $perPage))];
         JsonResponse::send($response);
     }
 

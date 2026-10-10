@@ -44,6 +44,53 @@ final class AuthService
         return ['type' => 'super_admin', 'user' => Session::current()];
     }
 
+    public function superAdminsPage(int $page, int $perPage): array
+    {
+        $count = (int) ($this->db->query('SELECT COUNT(*) AS total FROM super_admins')->fetch_assoc()['total'] ?? 0);
+        $offset = ($page - 1) * $perPage;
+        $statement = $this->db->prepare('SELECT super_admin_id, email, full_name, is_active, created_at FROM super_admins ORDER BY super_admin_id DESC LIMIT ? OFFSET ?');
+        $statement->bind_param('ii', $perPage, $offset);
+        $statement->execute();
+        return [
+            'rows' => $statement->get_result()->fetch_all(MYSQLI_ASSOC),
+            'pagination' => ['page' => $page, 'per_page' => $perPage, 'total' => $count, 'pages' => max(1, (int) ceil($count / $perPage))],
+        ];
+    }
+
+    public function createSuperAdmin(array $data): int
+    {
+        $email = strtolower(trim((string) ($data['email'] ?? '')));
+        $fullName = trim((string) ($data['full_name'] ?? ''));
+        $password = (string) ($data['password'] ?? '');
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 150) {
+            throw new RuntimeException('Saisissez une adresse électronique valide (150 caractères maximum).');
+        }
+        if ($fullName === '' || mb_strlen($fullName, 'UTF-8') > 100) {
+            throw new RuntimeException('Le nom complet est obligatoire (100 caractères maximum).');
+        }
+        if (strlen($password) < 8) {
+            throw new RuntimeException('Le mot de passe doit contenir au moins 8 caractères.');
+        }
+        $exists = $this->db->prepare('SELECT super_admin_id FROM super_admins WHERE email = ? LIMIT 1');
+        $exists->bind_param('s', $email);
+        $exists->execute();
+        if ($exists->get_result()->fetch_assoc()) {
+            throw new RuntimeException('Un super administrateur utilise déjà cette adresse électronique.');
+        }
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        $statement = $this->db->prepare('INSERT INTO super_admins (email, password_hash, full_name, is_active) VALUES (?, ?, ?, 1)');
+        $statement->bind_param('sss', $email, $hash, $fullName);
+        try {
+            $statement->execute();
+        } catch (\mysqli_sql_exception $exception) {
+            if ($exception->getCode() === 1062) {
+                throw new RuntimeException('Un super administrateur utilise déjà cette adresse électronique.', 0, $exception);
+            }
+            throw $exception;
+        }
+        return (int) $this->db->insert_id;
+    }
+
     // Retourne toutes les entreprises visibles par le super administrateur.
     public function enterprises(): array
     {

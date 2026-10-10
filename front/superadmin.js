@@ -1,4 +1,7 @@
 const enterpriseList = document.getElementById('enterprise-list');
+const superAdminList = document.getElementById('super-admin-list');
+const superAdminForm = document.getElementById('super-admin-form');
+const superAdminPagination = document.getElementById('super-admin-pagination');
 const moduleAccessForm = document.getElementById('module-access-form');
 const moduleAccessEnterprise = document.getElementById('module-access-enterprise');
 const moduleAccessList = document.getElementById('module-access-list');
@@ -9,11 +12,14 @@ const message = document.getElementById('admin-message');
 const adminPageTitle = document.getElementById('admin-page-title');
 const adminPageDescription = document.getElementById('admin-page-description');
 let editingCurrencyCode = null;
+let superAdminPage = 1;
+let superAdminPageSize = 10;
 
 // Affiche le module choisi dans le menu du super administrateur.
 function setAdminView(viewName, updateAddress = true) {
   const views = {
     enterprises: ['Gestion des entreprises', 'Activez ou désactivez les comptes inscrits sur la plateforme.'],
+    'super-admins': ['Super administrateurs', 'Créez et consultez les comptes de super administration.'],
     modules: ['Droits des modules', 'Définissez les modules accessibles à chaque entreprise.'],
     currencies: ['Monnaies disponibles', 'Gérez les monnaies proposées lors de la création des produits.'],
     profile: ['Mon profil', 'Modifiez votre identité et votre mot de passe super administrateur.']
@@ -25,6 +31,51 @@ function setAdminView(viewName, updateAddress = true) {
   adminPageDescription.textContent = views[viewName][1];
   if (updateAddress) window.history.replaceState({}, document.title, `${window.location.pathname}#${viewName}`);
 }
+
+async function loadSuperAdmins(page = 1) {
+  superAdminPage = page;
+  try {
+    const result = await requestJson(`../backend/public/auth.php?action=super-admin-admins&page=${page}&per_page=${superAdminPageSize}`);
+    superAdminList.innerHTML = result.data.length ? result.data.map(admin => `<tr><td><strong>${escapeHtml(admin.full_name)}</strong></td><td>${escapeHtml(admin.email)}</td><td>${escapeHtml(admin.created_at)}</td><td><span class="status ${Number(admin.is_active) === 1 ? 'success' : 'danger'}">${Number(admin.is_active) === 1 ? 'Actif' : 'Inactif'}</span></td></tr>`).join('') : '<tr><td colspan="4">Aucun super administrateur enregistré.</td></tr>';
+    const info = result.pagination;
+    superAdminPagination.innerHTML = `<span>Page ${info.page} sur ${info.pages} · ${Number(info.total).toLocaleString('fr-FR')} compte${Number(info.total) === 1 ? '' : 's'}</span><div><label>Lignes par page<select data-super-admin-page-size>${[5, 10, 20, 25, 100].map(size => `<option value="${size}"${superAdminPageSize === size ? ' selected' : ''}>${size}</option>`).join('')}</select></label><button type="button" data-super-admin-page="${info.page - 1}" ${info.page <= 1 ? 'disabled' : ''}>Précédent</button><button type="button" data-super-admin-page="${info.page + 1}" ${info.page >= info.pages ? 'disabled' : ''}>Suivant</button></div>`;
+  } catch (error) {
+    superAdminList.innerHTML = `<tr><td colspan="4">${escapeHtml(error.message)}</td></tr>`;
+  }
+}
+
+superAdminForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const submitButton = superAdminForm.querySelector('[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    await requestJson('../backend/public/auth.php?action=super-admin-admins', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(Object.fromEntries(new FormData(superAdminForm)))
+    });
+    superAdminForm.reset();
+    notify('Super administrateur créé.');
+    await loadSuperAdmins(1);
+  } catch (error) {
+    notify(error.message);
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+
+superAdminPagination.addEventListener('click', event => {
+  const button = event.target.closest('[data-super-admin-page]');
+  if (button && !button.disabled) loadSuperAdmins(Number(button.dataset.superAdminPage));
+});
+superAdminPagination.addEventListener('change', event => {
+  const select = event.target.closest('[data-super-admin-page-size]');
+  if (!select) return;
+  const pageSize = Number(select.value);
+  if (![5, 10, 20, 25, 100].includes(pageSize)) return;
+  superAdminPageSize = pageSize;
+  loadSuperAdmins(1);
+});
 
 // Échappe les valeurs de la base avant leur insertion dans les tableaux HTML.
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
@@ -248,5 +299,6 @@ if (savedCurrency) {
 
 // Charge les deux listes au démarrage de la page d'administration.
 loadEnterprises().catch(error => { enterpriseList.innerHTML = `<tr><td colspan="6">${escapeHtml(error.message)}</td></tr>`; });
+loadSuperAdmins().catch(error => { superAdminList.innerHTML = `<tr><td colspan="4">${escapeHtml(error.message)}</td></tr>`; });
 loadCurrencies().catch(error => { currencyList.innerHTML = `<tr><td colspan="3">${escapeHtml(error.message)}</td></tr>`; });
 loadAdminProfile().catch(error => notify(error.message));

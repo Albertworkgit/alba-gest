@@ -46,6 +46,24 @@ try {
         JsonResponse::send(['success' => true, 'data' => $service->loginSuperAdmin($email, $password)]);
     }
 
+    if ($action === 'super-admin-admins' && $method === 'GET') {
+        $session = Session::current();
+        if (!$session || $session['type'] !== 'super_admin') JsonResponse::error('Accès réservé au super administrateur.', 403);
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $perPage = min(100, max(1, (int) ($_GET['per_page'] ?? 10)));
+        $result = $service->superAdminsPage($page, $perPage);
+        JsonResponse::send(['success' => true, 'data' => $result['rows'], 'pagination' => $result['pagination']]);
+    }
+
+    if ($action === 'super-admin-admins' && $method === 'POST') {
+        $session = Session::current();
+        if (!$session || $session['type'] !== 'super_admin') JsonResponse::error('Accès réservé au super administrateur.', 403);
+        $body = json_decode((string) file_get_contents('php://input'), true);
+        if (!is_array($body)) JsonResponse::error('Corps JSON invalide.', 400);
+        $adminId = $service->createSuperAdmin($body);
+        JsonResponse::send(['success' => true, 'data' => ['super_admin_id' => $adminId]], 201);
+    }
+
     if ($action === 'super-admin-enterprises' && $method === 'GET') {
         $session = Session::current();
         if (!$session || $session['type'] !== 'super_admin') {

@@ -22,6 +22,41 @@ final class AccountingService
         return $query->get_result()->fetch_all(MYSQLI_ASSOC);
     }
 
+    public function entriesPage(int $enterpriseId, string $from, string $to, string $currency, int $page, int $perPage): array
+    {
+        $this->validatePeriod($from, $to, $currency);
+        $count = $this->db->prepare('SELECT COUNT(*) AS total FROM ecritures_comptables e WHERE e.entreprise_id=? AND e.statut=\'VALIDEE\' AND e.date_ecriture BETWEEN ? AND ? AND e.monnaie=? AND EXISTS (SELECT 1 FROM lignes_ecritures_comptables l WHERE l.entreprise_id=e.entreprise_id AND l.ecriture_id=e.ecriture_id)');
+        $count->bind_param('isss', $enterpriseId, $from, $to, $currency);
+        $count->execute();
+        $total = (int) ($count->get_result()->fetch_assoc()['total'] ?? 0);
+        $offset = ($page - 1) * $perPage;
+        $sql = 'SELECT e.ecriture_id,e.date_ecriture,e.journal_code,e.reference,e.libelle,e.monnaie,e.statut,u.full_name AS auteur,MAX(r.demande_id) AS annulation_demande_id,MAX(r.motif) AS annulation_motif,COUNT(l.ligne_id) AS line_count,SUM(l.debit) AS debit_total,SUM(l.credit) AS credit_total FROM ecritures_comptables e JOIN lignes_ecritures_comptables l ON l.ecriture_id=e.ecriture_id AND l.entreprise_id=e.entreprise_id LEFT JOIN users u ON u.user_id=e.user_id AND u.entreprise_id=e.entreprise_id LEFT JOIN demandes_annulation_ecritures r ON r.entreprise_id=e.entreprise_id AND r.ecriture_id=e.ecriture_id AND r.statut=\'EN_ATTENTE\' WHERE e.entreprise_id=? AND e.statut=\'VALIDEE\' AND e.date_ecriture BETWEEN ? AND ? AND e.monnaie=? GROUP BY e.ecriture_id ORDER BY e.date_ecriture DESC,e.ecriture_id DESC LIMIT ? OFFSET ?';
+        $query = $this->db->prepare($sql);
+        $query->bind_param('isssii', $enterpriseId, $from, $to, $currency, $perPage, $offset);
+        $query->execute();
+        return [
+            'rows' => $query->get_result()->fetch_all(MYSQLI_ASSOC),
+            'pagination' => ['page' => $page, 'per_page' => $perPage, 'total' => $total, 'pages' => max(1, (int) ceil($total / $perPage))],
+        ];
+    }
+
+    public function draftEntriesPage(int $enterpriseId, int $page, int $perPage): array
+    {
+        $count = $this->db->prepare('SELECT COUNT(*) AS total FROM ecritures_comptables WHERE entreprise_id=? AND statut=\'BROUILLON\'');
+        $count->bind_param('i', $enterpriseId);
+        $count->execute();
+        $total = (int) ($count->get_result()->fetch_assoc()['total'] ?? 0);
+        $offset = ($page - 1) * $perPage;
+        $sql = 'SELECT e.ecriture_id,e.date_ecriture,e.journal_code,e.reference,e.libelle,e.monnaie,e.user_id,u.full_name AS auteur,COUNT(l.ligne_id) AS line_count,COALESCE(SUM(l.debit),0) AS debit_total,COALESCE(SUM(l.credit),0) AS credit_total FROM ecritures_comptables e LEFT JOIN lignes_ecritures_comptables l ON l.ecriture_id=e.ecriture_id AND l.entreprise_id=e.entreprise_id LEFT JOIN users u ON u.user_id=e.user_id AND u.entreprise_id=e.entreprise_id WHERE e.entreprise_id=? AND e.statut=\'BROUILLON\' GROUP BY e.ecriture_id ORDER BY e.date_ecriture DESC,e.ecriture_id DESC LIMIT ? OFFSET ?';
+        $query = $this->db->prepare($sql);
+        $query->bind_param('iii', $enterpriseId, $perPage, $offset);
+        $query->execute();
+        return [
+            'rows' => $query->get_result()->fetch_all(MYSQLI_ASSOC),
+            'pagination' => ['page' => $page, 'per_page' => $perPage, 'total' => $total, 'pages' => max(1, (int) ceil($total / $perPage))],
+        ];
+    }
+
     public function createAccount(int $enterpriseId, array $data): int
     {
         $code = strtoupper(trim((string) ($data['code'] ?? '')));

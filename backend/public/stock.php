@@ -27,6 +27,9 @@ try {
         // La consultation du catalogue stock est indépendante du droit de modification.
         Authorization::requirePermission($actor, 'voir_stock');
         $branchId = Authorization::branchId($actor, $branchId);
+        if (($_GET['action'] ?? '') === 'summary') {
+            JsonResponse::send(['success' => true, 'data' => $service->summary($enterpriseId, $branchId)]);
+        }
         if (isset($_GET['page'])) {
             $page = max(1, (int) $_GET['page']);
             $perPage = min(100, max(1, (int) ($_GET['per_page'] ?? 10)));

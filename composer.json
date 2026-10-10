@@ -1,0 +1,6 @@
+{
+  "license": "proprietary",
+  "require": {
+    "setasign/fpdf": "^1.8"
+  }
+}

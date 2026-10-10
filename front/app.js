@@ -16,7 +16,8 @@ const views = {
 let activeBranchId = '';
 let branchOptions = [];
 const branchScopedResources = new Set(['stocks', 'achats', 'caisses', 'ventes', 'fournisseurs']);
-let procurementSummaryRows = [];
+let procurementSummaryTimer = null;
+let procurementSummaryRequest = 0;
 function canSelectCompanyBranches(user = sessionUser) {
   if (!user) return false;
   if (!user.succursale_id || user.is_company_admin) return true;
@@ -233,26 +234,30 @@ function filterCurrentReport() {
   updateProcurementSummary();
 }
 function updateProcurementSummary() {
-  const quantityIn = new Map();
-  const quantityOut = new Map();
+  if (currentViewName !== 'procurement' && !(currentViewName === 'stock' && container.querySelector('[data-stock-section].active')?.dataset.stockSection === 'procurement')) return;
   const {from, to, search} = reportFilterValues();
-  const purchases = Array.isArray(procurementSummaryRows) ? procurementSummaryRows : [];
-  purchases.forEach(purchase => {
-    const day = String(purchase.purchase_date || '').slice(0, 10);
-    const text = `${purchase.purchase_no || ''} ${purchase.branch_name || ''} ${purchase.supplier_name || ''} ${purchase.motif_sortie || ''} ${purchase.movement_type || ''}`.toLocaleLowerCase('fr');
-    if (purchase.status !== 'RECEIVED' || (from && day < from) || (to && day > to) || (search && !text.includes(search))) return;
-    const totals = purchase.movement_type === 'IN' ? quantityIn : quantityOut;
-    addUnitQuantity(totals, purchase.unit_abbreviation || purchase.unit_name, purchase.total_quantity);
-  });
-  const balance = new Map(quantityIn);
-  for (const [unit, quantity] of quantityOut) balance.set(unit, (balance.get(unit) || 0) - quantity);
-  const inField = container.querySelector('#purchase-total-in');
-  const outField = container.querySelector('#purchase-total-out');
-  const balanceField = container.querySelector('#purchase-balance');
-  if (inField) inField.textContent = unitTotalsLabel(quantityIn);
-  if (outField) outField.textContent = unitTotalsLabel(quantityOut);
-  if (balanceField) balanceField.textContent = unitTotalsLabel(balance);
-  [inField, outField, balanceField].forEach(field => field?.classList.add('quantity-by-unit'));
+  const requestId = ++procurementSummaryRequest;
+  clearTimeout(procurementSummaryTimer);
+  procurementSummaryTimer = setTimeout(async () => {
+    try {
+      const rows = await fetchReportData('procurement-summary', {date_debut:from, date_fin:to, recherche:search});
+      if (requestId !== procurementSummaryRequest) return;
+      const quantityIn = new Map();
+      const quantityOut = new Map();
+      rows.forEach(row => addUnitQuantity(row.movement_type === 'IN' ? quantityIn : quantityOut, row.unit_abbreviation || row.unit_name, row.total_quantity));
+      const balance = new Map(quantityIn);
+      for (const [unit, quantity] of quantityOut) balance.set(unit, (balance.get(unit) || 0) - quantity);
+      const inField = container.querySelector('#purchase-total-in');
+      const outField = container.querySelector('#purchase-total-out');
+      const balanceField = container.querySelector('#purchase-balance');
+      if (inField) inField.textContent = unitTotalsLabel(quantityIn);
+      if (outField) outField.textContent = unitTotalsLabel(quantityOut);
+      if (balanceField) balanceField.textContent = unitTotalsLabel(balance);
+      [inField, outField, balanceField].forEach(field => field?.classList.add('quantity-by-unit'));
+    } catch (error) {
+      if (requestId === procurementSummaryRequest) showToast(error.message);
+    }
+  }, 250);
 }
 function currentReportSource() {
   if (currentViewName === 'stock') return container.querySelector('[data-stock-section-panel]:not([hidden])') || container;
@@ -400,10 +405,34 @@ async function exportReportExcel() {
   link.click();
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
-async function printCurrentReport() {
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) { showToast('Autorisez les fenêtres contextuelles pour imprimer le rapport.'); return; }
-  printReportInWindow(printWindow, currentReportTitle(), await cloneReportContent());
+async function printCurrentReport(title = currentReportTitle(), sourceHtml = null) {
+  try {
+    const clone = new DOMParser().parseFromString(sourceHtml ?? await cloneReportContent(), 'text/html');
+    const tables = [...clone.querySelectorAll('table')].map(table => ({
+      headers: [...table.querySelectorAll('thead th')].map(cell => cell.textContent.trim()),
+      rows: [...table.querySelectorAll('tbody tr')].filter(row => !row.hidden).map(row => [...row.cells].flatMap(cell => [cell.textContent.trim().replace(/\s+/g, ' '), ...Array(Math.max(0, cell.colSpan - 1)).fill('')]))
+    })).filter(table => table.headers.length > 0);
+    if (!tables.length) throw new Error('Aucun tableau de données à exporter en PDF.');
+    const branchId = activeBranchId || (currentViewName === 'stock' ? document.getElementById('stock-branch')?.value : '');
+    const response = await fetch('../backend/public/pdf-report.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      credentials: 'include',
+      body: JSON.stringify({title, succursale_id: branchId || null, tables})
+    });
+    if (!response.ok) {
+      const result = await readJson(response);
+      throw new Error(result.message || 'Génération du PDF impossible.');
+    }
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'rapport'}.pdf`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 function configureStockWorkspace() {
   const productPanel = document.getElementById('stock-rows')?.closest('section');
@@ -495,6 +524,15 @@ function applyMenuAccess(user) {
   });
 }
 const apiUrl = resource => `../backend/public/api.php?resource=${encodeURIComponent(resource)}`;
+async function fetchStockSummary(branchId) {
+  const selectedBranchId = arguments.length ? branchId : activeBranchId;
+  const query = new URLSearchParams({action:'summary'});
+  if (selectedBranchId) query.set('succursale_id', selectedBranchId);
+  const response = await fetch(`../backend/public/stock.php?${query}`, {credentials:'include'});
+  const result = await readJson(response);
+  if (!response.ok || !result.success) throw new Error(result.message || 'Chargement du résumé de stock impossible.');
+  return result.data;
+}
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 function companyImageUrl(path) {
   return path ? new URL(`../${String(path).replace(/^\/+/, '')}`, window.location.href).href : '';
@@ -530,7 +568,10 @@ async function apiGet(resource, branchId) {
   if (!response.ok || !result.success) throw new Error(result.message || 'Chargement impossible.');
   return result.data;
 }
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [5, 10, 20, 25, 100];
+let PAGE_SIZE = PAGE_SIZE_OPTIONS.includes(Number(localStorage.getItem('alba-stock-page-size')))
+  ? Number(localStorage.getItem('alba-stock-page-size'))
+  : 10;
 const paginationLoaders = new Map();
 async function apiGetPage(resource, page, branchId) {
   const endpoint = new URL(resource === 'stocks' ? '../backend/public/stock.php' : apiUrl(resource), window.location.href);
@@ -559,9 +600,9 @@ function showPagination(body, key, info, onPage) {
   if (!controls) return;
   const page = Number(info?.page || 1), pages = Number(info?.pages || 1), total = Number(info?.total || 0);
   paginationLoaders.set(key, onPage);
-  controls.innerHTML = `<span>Page ${page} sur ${pages} · ${total.toLocaleString('fr-FR')} résultat${total === 1 ? '' : 's'}</span><div><button type="button" data-page-key="${key}" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>&#8249; Précédent</button><button type="button" data-page-key="${key}" data-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>Suivant &#8250;</button></div>`;
+  controls.innerHTML = `<span>Page ${page} sur ${pages} · ${total.toLocaleString('fr-FR')} résultat${total === 1 ? '' : 's'}</span><div><label class="pagination-size">Lignes par page<select data-page-size-key="${key}">${PAGE_SIZE_OPTIONS.map(size => `<option value="${size}"${PAGE_SIZE === size ? ' selected' : ''}>${size}</option>`).join('')}</select></label><button type="button" data-page-key="${key}" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>&#8249; Précédent</button><button type="button" data-page-key="${key}" data-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>Suivant &#8250;</button></div>`;
 }
-let stockData = {products:[], stocks:[], categories:[], branches:[], units:[]};
+let stockData = {products:[], stocks:[], categories:[], branches:[], units:[], summary:[]};
 let unitManagerModal = null;
 let refreshUnitManager = null;
 let roleData = [];
@@ -830,9 +871,8 @@ async function openCashForm(reopenCash=null){
 async function loadPurchaseRows(page = 1) {
   const body = document.getElementById('purchase-rows'); if (!body) return;
   try {
-    const [pageResult, summaryRows] = await Promise.all([fetchReportPage('procurement-list', page), fetchReportData('procurement-list')]);
+    const pageResult = await fetchReportPage('procurement-list', page);
     const purchases = pageResult.rows;
-    procurementSummaryRows = summaryRows;
     const header = body.closest('table')?.tHead?.rows[0];
     if (header) header.innerHTML = '<th>Référence</th><th>Motif</th><th>Date</th><th>Quantité</th><th>Quantité sortie</th><th>Quantité entrée</th><th>Solde du lot</th><th>Total</th><th>Statut</th><th>Bon</th>';
     body.innerHTML = purchases.length ? purchases.map(item => {
@@ -868,19 +908,18 @@ async function loadSupplierRows(page = 1) {
 }
 async function loadDashboardData() {
   const lowRows = document.getElementById('dash-low-stock'); if (!lowRows) return;
-  const [stocksResult, salesResult] = await Promise.allSettled([apiGet('stocks'), apiGet('ventes')]);
+  const [stocksResult, salesResult] = await Promise.allSettled([fetchStockSummary(), fetchReportPage('sales-list', 1)]);
   if (stocksResult.status === 'fulfilled') {
-    const rows = stocksResult.value;
-    const low = rows.filter(item => Number(item.quantity) <= Number(item.min_stock_level));
-    document.getElementById('dash-products').textContent = new Set(rows.map(item => item.produit_id)).size;
-    setQuantitySummary(document.getElementById('dash-quantity'), rows);
-    document.getElementById('dash-alerts').textContent = low.length;
-    lowRows.innerHTML = low.length ? low.slice(0, 10).map(item => { const unit = item.unit_abbreviation || item.unit_name || ''; return `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.branch_name || '—')}</td><td>${Number(item.quantity)} ${escapeHtml(unit)}</td><td>${Number(item.min_stock_level)} ${escapeHtml(unit)}</td></tr>`; }).join('') : '<tr><td colspan="4">Aucun produit sous son seuil minimum.</td></tr>';
+    const summary = stocksResult.value;
+    document.getElementById('dash-products').textContent = Number(summary.products_count).toLocaleString('fr-FR');
+    setQuantitySummary(document.getElementById('dash-quantity'), summary.branches.map(row => ({unit_abbreviation:row.unit_abbreviation, unit_name:row.unit_name, quantity:row.quantity})));
+    document.getElementById('dash-alerts').textContent = Number(summary.low_stock_count).toLocaleString('fr-FR');
+    lowRows.innerHTML = summary.low_stock_rows.length ? summary.low_stock_rows.map(item => { const unit = item.unit_abbreviation || item.unit_name || ''; return `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.branch_name || '—')}</td><td>${Number(item.quantity)} ${escapeHtml(unit)}</td><td>${Number(item.min_stock_level)} ${escapeHtml(unit)}</td></tr>`; }).join('') : '<tr><td colspan="4">Aucun produit sous son seuil minimum.</td></tr>';
   } else {
     document.getElementById('dash-products').textContent = '—'; document.getElementById('dash-quantity').textContent = '—'; document.getElementById('dash-alerts').textContent = '—';
     showLoadError('dash-low-stock', stocksResult.reason, 4);
   }
-  document.getElementById('dash-sales').textContent = salesResult.status === 'fulfilled' ? salesResult.value.length : '—';
+  document.getElementById('dash-sales').textContent = salesResult.status === 'fulfilled' ? Number(salesResult.value.pagination.total).toLocaleString('fr-FR') : '—';
 }
 async function loadAccountingData() {
   if (!document.getElementById('accounting-report-type')) return;
@@ -1047,7 +1086,7 @@ async function loadAccountingAccounts(page = accountingAccountPage) {
     showToast(error.message);
   }
 }
-async function loadAccountingEntryRows() {
+async function loadAccountingEntryRows(page = 1) {
   const rowsTarget = document.getElementById('accounting-entry-rows');
   if (!rowsTarget) return;
   const from = document.getElementById('accounting-from')?.value;
@@ -1058,18 +1097,22 @@ async function loadAccountingEntryRows() {
     return;
   }
   try {
-    const entries = await fetchReportData('accounting-entries', {date_debut: from, date_fin: to, monnaie: currency});
+    const result = await fetchReportPage('accounting-entries', page, {date_debut: from, date_fin: to, monnaie: currency});
+    const entries = result.rows;
     rowsTarget.innerHTML = entries.length ? entries.map(entry => `<tr><td>${escapeHtml(dateLabel(entry.date_ecriture))}</td><td>${escapeHtml(entry.journal_code)}</td><td>${escapeHtml(entry.reference)}</td><td>${escapeHtml(entry.libelle)}</td><td>${Number(entry.line_count)}</td><td>${moneyCurrencyLabel(entry.debit_total, entry.monnaie)}</td><td>${moneyCurrencyLabel(entry.credit_total, entry.monnaie)}</td><td>${entry.annulation_demande_id ? '<span class="status warning">En attente</span>' : `<button type="button" class="icon-action-button icon-action-danger" title="Demander l’annulation de l’écriture ${escapeHtml(entry.reference)}" aria-label="Demander l’annulation de l’écriture ${escapeHtml(entry.reference)}" data-entry-cancellation-request="${Number(entry.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`}</td></tr>`).join('') : '<tr><td colspan="8">Aucune écriture validée pour cette période et cette monnaie.</td></tr>';
+    showPagination(rowsTarget, 'accounting-entries', result.pagination, loadAccountingEntryRows);
   } catch (error) {
     rowsTarget.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
   }
 }
-async function loadAccountingDrafts() {
+async function loadAccountingDrafts(page = 1) {
   const target = document.getElementById('accounting-draft-rows');
   if (!target) return;
   try {
-    const drafts = await fetchReportData('accounting-drafts');
+    const result = await fetchReportPage('accounting-drafts', page);
+    const drafts = result.rows;
     target.innerHTML = drafts.length ? drafts.map(draft => `<tr><td>${escapeHtml(dateLabel(draft.date_ecriture))}</td><td>${escapeHtml(draft.journal_code)}</td><td>${escapeHtml(draft.reference)}</td><td>${escapeHtml(draft.libelle)}</td><td>${Number(draft.line_count)}</td><td>${escapeHtml(moneyCurrencyLabel(draft.debit_total, draft.monnaie))}</td><td>${escapeHtml(moneyCurrencyLabel(draft.credit_total, draft.monnaie))}</td><td>${hasAccess('creer_comptabilite') ? `<div class="user-action-group"><button type="button" class="icon-action-button" title="Modifier le brouillon" aria-label="Modifier le brouillon" data-accounting-draft-edit="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4 4M4 20l4.5-1L19 8.5 15.5 5 5 15.5 4 20Z"/></svg></button><button type="button" class="icon-action-button icon-action-success" title="Valider le brouillon" aria-label="Valider le brouillon" data-accounting-draft-validate="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button><button type="button" class="icon-action-button icon-action-danger" title="Supprimer le brouillon" aria-label="Supprimer le brouillon" data-accounting-draft-delete="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button></div>` : '—'}</td></tr>`).join('') : '<tr><td colspan="8">Aucun brouillon comptable enregistré.</td></tr>';
+    showPagination(target, 'accounting-drafts', result.pagination, loadAccountingDrafts);
   } catch (error) {
     target.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
   }
@@ -1398,10 +1441,10 @@ async function openSupplierPayment(button){const amount=Number(button.dataset.su
 async function loadBranchDashboard() {
   const target = document.getElementById('branch-product-count'); if (!target) return;
   try {
-    const rows = await apiGet('stocks');
-    target.textContent = new Set(rows.map(item => item.produit_id)).size;
-    setQuantitySummary(document.getElementById('branch-quantity'), rows);
-    document.getElementById('branch-alerts').textContent = rows.filter(item => Number(item.quantity) <= Number(item.min_stock_level)).length;
+    const summary = await fetchStockSummary(sessionUser?.succursale_id);
+    target.textContent = Number(summary.products_count).toLocaleString('fr-FR');
+    setQuantitySummary(document.getElementById('branch-quantity'), summary.branches);
+    document.getElementById('branch-alerts').textContent = Number(summary.low_stock_count).toLocaleString('fr-FR');
   } catch (error) { target.textContent = error.message; }
 }
 async function loadExpiringStock() {
@@ -1484,10 +1527,10 @@ async function loadStock(page = 1) {
   const rows = document.getElementById('stock-rows'); if (!rows) return;
   try {
     const isBranchScoped = !canSelectCompanyBranches();
-    const [stockPage, allStocks, categoryPage, units] = await Promise.all([apiGetPage('stocks', page), apiGet('stocks', null), apiGetPage('categories', 1), apiGet('unites_mesure')]);
+    const [stockPage, categoryPage, units, summary] = await Promise.all([apiGetPage('stocks', page), apiGetPage('categories', 1), apiGet('unites_mesure'), fetchStockSummary()]);
     const categories = categoryPage.rows;
     const products = [...new Map(stockPage.rows.map(row => [Number(row.produit_id), row])).values()];
-    stockData = {products, stocks:allStocks, categories, branches:branchOptions, units};
+    stockData = {products, stocks:stockPage.rows, categories, branches:branchOptions, units, summary:summary.branches};
     renderCategoryRows();
     const branchSelect = document.getElementById('stock-branch');
     branchSelect.hidden = true;
@@ -1513,13 +1556,13 @@ function renderBranchStockSummary() {
   }
   const totals = new Map(branchOptions.map(branch => [Number(branch.succursale_id), {name:branch.name, quantities:new Map(), alerts:0}]));
   const grandTotal = new Map();
-  for (const stock of stockData.stocks) {
+  for (const stock of stockData.summary) {
     const branch = totals.get(Number(stock.succursale_id));
     if (!branch) continue;
     const unit = stock.unit_abbreviation || stock.unit_name;
     addUnitQuantity(branch.quantities, unit, stock.quantity);
     addUnitQuantity(grandTotal, unit, stock.quantity);
-    if (Number(stock.quantity || 0) <= Number(stock.min_stock_level || 0)) branch.alerts++;
+    branch.alerts += Number(stock.alerts || 0);
   }
   const grandTotalElement = document.getElementById('company-stock-total');
   grandTotalElement.textContent = unitTotalsLabel(grandTotal);
@@ -1981,8 +2024,8 @@ async function fetchReportData(actionName, params = {}) {
   if (!response.ok || !result.success) throw new Error(result.message || 'Chargement du rapport impossible.');
   return result.data;
 }
-async function fetchReportPage(actionName, page) {
-  const query = new URLSearchParams({action:actionName, page:String(page), per_page:String(PAGE_SIZE)});
+async function fetchReportPage(actionName, page, params = {}) {
+  const query = new URLSearchParams({action:actionName, ...params, page:String(page), per_page:String(PAGE_SIZE)});
   if (activeBranchId) query.set('succursale_id', activeBranchId);
   const response = await fetch(`../backend/public/report-data.php?${query}`, {credentials:'include'});
   const result = await readJson(response);
@@ -2437,11 +2480,9 @@ document.addEventListener('click', async event => {
     const output = document.getElementById('accounting-report-result');
     const content = output?.innerHTML.trim();
     if (!content || output.textContent.trim() === 'Aucun état généré.') return;
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) { showToast('Autorisez les fenêtres contextuelles pour imprimer le rapport choisi.'); return; }
     const title = document.getElementById('accounting-report-title')?.textContent || 'État financier';
     const meta = document.getElementById('accounting-report-meta')?.textContent || '';
-    printReportInWindow(printWindow, title, `<p><strong>Période et monnaie :</strong> ${escapeHtml(meta)}</p>${content}`, '', 'landscape');
+    await printCurrentReport(title, `<p><strong>Période et monnaie :</strong> ${escapeHtml(meta)}</p>${content}`);
     return;
   }
   const supplierPaymentButton=event.target.closest('[data-supplier-payment]');if(supplierPaymentButton){await openSupplierPayment(supplierPaymentButton);return;}
@@ -2643,6 +2684,15 @@ document.addEventListener('submit', async event => {
   } catch (error) { showToast(error.message); }
 });
 action.addEventListener('click', () => { if (currentViewName === 'stock') openEntityForm('product'); else if (currentViewName === 'users') openEntityForm('user'); else if (currentViewName === 'branches') openEntityForm('branch'); else if (currentViewName === 'procurement') openEntityForm('purchase'); else if (currentViewName === 'sales') openSaleForm(); else if (currentViewName === 'cash') openCashForm(); else if (action.textContent.trim()) showToast(`${action.textContent.trim()} : fenêtre prête à être connectée`); });
+document.addEventListener('change', event => {
+  const pageSizeSelect = event.target.closest('[data-page-size-key]');
+  if (!pageSizeSelect) return;
+  const pageSize = Number(pageSizeSelect.value);
+  if (!PAGE_SIZE_OPTIONS.includes(pageSize)) return;
+  PAGE_SIZE = pageSize;
+  localStorage.setItem('alba-stock-page-size', String(pageSize));
+  paginationLoaders.get(pageSizeSelect.dataset.pageSizeKey)?.(1);
+});
 document.addEventListener('click', event => { const pageButton = event.target.closest('[data-page-key]'); if (pageButton && !pageButton.disabled) { const loader = paginationLoaders.get(pageButton.dataset.pageKey); if (loader) loader(Number(pageButton.dataset.page)); return; } if (event.target.closest('[data-create-role]')) openEntityForm('role'); if (event.target.closest('[data-create-category]')) openEntityForm('category'); if (event.target.closest('[data-create-unit]') && sessionUser?.is_company_admin) openUnitManager(); if (event.target.closest('[data-stock-movement-report]')) openStockMovementsReport(); });
 document.addEventListener('click', event => { if (event.target.closest('.text-button') && !event.target.closest('[data-product-edit],[data-product-delete],[data-category-edit],[data-category-delete],[data-branch-edit],[data-branch-delete],[data-stock-edit],[data-stock-card],[data-role-edit],[data-role-delete],[data-user-edit],[data-user-delete],[data-stock-section],[data-toggle-categories],[data-create-unit],[data-create-category],[data-create-supplier],[data-create-purchase],[data-supplier-edit],[data-supplier-delete],[data-purchase-voucher],[data-report-action],[data-report-close],[data-bank-form-open],[data-account-create-open],[data-account-edit],[data-account-delete],[data-account-report-print],#accounting-entry-add-line,#purchase-add-supplier')) showToast('Rapport mis à jour'); });
 document.addEventListener('click', event => {
@@ -2658,8 +2708,7 @@ document.addEventListener('click', event => {
     if (!/^\d+$/.test(nextQuantity)) { showToast('Saisissez une quantité entière positive ou nulle.'); return; }
     const payload = {produit_id:productId, succursale_id:Number(branchId), operation:'set', quantity:Number(nextQuantity), min_stock_level:Number(stock?.min_stock_level ?? 5)};
     fetch('../backend/public/stock.php', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(payload)})
-      .then(async response => { const result = await readJson(response); if (!response.ok || !result.success) throw new Error(result.message || 'Mise à jour impossible.'); showToast('Stock mis à jour.'); return apiGet('stocks'); })
-      .then(stocks => { stockData.stocks = stocks; renderStockRows(); })
+      .then(async response => { const result = await readJson(response); if (!response.ok || !result.success) throw new Error(result.message || 'Mise à jour impossible.'); showToast('Stock mis à jour.'); await loadStock(); })
       .catch(error => showToast(error.message));
     return;
   }

@@ -39,7 +39,17 @@ dans un environnement expose ou de production.
 Les migrations de backend/database/ doivent etre appliquees dans l'ordre sur
 une base initialisee. La migration 025 cree les tables de comptabilite et la
 migration 029 ajoute caisses.montant, qui stocke le solde courant de chaque
-caisse.
+caisse. La migration 033 ajoute les index necessaires aux filtres et au tri des
+listes paginees.
+
+Les rapports PDF utilisent FPDF. Apres avoir installe Composer, executer
+`composer install` a la racine du projet pour installer cette dependance. Les
+listes proposees dans l'interface peuvent afficher 5, 10, 20, 25 ou 100 lignes
+par page; le choix est conserve dans le navigateur.
+
+Un super administrateur connecte peut creer d'autres comptes dans le menu
+"Super administrateurs" de la page de super administration. Chaque nouveau
+compte doit avoir un email valide et un mot de passe d'au moins 8 caracteres.
 
 Une entreprise qui s'inscrit reste inactive jusqu'a son approbation par un
 super administrateur. Son premier utilisateur et sa succursale principale sont

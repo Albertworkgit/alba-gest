@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="crud-actions.css">
   <style>
-    .module-access-form{display:grid;gap:16px;margin-top:20px}.module-access-company{max-width:420px;display:grid;gap:7px;color:#51615b;font-size:12px;font-weight:700}.module-access-company select{padding:10px;border:1px solid #e6ebe7;border-radius:6px;font:inherit}.module-access-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 18px;border:0;padding:0;margin:0}.module-access-list label{display:flex;align-items:center;gap:9px;padding:11px 12px;border:1px solid #e6ebe7;border-radius:6px;color:#33433d;font-size:13px}.module-access-list input{accent-color:#147c70;width:16px;height:16px}.module-access-submit{justify-self:start;background:#147c70;color:#fff;border:0;padding:10px 14px;border-radius:6px;font-weight:700;cursor:pointer}.module-access-submit:disabled{opacity:.6;cursor:wait}
+    .module-access-form{display:grid;gap:16px;margin-top:20px}.module-access-company{max-width:420px;display:grid;gap:7px;color:#51615b;font-size:12px;font-weight:700}.module-access-company select{padding:10px;border:1px solid #e6ebe7;border-radius:6px;font:inherit}.module-access-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 18px;border:0;padding:0;margin:0}.module-access-list label{display:flex;align-items:center;gap:9px;padding:11px 12px;border:1px solid #e6ebe7;border-radius:6px;color:#33433d;font-size:13px}.module-access-list input{accent-color:#147c70;width:16px;height:16px}.module-access-submit{justify-self:start;background:#147c70;color:#fff;border:0;padding:10px 14px;border-radius:6px;font-weight:700;cursor:pointer}.module-access-submit:disabled{opacity:.6;cursor:wait}.admin-pagination{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:12px;color:#73807b;font-size:12px}.admin-pagination>div{display:flex;align-items:center;gap:8px}.admin-pagination label{display:flex;align-items:center;gap:6px}.admin-pagination select,.admin-pagination button{padding:7px 9px;border:1px solid #e6ebe7;border-radius:6px;background:#fff;color:#1d2926;font:inherit}.admin-pagination button{cursor:pointer}.admin-pagination button:disabled{opacity:.45;cursor:not-allowed}
     @media(max-width:700px){.admin-shell{grid-template-columns:1fr}.admin-sidebar{padding:10px;flex-direction:row;overflow:auto}.admin-sidebar-label{display:none}.admin-nav-item{white-space:nowrap;width:auto}}
   </style>
   <style>
@@ -20,6 +20,7 @@
     <aside class="admin-sidebar" aria-label="Menu super administrateur">
       <p class="admin-sidebar-label">Administration</p>
       <button class="admin-nav-item active" type="button" data-admin-view="enterprises"><span>▦</span>Entreprises</button>
+      <button class="admin-nav-item" type="button" data-admin-view="super-admins"><span>♙</span>Super administrateurs</button>
       <button class="admin-nav-item" type="button" data-admin-view="modules"><span>◈</span>Droits des modules</button>
       <button class="admin-nav-item" type="button" data-admin-view="currencies"><span>¤</span>Monnaies</button>
       <button class="admin-nav-item" type="button" data-admin-view="profile"><span>♙</span>Mon profil</button>
@@ -28,6 +29,23 @@
       <header class="admin-heading"><h1 id="admin-page-title">Gestion des entreprises</h1><p id="admin-page-description">Activez ou désactivez les comptes inscrits sur la plateforme.</p></header>
       <section class="admin-view" id="admin-view-enterprises">
         <div class="admin-panel"><table class="admin-table"><thead><tr><th>Entreprise</th><th>Email</th><th>Date</th><th>Statut</th><th>Action</th><th>Modules</th><th>Suppression</th></tr></thead><tbody id="enterprise-list"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div>
+      </section>
+      <section class="admin-view" id="admin-view-super-admins" hidden>
+        <div class="admin-panel">
+          <h2>Créer un super administrateur</h2>
+          <p>Le nouveau compte pourra se connecter à l’espace de super administration.</p>
+          <form id="super-admin-form" class="currency-form">
+            <label>Nom complet<input name="full_name" maxlength="100" required></label>
+            <label>Email<input name="email" type="email" maxlength="150" required></label>
+            <label>Mot de passe<input name="password" type="password" minlength="8" autocomplete="new-password" required></label>
+            <button class="currency-submit" type="submit">Créer le compte</button>
+          </form>
+        </div>
+        <div class="admin-panel">
+          <h2>Comptes super administrateurs</h2>
+          <div style="overflow:auto"><table class="admin-table"><thead><tr><th>Nom complet</th><th>Email</th><th>Créé le</th><th>Statut</th></tr></thead><tbody id="super-admin-list"><tr><td colspan="4">Chargement…</td></tr></tbody></table></div>
+          <div id="super-admin-pagination" class="admin-pagination"></div>
+        </div>
       </section>
       <section class="admin-view" id="admin-view-modules" hidden>
         <div class="admin-panel">
