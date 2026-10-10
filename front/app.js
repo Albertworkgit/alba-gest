@@ -88,6 +88,50 @@ function navigate(viewName, replace = false) {
   else if (window.location.hash !== nextUrl) window.location.hash = route;
   renderView(viewName);
 }
+function renderModuleNavigation() {
+  const navigation = document.getElementById('module-section-nav');
+  if (!navigation) return;
+  navigation.replaceChildren();
+  const panels = [...container.querySelectorAll('.panel')].filter(panel => {
+    if (!panel.hidden) return true;
+    if (currentViewName !== 'stock' || !panel.hasAttribute('data-stock-section-panel')) return false;
+    const section = panel.dataset.stockSectionPanel;
+    return section === 'products' || (section === 'categories' && hasAccess('voir_stock')) ||
+      (section === 'suppliers' && hasAccess('voir_fournisseurs')) ||
+      (section === 'procurement' && hasAccess('voir_approvisionnements'));
+  });
+  const items = panels.map((panel, index) => {
+    const heading = panel.querySelector('.panel-header h2, h2, h3');
+    if (!panel.id) panel.id = `module-section-${currentViewName}-${index + 1}`;
+    return {panel, label:heading?.textContent.trim() || views[currentViewName]?.label || 'Section', id:panel.id};
+  });
+  if (!items.length) {
+    const heading = document.querySelector('.page-heading');
+    if (!heading) {
+      navigation.hidden = true;
+      return;
+    }
+    heading.id = `module-section-${currentViewName}-overview`;
+    items.push({panel:heading, label:'Vue générale', id:heading.id});
+  }
+  navigation.setAttribute('aria-label', `Sections du module ${views[currentViewName]?.label || ''}`);
+  navigation.innerHTML = `<span class="module-section-title">Dans ce module</span>${items.map(item => `<a href="#${encodeURIComponent(item.id)}">${escapeHtml(item.label)}</a>`).join('')}`;
+  if (!navigation.dataset.bound) {
+    navigation.dataset.bound = 'true';
+    navigation.addEventListener('click', event => {
+      const link = event.target.closest('a[href^="#"]');
+      if (!link) return;
+      const panel = document.getElementById(decodeURIComponent(link.hash.slice(1)));
+      if (!panel) return;
+      event.preventDefault();
+      if (currentViewName === 'stock' && panel.dataset.stockSectionPanel) selectStockSection(panel.dataset.stockSectionPanel);
+      panel.scrollIntoView({behavior:'smooth', block:'start'});
+      panel.setAttribute('tabindex', '-1');
+      panel.focus({preventScroll:true});
+    });
+  }
+  navigation.hidden = false;
+}
 function renderView(viewName) {
   const view = views[viewName] || views.dashboard;
   currentViewName = viewName;
@@ -97,6 +141,7 @@ function renderView(viewName) {
   if (viewName === 'accounting') renderAccountingDraftPanel(container);
   if (viewName === 'stock') configureStockWorkspace();
   configureReportToolbar(viewName);
+  renderModuleNavigation();
   if (viewName === 'accounting') {
     const entryButton = container.querySelector('[data-account-entry-open]');
     const accountButton = container.querySelector('[data-account-create-open]');
@@ -470,6 +515,7 @@ function configureStockWorkspace() {
 function selectStockSection(sectionName) {
   document.querySelectorAll('[data-stock-section-panel]').forEach(panel => { panel.hidden = panel.dataset.stockSectionPanel !== sectionName; });
   document.querySelectorAll('[data-stock-section]').forEach(button => button.classList.toggle('active', button.dataset.stockSection === sectionName));
+  renderModuleNavigation();
   filterCurrentReport();
 }
 // Les droits reçus dans la session sont utilisés pour afficher seulement les écrans autorisés.
@@ -733,9 +779,64 @@ async function loadSalesRows(page = 1) {
   } catch (error) { showLoadError('sales-rows', error, 10); }
 }
 function ensureBankPanels(){
-  if(document.getElementById('bank-admin-panel'))return;const externalPanel=document.getElementById('external-payment-rows')?.closest('.panel');if(!externalPanel)return;externalPanel.insertAdjacentHTML('afterend',`<section class="panel" id="bank-admin-panel"><div class="panel-header"><div><h2>Banques de l’entreprise</h2><p class="panel-subtitle">Créez les banques à associer aux entrées, sorties et règlements bancaires.</p></div><button type="button" class="text-button" data-bank-form-open>+ Ajouter une banque</button></div><form id="bank-create-form" class="entity-form" style="margin-bottom:16px" hidden><label>Nom de la banque<input name="name" maxlength="120" required placeholder="Ex. Banque Atlantique"></label><label>Numéro de compte (facultatif)<input name="account_number" maxlength="80"></label><div class="entity-modal-actions"><button type="button" class="modal-cancel" data-bank-form-close>Fermer</button><button class="modal-submit">Ajouter la banque</button></div></form><div style="overflow:auto"><table class="data-table"><thead><tr><th>Banque</th><th>Compte</th></tr></thead><tbody id="bank-rows"><tr><td colspan="2">Chargement…</td></tr></tbody></table></div></section><section class="panel" id="bank-operations-panel"><div class="panel-header"><div><h2>Opérations par banque</h2><p class="panel-subtitle">Consultez les mouvements rattachés à une banque.</p></div><select id="bank-operation-select" class="select-field"><option value="">Choisir une banque</option></select></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Banque</th><th>Caisse</th><th>Succursale</th><th>Opération</th><th>Motif</th><th>Montant</th></tr></thead><tbody id="bank-operation-rows"><tr><td colspan="7">Choisissez une banque.</td></tr></tbody></table></div></section>`);const form=document.getElementById('bank-create-form'),openButton=document.querySelector('[data-bank-form-open]');if(!hasAccess('modifier_caisse')){form.hidden=true;openButton.hidden=true;}openButton.addEventListener('click',()=>{form.hidden=false;form.elements.namedItem('name').focus();});form.querySelector('[data-bank-form-close]').addEventListener('click',()=>{form.reset();form.hidden=true;});form.addEventListener('submit',async event=>{event.preventDefault();const data=Object.fromEntries(new FormData(form));try{const response=await fetch('../backend/public/auth.php?action=banks',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(data)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Création de la banque impossible.');form.reset();form.hidden=true;showToast('Banque enregistrée.');await loadBanks();}catch(error){showToast(error.message);}});document.getElementById('bank-operation-select').addEventListener('change',event=>loadBankOperations(event.currentTarget.value));
+  if(document.getElementById('bank-admin-panel'))return;
+  const externalPanel=document.getElementById('external-payment-rows')?.closest('.panel');
+  if(!externalPanel)return;
+  externalPanel.insertAdjacentHTML('afterend',`<section class="panel" id="bank-admin-panel"><div class="panel-header"><div><h2>Banques de l’entreprise</h2><p class="panel-subtitle">Créez et gérez les banques associées aux opérations bancaires.</p></div><button type="button" class="text-button" data-bank-form-open>+ Ajouter une banque</button></div><form id="bank-create-form" class="entity-form" style="margin-bottom:16px" hidden><input type="hidden" name="banque_id"><label>Nom de la banque<input name="name" maxlength="120" required placeholder="Ex. Banque Atlantique"></label><label>Numéro de compte (facultatif)<input name="account_number" maxlength="80"></label><div class="entity-modal-actions"><button type="button" class="modal-cancel" data-bank-form-close>Fermer</button><button class="modal-submit">Ajouter la banque</button></div></form><div style="overflow:auto"><table class="data-table"><thead><tr><th>Banque</th><th>Compte</th><th>Actions</th></tr></thead><tbody id="bank-rows"><tr><td colspan="3">Chargement…</td></tr></tbody></table></div></section><section class="panel" id="bank-operations-panel"><div class="panel-header"><div><h2>Opérations par banque</h2><p class="panel-subtitle">Consultez les mouvements rattachés à une banque.</p></div><select id="bank-operation-select" class="select-field"><option value="">Choisir une banque</option></select></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Banque</th><th>Caisse</th><th>Succursale</th><th>Opération</th><th>Motif</th><th>Montant</th></tr></thead><tbody id="bank-operation-rows"><tr><td colspan="7">Choisissez une banque.</td></tr></tbody></table></div></section>`);
+  const form=document.getElementById('bank-create-form'),openButton=document.querySelector('[data-bank-form-open]');
+  const resetForm=()=>{form.reset();form.hidden=true;form.querySelector('.modal-submit').textContent='Ajouter la banque';delete form.dataset.editing;};
+  if(!hasAccess('modifier_caisse')){form.hidden=true;openButton.hidden=true;}
+  openButton.addEventListener('click',()=>{resetForm();form.hidden=false;form.elements.namedItem('name').focus();});
+  form.querySelector('[data-bank-form-close]').addEventListener('click',resetForm);
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const editing=Boolean(form.dataset.editing);
+    try{
+      const response=await fetch('../backend/public/auth.php?action=banks',{method:editing?'PUT':'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(Object.fromEntries(new FormData(form)))});
+      const result=await readJson(response);
+      if(!response.ok||!result.success)throw new Error(result.message||(editing?'Modification':'Création')+' de la banque impossible.');
+      resetForm();
+      showToast(editing?'Banque modifiée.':'Banque enregistrée.');
+      await loadBanks();
+    }catch(error){showToast(error.message);}
+  });
+  document.getElementById('bank-rows').addEventListener('click',async event=>{
+    const edit=event.target.closest('[data-bank-edit]');
+    if(edit){
+      form.hidden=false;
+      form.dataset.editing=edit.dataset.bankEdit;
+      form.elements.namedItem('banque_id').value=edit.dataset.bankEdit;
+      form.elements.namedItem('name').value=edit.dataset.bankName;
+      form.elements.namedItem('account_number').value=edit.dataset.bankAccount||'';
+      form.querySelector('.modal-submit').textContent='Enregistrer les modifications';
+      form.elements.namedItem('name').focus();
+      return;
+    }
+    const remove=event.target.closest('[data-bank-delete]');
+    if(!remove||!window.confirm(`Supprimer la banque « ${remove.dataset.bankName} » de la liste active ?`))return;
+    try{
+      const response=await fetch(`../backend/public/auth.php?action=banks&banque_id=${encodeURIComponent(remove.dataset.bankDelete)}`,{method:'DELETE',credentials:'include'});
+      const result=await readJson(response);
+      if(!response.ok||!result.success)throw new Error(result.message||'Suppression de la banque impossible.');
+      showToast('Banque supprimée de la liste active.');
+      await loadBanks();
+    }catch(error){showToast(error.message);}
+  });
+  document.getElementById('bank-operation-select').addEventListener('change',event=>loadBankOperations(event.currentTarget.value));
 }
-async function loadBanks(){const list=document.getElementById('bank-rows'),select=document.getElementById('bank-operation-select');if(!list||!select)return;try{const response=await fetch('../backend/public/auth.php?action=banks',{credentials:'include'}),result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Chargement des banques impossible.');const selected=select.value,banks=result.data||[];list.innerHTML=banks.length?banks.map(bank=>`<tr><td>${escapeHtml(bank.name)}</td><td>${escapeHtml(bank.account_number||'—')}</td></tr>`).join(''):'<tr><td colspan="2">Aucune banque enregistrée.</td></tr>';select.innerHTML='<option value="">Choisir une banque</option>'+banks.map(bank=>`<option value="${Number(bank.banque_id)}">${escapeHtml(bank.name)}${bank.account_number?` · ${escapeHtml(bank.account_number)}`:''}</option>`).join('');if(banks.some(bank=>String(bank.banque_id)===selected))select.value=selected;else if(banks.length)select.value=String(banks[0].banque_id);if(select.value)await loadBankOperations(select.value);}catch(error){list.innerHTML=`<tr><td colspan="2">${escapeHtml(error.message)}</td></tr>`;}}
+async function loadBanks(){
+  const list=document.getElementById('bank-rows'),select=document.getElementById('bank-operation-select');
+  if(!list||!select)return;
+  try{
+    const response=await fetch('../backend/public/auth.php?action=banks',{credentials:'include',cache:'no-store'}),result=await readJson(response);
+    if(!response.ok||!result.success)throw new Error(result.message||'Chargement des banques impossible.');
+    const selected=select.value,banks=result.data||[],canEdit=hasAccess('modifier_caisse');
+    list.innerHTML=banks.length?banks.map(bank=>`<tr><td>${escapeHtml(bank.name)}</td><td>${escapeHtml(bank.account_number||'—')}</td><td>${canEdit?`<button type="button" data-bank-edit="${Number(bank.banque_id)}" data-bank-name="${escapeHtml(bank.name)}" data-bank-account="${escapeHtml(bank.account_number||'')}">Modifier</button> <button type="button" data-bank-delete="${Number(bank.banque_id)}" data-bank-name="${escapeHtml(bank.name)}">Supprimer</button>`:'—'}</td></tr>`).join(''):'<tr><td colspan="3">Aucune banque enregistrée.</td></tr>';
+    select.innerHTML='<option value="">Choisir une banque</option>'+banks.map(bank=>`<option value="${Number(bank.banque_id)}">${escapeHtml(bank.name)}${bank.account_number?` · ${escapeHtml(bank.account_number)}`:''}</option>`).join('');
+    if(banks.some(bank=>String(bank.banque_id)===selected))select.value=selected;else if(banks.length)select.value=String(banks[0].banque_id);
+    if(select.value)await loadBankOperations(select.value);
+  }catch(error){list.innerHTML=`<tr><td colspan="3">${escapeHtml(error.message)}</td></tr>`;}
+}
 async function loadBankOperations(bankId){
   const body=document.getElementById('bank-operation-rows');if(!body)return;if(!bankId){body.innerHTML='<tr><td colspan="7">Choisissez une banque.</td></tr>';return;}
   try{const result=await fetchReportData('bank-operations',{banque_id:bankId}),summary=result.summary||[],rows=result.operations||[],panel=body.closest('.panel');let summaryBox=panel.querySelector('#bank-balance-summary');if(!summaryBox){summaryBox=document.createElement('div');summaryBox.id='bank-balance-summary';summaryBox.style.overflow='auto';panel.querySelector('.panel-header').after(summaryBox);}summaryBox.innerHTML=summary.length?`<table class="data-table"><thead><tr><th>Monnaie</th><th>Total entrées</th><th>Total sorties</th><th>Solde net</th><th>Opérations</th></tr></thead><tbody>${summary.map(row=>`<tr><td>${escapeHtml(row.monais)}</td><td>${moneyCurrencyLabel(row.entrees,row.monais)}</td><td>${moneyCurrencyLabel(row.sorties,row.monais)}</td><td><strong>${moneyCurrencyLabel(row.solde,row.monais)}</strong></td><td>${Number(row.operations)}</td></tr>`).join('')}</tbody></table>`:'<p class="panel-subtitle">Aucun mouvement comptabilisé pour cette banque.</p>';body.innerHTML=rows.length?rows.map(row=>`<tr data-report-date="${escapeHtml(String(row.movement_date).slice(0,10))}"><td>${escapeHtml(dateLabel(row.movement_date))}</td><td>${escapeHtml(row.bank_name)}</td><td>${escapeHtml(row.cash_name)}</td><td>${escapeHtml(row.branch_name)}</td><td>${escapeHtml(row.type==='ENTREE'?'Entrée':'Sortie')} · ${escapeHtml(row.payment_mode||'Banque')}</td><td>${escapeHtml(row.reason||'—')}${row.bank_reference?`<br><small>Réf. bancaire : ${escapeHtml(row.bank_reference)}</small>`:''}</td><td>${moneyCurrencyLabel(row.amount,row.monais)}</td></tr>`).join(''):'<tr><td colspan="7">Aucune opération enregistrée pour cette banque.</td></tr>';
@@ -763,6 +864,7 @@ function addSalePaymentReceiptActions(body, rows) {
     button.type = 'button';
     button.className = 'document-action-button';
     button.dataset.salePaymentReceipt = String(Number(row.vente_id));
+    button.dataset.salePaymentId = String(Number(row.paiement_id || 0));
     button.dataset.salePaymentAmount = String(Number(row.amount));
     button.dataset.salePaymentCurrency = String(row.monais || '');
     button.dataset.salePaymentDate = String(row.payment_date || row.movement_date || '');
@@ -776,6 +878,135 @@ function addSalePaymentReceiptActions(body, rows) {
     actionCell.append(button);
   });
   body.querySelectorAll('tr[data-report-total]').forEach(row => row.insertCell());
+}
+function updateExchangeRateLabel(panel) {
+  const reference = panel.querySelector('#exchange-reference-form [name="monais"]').value || '…';
+  const currency = panel.querySelector('#exchange-rate-form [name="monais"]').value || '…';
+  panel.querySelector('[data-exchange-rate-label]').textContent = `Valeur de 1 ${currency} en ${reference}`;
+}
+function ensureExchangeRatePanel() {
+  if (document.getElementById('exchange-rates-panel')) return;
+  const cashPanel = document.getElementById('cash-rows')?.closest('.panel');
+  if (!cashPanel) return;
+  const panel = document.createElement('section');
+  panel.id = 'exchange-rates-panel';
+  panel.className = 'panel';
+  panel.innerHTML = `<div class="panel-header"><div><h2>Taux de change</h2><p class="panel-subtitle">Choisissez la monnaie dans laquelle votre entreprise exprime ses prix. Elle sert de base au calcul des conversions.</p></div></div><form id="exchange-reference-form" class="filter-bar"><label>Monnaie de référence<select name="monais" required></select></label><button type="submit" class="primary-button">Enregistrer la référence</button><button type="button" class="icon-action-button icon-action-danger" data-exchange-reference-delete title="Supprimer la monnaie de référence" aria-label="Supprimer la monnaie de référence" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button></form><p class="exchange-rate-help" data-exchange-reference-help></p><form id="exchange-rate-form" class="filter-bar"><label>Monnaie à convertir<select name="monais" required></select></label><label><span data-exchange-rate-label>Valeur de 1 unité en monnaie de référence</span><input name="taux_vers_reference" type="number" min="0.0000000001" step="any" required></label><button type="submit" class="primary-button">Créer le taux</button><button type="button" class="text-button" data-exchange-cancel hidden>Annuler</button></form><p class="panel-subtitle" data-exchange-hint></p><div style="overflow:auto"><table class="data-table"><thead><tr><th>Monnaie</th><th>Taux vers la référence</th><th>Mis à jour le</th><th>Actions</th></tr></thead><tbody data-exchange-rates><tr><td colspan="4">Chargement…</td></tr></tbody></table></div>`;
+  cashPanel.insertAdjacentElement('afterend', panel);
+  const referenceForm = panel.querySelector('#exchange-reference-form');
+  const rateForm = panel.querySelector('#exchange-rate-form');
+  const cancelButton = panel.querySelector('[data-exchange-cancel]');
+  const deleteReferenceButton = panel.querySelector('[data-exchange-reference-delete]');
+  referenceForm.elements.namedItem('monais').addEventListener('change', () => updateExchangeRateLabel(panel));
+  rateForm.elements.namedItem('monais').addEventListener('change', () => updateExchangeRateLabel(panel));
+  const resetRateForm = () => {
+    rateForm.reset();
+    rateForm.elements.namedItem('monais').disabled = false;
+    rateForm.querySelector('[type="submit"]').textContent = 'Créer le taux';
+    cancelButton.hidden = true;
+    delete rateForm.dataset.editing;
+  };
+  cancelButton.addEventListener('click', resetRateForm);
+  referenceForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    try {
+      const response = await fetch('../backend/public/auth.php?action=exchange-rates', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({type:'reference',monais:referenceForm.elements.namedItem('monais').value})});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Enregistrement de la monnaie de référence impossible.');
+      showToast('Monnaie de référence enregistrée.');
+      await loadExchangeRates();
+    } catch (error) { showToast(error.message); }
+  });
+  deleteReferenceButton.addEventListener('click', async () => {
+    if (!window.confirm('Supprimer la monnaie de référence ? Cette action est possible uniquement après la suppression de tous les taux de change.')) return;
+    try {
+      const response = await fetch('../backend/public/auth.php?action=exchange-rates&type=reference', {method:'DELETE',credentials:'include'});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Suppression de la monnaie de référence impossible.');
+      showToast('Monnaie de référence supprimée.');
+      await loadExchangeRates();
+    } catch (error) { showToast(error.message); }
+  });
+  rateForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const formData = new FormData(rateForm);
+    const currency = String(formData.get('monais') || '');
+    const method = rateForm.dataset.editing ? 'PUT' : 'POST';
+    try {
+      const response = await fetch('../backend/public/auth.php?action=exchange-rates', {method,headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({type:'rate',monais:currency,taux_vers_reference:Number(formData.get('taux_vers_reference'))})});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Enregistrement du taux impossible.');
+      resetRateForm();
+      showToast(method === 'PUT' ? 'Taux de change modifié.' : 'Taux de change créé.');
+      await loadExchangeRates();
+    } catch (error) { showToast(error.message); }
+  });
+  panel.querySelector('[data-exchange-rates]').addEventListener('click', async event => {
+    const editButton = event.target.closest('[data-exchange-edit]');
+    if (editButton) {
+      rateForm.elements.namedItem('monais').value = editButton.dataset.exchangeEdit;
+      rateForm.elements.namedItem('monais').disabled = true;
+      rateForm.elements.namedItem('taux_vers_reference').value = editButton.dataset.rate;
+      rateForm.dataset.editing = editButton.dataset.exchangeEdit;
+      rateForm.querySelector('[type="submit"]').textContent = 'Modifier le taux';
+      cancelButton.hidden = false;
+      updateExchangeRateLabel(panel);
+      return;
+    }
+    const deleteButton = event.target.closest('[data-exchange-delete]');
+    if (!deleteButton || !window.confirm(`Supprimer le taux de ${deleteButton.dataset.exchangeDelete} ?`)) return;
+    try {
+      const response = await fetch(`../backend/public/auth.php?action=exchange-rates&monais=${encodeURIComponent(deleteButton.dataset.exchangeDelete)}`, {method:'DELETE',credentials:'include'});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Suppression du taux impossible.');
+      showToast('Taux de change supprimé.');
+      await loadExchangeRates();
+    } catch (error) { showToast(error.message); }
+  });
+}
+async function loadExchangeRates() {
+  const panel = document.getElementById('exchange-rates-panel');
+  if (!panel) return;
+  try {
+    const response = await fetch('../backend/public/auth.php?action=exchange-rates', {credentials:'include',cache:'no-store'});
+    const result = await readJson(response);
+    if (!response.ok || !result.success) throw new Error(result.message || 'Chargement des taux impossible.');
+    const data = result.data;
+    const referenceForm = panel.querySelector('#exchange-reference-form');
+    const rateForm = panel.querySelector('#exchange-rate-form');
+    const referenceSelect = referenceForm.elements.namedItem('monais');
+    const currencySelect = rateForm.elements.namedItem('monais');
+    const currencies = data.currencies || [];
+    referenceSelect.innerHTML = currencies.map(item => `<option value="${escapeHtml(item.type_monais)}"${item.type_monais === data.reference_currency ? ' selected' : ''}>${escapeHtml(item.type_monais)}${item.description ? ` · ${escapeHtml(item.description)}` : ''}</option>`).join('');
+    const selectedCurrency = currencySelect.value;
+    currencySelect.innerHTML = currencies.filter(item => item.type_monais !== data.reference_currency).map(item => `<option value="${escapeHtml(item.type_monais)}">${escapeHtml(item.type_monais)}${item.description ? ` · ${escapeHtml(item.description)}` : ''}</option>`).join('');
+    if ([...currencySelect.options].some(option => option.value === selectedCurrency)) currencySelect.value = selectedCurrency;
+    updateExchangeRateLabel(panel);
+    const editable = hasAccess('voir_caisse');
+    referenceForm.hidden = !editable;
+    rateForm.hidden = !editable;
+    referenceSelect.disabled = !editable || currencies.length === 0;
+    const deleteReferenceButton = panel.querySelector('[data-exchange-reference-delete]');
+    deleteReferenceButton.hidden = !editable || !data.reference_currency;
+    deleteReferenceButton.disabled = !editable || !data.reference_currency;
+    rateForm.querySelector('[type="submit"]').disabled = !editable || !data.reference_currency || currencySelect.options.length === 0;
+    panel.querySelector('[data-exchange-reference-help]').textContent = data.reference_currency
+      ? `La référence est ${data.reference_currency}. Exemple : un taux USD de 2 300 signifie 1 USD = 2 300 ${data.reference_currency}, donc 2 300 ${data.reference_currency} = 1 USD. Pour convertir des ${data.reference_currency} en USD, divisez le montant par 2 300. Les paiements sont convertis automatiquement dans les deux sens vers la monnaie de la facture. Pour changer la référence après avoir créé des taux, supprimez d’abord ces taux.`
+      : 'Étape 1 : sélectionnez la monnaie habituelle de votre entreprise ci-dessus et enregistrez-la. Ensuite, ajoutez un taux pour chaque autre monnaie.';
+    panel.querySelector('[data-exchange-hint]').textContent = data.reference_currency
+      ? `Étape 2 : choisissez une autre monnaie et indiquez combien vaut 1 unité de cette monnaie en ${data.reference_currency}. Le taux inverse est calculé automatiquement.`
+      : '';
+    const rates = data.rates || [];
+    panel.querySelector('[data-exchange-rates]').innerHTML = rates.length ? rates.map(rate => {
+      const isReference = rate.monais === data.reference_currency;
+      const rateValue = Number(rate.taux_vers_reference);
+      const rateLabel = rateValue.toLocaleString('fr-FR',{maximumFractionDigits:10});
+      const inverseLabel = rateValue > 0 ? `${rateValue.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(data.reference_currency || '')} = 1 ${escapeHtml(rate.monais)}` : '';
+      return `<tr><td>${escapeHtml(rate.monais)}${isReference ? ' (référence)' : ''}</td><td>${isReference ? '1' : `1 ${escapeHtml(rate.monais)} = ${rateLabel} ${escapeHtml(data.reference_currency || '')}${inverseLabel ? `<br><small>${inverseLabel}</small>` : ''}`}</td><td>${escapeHtml(rate.updated_at || '—')}</td><td>${!editable || isReference ? '—' : `<button type="button" class="icon-action-button" data-exchange-edit="${escapeHtml(rate.monais)}" data-rate="${rateValue}" title="Modifier le taux ${escapeHtml(rate.monais)}" aria-label="Modifier le taux ${escapeHtml(rate.monais)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button> <button type="button" class="icon-action-button icon-action-danger" data-exchange-delete="${escapeHtml(rate.monais)}" title="Supprimer le taux ${escapeHtml(rate.monais)}" aria-label="Supprimer le taux ${escapeHtml(rate.monais)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`}</td></tr>`;
+    }).join('') : '<tr><td colspan="4">Aucun taux enregistré.</td></tr>';
+  } catch (error) {
+    panel.querySelector('[data-exchange-rates]').innerHTML = `<tr><td colspan="4">${escapeHtml(error.message)}</td></tr>`;
+  }
 }
 async function loadCashRows(page = 1, movementPage = 1) {
   const body = document.getElementById('cash-rows'); if (!body) return;
@@ -810,7 +1041,7 @@ async function loadCashRows(page = 1, movementPage = 1) {
       actionCell.innerHTML = `<button type="button" class="icon-action-button icon-action-danger" title="Demander l’annulation de cette opération" aria-label="Demander l’annulation de l’opération ${Number(movement.mouvement_id)}" data-cash-cancellation-request="${Number(movement.mouvement_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`;
     });
     addSalePaymentReceiptActions(document.getElementById('external-payment-rows'), externalPayments);
-    ensureBankPanels();await loadBanks();
+    ensureBankPanels();await loadBanks();ensureExchangeRatePanel();await loadExchangeRates();renderModuleNavigation();
     if(hasAccess('modifier_caisse'))loadPendingSales();
   } catch (error) { showLoadError('cash-rows', error, 9); }
 }
@@ -1422,19 +1653,65 @@ async function openAccountingEntryForm(draftId = null) {
 }
 async function openPaymentEntry({title,amount,currency,branchId,referenceTitle,submit,isInbound=false}){
   try{
-    const [modesResponse,banksResponse]=await Promise.all([fetch('../backend/public/auth.php?action=payment-modes',{credentials:'include'}),fetch('../backend/public/auth.php?action=banks',{credentials:'include'})]);const modesResult=await readJson(modesResponse),banksResult=await readJson(banksResponse);if(!modesResponse.ok||!modesResult.success)throw new Error(modesResult.message||'Chargement des modes impossible.');if(!banksResponse.ok||!banksResult.success)throw new Error(banksResult.message||'Chargement des banques impossible.');const modes=(modesResult.data||[]).sort((a,b)=>Number(String(b.code).toUpperCase()==='CASH')-Number(String(a.code).toUpperCase()==='CASH')),banks=banksResult.data||[];if(!modes.length)throw new Error('Aucun mode de paiement actif.');
+    const [modesResponse,banksResponse,exchangeResponse]=await Promise.all([
+      fetch('../backend/public/auth.php?action=payment-modes',{credentials:'include'}),
+      fetch('../backend/public/auth.php?action=banks',{credentials:'include'}),
+      isInbound?fetch('../backend/public/auth.php?action=exchange-rates',{credentials:'include',cache:'no-store'}):Promise.resolve(null)
+    ]);
+    const modesResult=await readJson(modesResponse),banksResult=await readJson(banksResponse);
+    if(!modesResponse.ok||!modesResult.success)throw new Error(modesResult.message||'Chargement des modes impossible.');
+    if(!banksResponse.ok||!banksResult.success)throw new Error(banksResult.message||'Chargement des banques impossible.');
+    const modes=(modesResult.data||[]).sort((a,b)=>Number(String(b.code).toUpperCase()==='CASH')-Number(String(a.code).toUpperCase()==='CASH')),banks=banksResult.data||[];
+    if(!modes.length)throw new Error('Aucun mode de paiement actif.');
+    let exchangeData={reference_currency:null,currencies:[],rates:[]};
+    if(exchangeResponse){const exchangeResult=await readJson(exchangeResponse);if(!exchangeResponse.ok||!exchangeResult.success)throw new Error(exchangeResult.message||'Chargement des taux de change impossible.');exchangeData=exchangeResult.data;}
+    const rates=new Map((exchangeData.rates||[]).map(rate=>[rate.monais,Number(rate.taux_vers_reference)]));
+    let paymentCurrencies=[currency];
+    if(isInbound){
+      paymentCurrencies=[...new Set([currency,...(exchangeData.currencies||[]).map(item=>item.type_monais).filter(code=>code===currency||(rates.has(currency)&&rates.has(code)))])];
+    }
     let cashboxes=[],page=1,totalPages=1;while(page<=totalPages){const result=await fetchReportPage('cashboxes-list',page);cashboxes.push(...result.rows);totalPages=result.pagination.pages;page++;}
-    cashboxes=cashboxes.filter(row=>row.statut==='OUVERTE'&&Number(row.succursale_id)===Number(branchId)&&row.monais===currency).sort((a,b)=>String(a.name).localeCompare(String(b.name),'fr'));
-    const modal=document.createElement('div');modal.className='entity-modal';modal.innerHTML=`<section class="entity-dialog"><h2>${escapeHtml(title)}</h2><p class="panel-subtitle">${escapeHtml(referenceTitle||'')} · À régler : ${moneyCurrencyLabel(amount,currency)}</p><form class="entity-form"><label class="full">Mode de paiement<select name="mode_paiement_id" required>${modes.map(mode=>`<option value="${Number(mode.mode_paiement_id)}" data-mode-code="${escapeHtml(mode.code)}" data-requires-cash="${Number(mode.requires_cash)}">${escapeHtml(mode.name)}</option>`).join('')}</select></label><label class="full" data-payment-cash-label>Caisse ou compte de paiement<select name="caisse_id" required></select><small data-no-cashboxes hidden>Aucun compte ouvert ne correspond à ce mode et à cette monnaie.</small><small data-insufficient-funds hidden>Solde insuffisant pour ce montant.</small></label><label class="full" data-payment-bank-label>Banque<select name="banque_id">${banks.map(bank=>`<option value="${Number(bank.banque_id)}">${escapeHtml(bank.name)}${bank.account_number?` · ${escapeHtml(bank.account_number)}`:''}</option>`).join('')}</select><small data-no-banks ${banks.length?'hidden':''}>Créez d’abord une banque dans le module Caisse.</small></label><label class="full" data-payment-reference-label>Référence de transaction<input name="reference" maxlength="120" placeholder="N° transaction Mobile Money ou référence bancaire"></label><label class="full">Montant du paiement<input name="amount" type="number" min="0.01" max="${Number(amount)}" step="0.01" value="${Number(amount)}" required></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Enregistrer le paiement</button></div></form></section>`;document.body.appendChild(modal);
-    const form=modal.querySelector('form'),modeSelect=form.elements.namedItem('mode_paiement_id'),cashLabel=modal.querySelector('[data-payment-cash-label]'),cashSelect=form.elements.namedItem('caisse_id'),bankLabel=modal.querySelector('[data-payment-bank-label]'),bankSelect=form.elements.namedItem('banque_id'),refLabel=modal.querySelector('[data-payment-reference-label]'),refInput=form.elements.namedItem('reference'),amountInput=form.elements.namedItem('amount'),submitButton=form.querySelector('.modal-submit');
-    const amountLabel=amountInput.closest('label');
-    amountLabel.firstChild.textContent='Montant versé';
-    const amountSummary=document.createElement('div');amountSummary.className='full';
-    const dueText=document.createElement('strong');dueText.textContent=`Reste à payer : ${moneyCurrencyLabel(amount,currency)}`;
-    const fullAmountButton=document.createElement('button');fullAmountButton.type='button';fullAmountButton.className='text-button';fullAmountButton.textContent='Payer le solde complet';
-    amountSummary.append(dueText,fullAmountButton);amountLabel.before(amountSummary);
-    fullAmountButton.addEventListener('click',()=>{amountInput.value=Number(amount).toFixed(2);amountInput.dispatchEvent(new Event('input',{bubbles:true}));});
-    const syncMode=()=>{const selected=modeSelect.selectedOptions[0],requiresCash=selected?.dataset.requiresCash==='1',isBank=selected?.dataset.modeCode==='BANK',modeId=Number(modeSelect.value),available=cashboxes.filter(row=>Number(row.mode_paiement_id)===modeId);cashSelect.innerHTML=available.map(row=>`<option value="${Number(row.caisse_id)}" data-bank-id="${Number(row.banque_id||0)}" data-balance="${Number(row.solde_courant||0)}">${escapeHtml(row.name)} · ${escapeHtml(row.payment_mode)} · Disponible ${moneyCurrencyLabel(row.solde_courant,row.monais)}</option>`).join('');cashLabel.hidden=false;cashSelect.required=true;modal.querySelector('[data-no-cashboxes]').hidden=available.length>0;const linkedBank=cashSelect.selectedOptions[0]?.dataset.bankId||'';if(linkedBank)bankSelect.value=linkedBank;bankLabel.hidden=!isBank;bankSelect.required=isBank;bankSelect.disabled=!isBank||Boolean(linkedBank);modal.querySelector('[data-no-banks]').hidden=banks.length>0;refLabel.hidden=requiresCash;refInput.required=!requiresCash;const insufficient=!isInbound&&available.length>0&&Number(amountInput.value)>Number(cashSelect.selectedOptions[0]?.dataset.balance||0)+0.009;modal.querySelector('[data-insufficient-funds]').hidden=!insufficient;submitButton.disabled=!available.length||(isBank&&!banks.length)||insufficient;};modeSelect.addEventListener('change',syncMode);cashSelect.addEventListener('change',syncMode);amountInput.addEventListener('input',syncMode);syncMode();modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());form.addEventListener('submit',async event=>{event.preventDefault();const payload=Object.fromEntries(new FormData(form));payload.mode_paiement_id=Number(payload.mode_paiement_id);payload.caisse_id=payload.caisse_id?Number(payload.caisse_id):null;payload.banque_id=Number(cashSelect.selectedOptions[0]?.dataset.bankId||payload.banque_id||0)||null;payload.amount=Number(payload.amount);try{await submit(payload);modal.remove();}catch(error){showToast(error.message);}});
+    cashboxes=cashboxes.filter(row=>row.statut==='OUVERTE'&&Number(row.succursale_id)===Number(branchId)).sort((a,b)=>String(a.name).localeCompare(String(b.name),'fr'));
+    const currencyOptions=isInbound?`<label class="full">Monnaie reçue<select name="received_monais" required>${paymentCurrencies.map(code=>`<option value="${escapeHtml(code)}"${code===currency?' selected':''}>${escapeHtml(code)}</option>`).join('')}</select></label>`:'';
+    const modal=document.createElement('div');modal.className='entity-modal';modal.innerHTML=`<section class="entity-dialog"><h2>${escapeHtml(title)}</h2><p class="panel-subtitle">${escapeHtml(referenceTitle||'')} · À régler : ${moneyCurrencyLabel(amount,currency)}</p><form class="entity-form">${currencyOptions}<label class="full">Mode de paiement<select name="mode_paiement_id" required>${modes.map(mode=>`<option value="${Number(mode.mode_paiement_id)}" data-mode-code="${escapeHtml(mode.code)}" data-requires-cash="${Number(mode.requires_cash)}">${escapeHtml(mode.name)}</option>`).join('')}</select></label><label class="full" data-payment-cash-label>Caisse ou compte de paiement<select name="caisse_id" required></select><small data-no-cashboxes hidden>Aucun compte ouvert ne correspond à ce mode et à cette monnaie.</small><small data-insufficient-funds hidden>Solde insuffisant pour ce montant.</small></label><label class="full" data-payment-bank-label>Banque<select name="banque_id">${banks.map(bank=>`<option value="${Number(bank.banque_id)}">${escapeHtml(bank.name)}${bank.account_number?` · ${escapeHtml(bank.account_number)}`:''}</option>`).join('')}</select><small data-no-banks ${banks.length?'hidden':''}>Créez d’abord une banque dans le module Caisse.</small></label><label class="full" data-payment-reference-label>Référence de transaction<input name="reference" maxlength="120" placeholder="N° transaction Mobile Money ou référence bancaire"></label><label class="full">Montant du paiement<input name="amount" type="number" min="0.01" max="${Number(amount)}" step="0.01" value="${Number(amount)}" required></label><div class="full"><strong data-payment-amount-summary>Reste à payer : ${moneyCurrencyLabel(amount,currency)}</strong></div><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Enregistrer le paiement</button></div></form></section>`;document.body.appendChild(modal);
+    const form=modal.querySelector('form'),modeSelect=form.elements.namedItem('mode_paiement_id'),cashLabel=modal.querySelector('[data-payment-cash-label]'),cashSelect=form.elements.namedItem('caisse_id'),bankLabel=modal.querySelector('[data-payment-bank-label]'),bankSelect=form.elements.namedItem('banque_id'),refLabel=modal.querySelector('[data-payment-reference-label]'),refInput=form.elements.namedItem('reference'),amountInput=form.elements.namedItem('amount'),submitButton=form.querySelector('.modal-submit'),receivedCurrencySelect=form.elements.namedItem('received_monais');
+    const amountLabel=amountInput.closest('label');amountLabel.firstChild.textContent=isInbound?'Montant reçu':'Montant versé';
+    const rateFor=code=>code===exchangeData.reference_currency?1:rates.get(code);
+    const multiplier=()=>{
+      const received=receivedCurrencySelect?.value||currency;
+      if(received===currency)return 1;
+      const receivedRate=rateFor(received),invoiceRate=rateFor(currency);
+      if(!Number.isFinite(receivedRate)||!Number.isFinite(invoiceRate)||receivedRate<=0||invoiceRate<=0)return null;
+      return receivedRate/invoiceRate;
+    };
+    const maxReceived=()=>{const appliedRate=multiplier();return appliedRate?Number(amount)/appliedRate:0;};
+    const summary=modal.querySelector('[data-payment-amount-summary]');
+    const syncMode=()=>{
+      const receivedCurrency=receivedCurrencySelect?.value||currency;
+      const selected=modeSelect.selectedOptions[0],requiresCash=selected?.dataset.requiresCash==='1',isBank=selected?.dataset.modeCode==='BANK',modeId=Number(modeSelect.value);
+      const available=cashboxes.filter(row=>row.monais===receivedCurrency&&Number(row.mode_paiement_id)===modeId);
+      cashSelect.innerHTML=available.map(row=>`<option value="${Number(row.caisse_id)}" data-bank-id="${Number(row.banque_id||0)}" data-balance="${Number(row.solde_courant||0)}">${escapeHtml(row.name)} · ${escapeHtml(row.payment_mode)} · Disponible ${moneyCurrencyLabel(row.solde_courant,row.monais)}</option>`).join('');
+      cashLabel.hidden=false;cashSelect.required=true;modal.querySelector('[data-no-cashboxes]').hidden=available.length>0;
+      const linkedBank=cashSelect.selectedOptions[0]?.dataset.bankId||'';if(linkedBank)bankSelect.value=linkedBank;
+      bankLabel.hidden=!isBank;bankSelect.required=isBank;bankSelect.disabled=!isBank||Boolean(linkedBank);modal.querySelector('[data-no-banks]').hidden=banks.length>0;
+      refLabel.hidden=requiresCash;refInput.required=!requiresCash;
+      const appliedRate=multiplier();
+      const maxAmount=maxReceived();amountInput.max=String(maxAmount);const applied=Number(amountInput.value||0)*(appliedRate||0);
+      const inverseRate=appliedRate&&appliedRate>0?1/appliedRate:0;
+      summary.textContent=isInbound
+        ? appliedRate===null?'Taux indisponible : vérifiez les taux configurés pour ces monnaies.'
+          : `Imputé à la facture : ${moneyCurrencyLabel(applied,currency)} · Solde : ${moneyCurrencyLabel(amount,currency)}${receivedCurrency!==currency?` · Taux : 1 ${receivedCurrency} = ${appliedRate.toLocaleString('fr-FR',{maximumFractionDigits:8})} ${currency} · Inverse : ${inverseRate.toLocaleString('fr-FR',{maximumFractionDigits:8})} ${receivedCurrency} = 1 ${currency}`:''}`
+        : `Reste à payer : ${moneyCurrencyLabel(amount,currency)}`;
+      const insufficient=!isInbound&&available.length>0&&Number(amountInput.value)>Number(cashSelect.selectedOptions[0]?.dataset.balance||0)+0.009;
+      modal.querySelector('[data-insufficient-funds]').hidden=!insufficient;
+      submitButton.disabled=!available.length||(isBank&&!banks.length)||insufficient||appliedRate===null||Number(amountInput.value)>maxAmount+0.009;
+    };
+    if(isInbound){const max=maxReceived();amountInput.value=max.toFixed(2);amountInput.max=String(max);}
+    const setFullAmount=()=>{amountInput.value=maxReceived().toFixed(2);syncMode();};
+    const fullAmountButton=document.createElement('button');fullAmountButton.type='button';fullAmountButton.className='text-button';fullAmountButton.textContent='Payer le solde complet';amountLabel.before(fullAmountButton);fullAmountButton.addEventListener('click',setFullAmount);
+    modeSelect.addEventListener('change',syncMode);cashSelect.addEventListener('change',syncMode);amountInput.addEventListener('input',syncMode);receivedCurrencySelect?.addEventListener('change',setFullAmount);
+    syncMode();modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());
+    form.addEventListener('submit',async event=>{event.preventDefault();const payload=Object.fromEntries(new FormData(form));payload.mode_paiement_id=Number(payload.mode_paiement_id);payload.caisse_id=payload.caisse_id?Number(payload.caisse_id):null;payload.banque_id=Number(cashSelect.selectedOptions[0]?.dataset.bankId||payload.banque_id||0)||null;payload.amount=Number(payload.amount);try{await submit(payload);modal.remove();}catch(error){showToast(error.message);}});
   }catch(error){showToast(error.message);}
 }
 async function openSupplierPayment(button){const amount=Number(button.dataset.supplierDue),currency=button.dataset.supplierCurrency;await openPaymentEntry({title:'Paiement fournisseur',amount,currency,branchId:Number(button.dataset.supplierBranch),referenceTitle:`Approvisionnement ${button.dataset.supplierRef}`,submit:async payload=>{payload.achat_id=Number(button.dataset.supplierPayment);const response=await fetch('../backend/public/auth.php?action=pay-supplier',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(payload)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Paiement impossible.');showToast('Paiement fournisseur enregistré.');loadAccountingData();if(currentViewName==='cash')loadCashRows();}});}
@@ -2304,10 +2581,16 @@ async function printSalePaymentReceipt(button){
       return `<tr><td>${escapeHtml(balanceCurrency)}</td><td>${moneyCurrencyLabel(currencyTotal,balanceCurrency)}</td><td>${moneyCurrencyLabel(currencyPaid,balanceCurrency)}</td><td>${moneyCurrencyLabel(due,balanceCurrency)}</td></tr>`;
     }).join('');
     const payments=data.payments||[];
-    const paymentRows=payments.map(payment=>`<tr><td>${escapeHtml(dateLabel(payment.payment_date))}</td><td>${escapeHtml(payment.payment_type==='REFUND'?'Remboursement':'Paiement')}</td><td>${escapeHtml(payment.payment_mode||'—')}</td><td>${escapeHtml(payment.reference||'—')}</td><td>${moneyCurrencyLabel(payment.amount,payment.monais)}</td></tr>`).join('');
+    const paymentRows=payments.map(payment=>{const invoiceCurrency=payment.monais_facture||payment.monais;const converted=invoiceCurrency!==payment.monais;const rate=Number(payment.exchange_rate||1);const inverse=rate>0?1/rate:0;return `<tr><td>${escapeHtml(dateLabel(payment.payment_date))}</td><td>${escapeHtml(payment.payment_type==='REFUND'?'Remboursement':'Paiement')}</td><td>${escapeHtml(payment.payment_mode||'—')}</td><td>${escapeHtml(payment.reference||'—')}</td><td>${moneyCurrencyLabel(payment.amount,payment.monais)}${converted?`<br><small>Imputé : ${moneyCurrencyLabel(payment.amount_applied??payment.amount,invoiceCurrency)} · Taux : 1 ${escapeHtml(payment.monais)} = ${rate.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(invoiceCurrency)} · Inverse : ${inverse.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(payment.monais)} = 1 ${escapeHtml(invoiceCurrency)}</small>`:''}</td></tr>`;}).join('');
+    const selectedPayment=payments.find(payment=>Number(payment.paiement_id)===Number(button.dataset.salePaymentId));
+    const selectedInvoiceCurrency=selectedPayment?.monais_facture||selectedPayment?.monais||currency;
+    const selectedAmountApplied=Number(selectedPayment?.amount_applied??amount);
+    const selectedRate=Number(selectedPayment?.exchange_rate||1);
+    const inverseSelectedRate=selectedRate>0?1/selectedRate:0;
+    const conversionSummary=selectedInvoiceCurrency!==currency?`<p><strong>Montant imputé à la facture :</strong> ${moneyCurrencyLabel(selectedAmountApplied,selectedInvoiceCurrency)} · <strong>Taux appliqué :</strong> 1 ${escapeHtml(currency)} = ${selectedRate.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(selectedInvoiceCurrency)} · <strong>Inverse :</strong> ${inverseSelectedRate.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(currency)} = 1 ${escapeHtml(selectedInvoiceCurrency)}</p>`:'';
     const receiptNumber=button.dataset.salePaymentNumber||`${sale.invoice_no}-${String(button.dataset.salePaymentDate||'').replace(/\D/g,'')}`;
     const reference=button.dataset.salePaymentReference;
-    const content=`<section><h2>REÇU DE PAIEMENT</h2><p><strong>Reçu n° :</strong> ${escapeHtml(receiptNumber)}</p><p><strong>Date :</strong> ${escapeHtml(dateLabel(button.dataset.salePaymentDate||new Date().toISOString()))}</p><p><strong>Facture :</strong> ${escapeHtml(sale.invoice_no)}</p><p><strong>Client :</strong> ${escapeHtml(sale.client_name||'Client comptoir')}</p><p><strong>Succursale :</strong> ${escapeHtml(sale.branch_name)}</p><p><strong>Caissier :</strong> ${escapeHtml(sale.cashier||'—')}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(button.dataset.salePaymentMode||'Caisse')}</p>${reference?`<p><strong>Référence de paiement :</strong> ${escapeHtml(reference)}</p>`:''}<h2>Montant reçu : ${moneyCurrencyLabel(amount,currency)}</h2><h3>Situation de la facture par monnaie</h3><table class="report-table"><thead><tr><th>Monnaie</th><th>Total facture</th><th>Total payé</th><th>Reste dû</th></tr></thead><tbody>${balanceRows}</tbody></table>${paymentRows?`<h3>Historique des règlements</h3><table class="report-table"><thead><tr><th>Date</th><th>Opération</th><th>Mode</th><th>Référence</th><th>Montant</th></tr></thead><tbody>${paymentRows}</tbody></table>`:''}</section>`;
+    const content=`<section><h2>REÇU DE PAIEMENT</h2><p><strong>Reçu n° :</strong> ${escapeHtml(receiptNumber)}</p><p><strong>Date :</strong> ${escapeHtml(dateLabel(button.dataset.salePaymentDate||new Date().toISOString()))}</p><p><strong>Facture :</strong> ${escapeHtml(sale.invoice_no)}</p><p><strong>Client :</strong> ${escapeHtml(sale.client_name||'Client comptoir')}</p><p><strong>Succursale :</strong> ${escapeHtml(sale.branch_name)}</p><p><strong>Caissier :</strong> ${escapeHtml(sale.cashier||'—')}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(button.dataset.salePaymentMode||'Caisse')}</p>${reference?`<p><strong>Référence de paiement :</strong> ${escapeHtml(reference)}</p>`:''}<h2>Montant reçu : ${moneyCurrencyLabel(amount,currency)}</h2>${conversionSummary}<h3>Situation de la facture par monnaie</h3><table class="report-table"><thead><tr><th>Monnaie</th><th>Total facture</th><th>Total payé</th><th>Reste dû</th></tr></thead><tbody>${balanceRows}</tbody></table>${paymentRows?`<h3>Historique des règlements</h3><table class="report-table"><thead><tr><th>Date</th><th>Opération</th><th>Mode</th><th>Référence</th><th>Montant</th></tr></thead><tbody>${paymentRows}</tbody></table>`:''}</section>`;
     printReportInWindow(printWindow,`Reçu de paiement ${sale.invoice_no}`,content,'','portrait',true);
   }catch(error){printWindow.close();showToast(`Impression du reçu impossible : ${error.message}`);}
 }
@@ -2317,7 +2600,7 @@ async function printSaleReceipt(button){
     const data=await fetchReportData('sale-receipt',{vente_id:button.dataset.saleReceipt});
     const sale=data.sale;
     const payments=data.payments||[];
-    const paymentSummary=payments.length?`<h2>Règlements reçus</h2><table class="report-table"><thead><tr><th>Date</th><th>Mode</th><th>Référence</th><th>Montant</th></tr></thead><tbody>${payments.map(payment=>`<tr><td>${escapeHtml(dateLabel(payment.payment_date))}</td><td>${escapeHtml(payment.payment_type==='REFUND'?`Remboursement — ${payment.payment_mode}`:payment.payment_mode)}</td><td>${escapeHtml(payment.reference||'—')}</td><td>${moneyCurrencyLabel(payment.amount,payment.monais)}</td></tr>`).join('')}</tbody></table>`:'';
+    const paymentSummary=payments.length?`<h2>Règlements reçus</h2><table class="report-table"><thead><tr><th>Date</th><th>Mode</th><th>Référence</th><th>Montant</th></tr></thead><tbody>${payments.map(payment=>{const invoiceCurrency=payment.monais_facture||payment.monais;const converted=invoiceCurrency!==payment.monais;const rate=Number(payment.exchange_rate||1);const inverse=rate>0?1/rate:0;return `<tr><td>${escapeHtml(dateLabel(payment.payment_date))}</td><td>${escapeHtml(payment.payment_type==='REFUND'?`Remboursement — ${payment.payment_mode}`:payment.payment_mode)}</td><td>${escapeHtml(payment.reference||'—')}</td><td>${moneyCurrencyLabel(payment.amount,payment.monais)}${converted?`<br><small>Imputé : ${moneyCurrencyLabel(payment.amount_applied??payment.amount,invoiceCurrency)} · Taux : 1 ${escapeHtml(payment.monais)} = ${rate.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(invoiceCurrency)} · Inverse : ${inverse.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(payment.monais)} = 1 ${escapeHtml(invoiceCurrency)}</small>`:''}</td></tr>`;}).join('')}</tbody></table>`:'';
     const rows=data.details.map(row=>{const unit=row.unit_symbol||row.unit_name||'';return `<tr><td>${escapeHtml(row.sku)}</td><td>${escapeHtml(row.product_name)}</td><td>${Number(row.quantity)} ${escapeHtml(unit)}</td><td>${moneyCurrencyLabel(row.unit_price,row.monais)}</td><td>${Number(row.discount_percent)>0?moneyCurrencyLabel(row.discount_amount,row.monais):'—'}</td><td>${moneyCurrencyLabel(row.subtotal,row.monais)}</td></tr>`;}).join('');
     const balances=sale.currency_totals||[];
     const due=balances.map(balance=>moneyCurrencyLabel(Math.max(0,Number(balance.total_amount)-Number(balance.amount_paid)),balance.monais)).join(' · ')||moneyCurrencyLabel(Math.max(0,Number(sale.total_amount)-Number(sale.amount_paid)),sale.monais);

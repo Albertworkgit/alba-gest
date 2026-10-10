@@ -40,7 +40,8 @@ Les migrations de backend/database/ doivent etre appliquees dans l'ordre sur
 une base initialisee. La migration 025 cree les tables de comptabilite et la
 migration 029 ajoute caisses.montant, qui stocke le solde courant de chaque
 caisse. La migration 033 ajoute les index necessaires aux filtres et au tri des
-listes paginees.
+listes paginees. La migration 034 ajoute les monnaies de reference et taux de
+change de caisse ainsi que les informations de conversion des paiements.
 
 Les rapports PDF utilisent FPDF. Apres avoir installe Composer, executer
 `composer install` a la racine du projet pour installer cette dependance. Les
@@ -108,8 +109,21 @@ Ventes
   - La creation de la vente reserve/diminue le stock et cree une vente a payer.
     Son statut passe a partiellement paye ou paye selon les reglements recus.
   - Encaisser un paiement depuis une caisse ouverte de la bonne succursale, de
-    la bonne monnaie et du bon mode de paiement. Une reference est requise pour
-    les paiements externes concernes.
+    la monnaie recue et du bon mode de paiement. Une reference est requise pour
+    les paiements externes concernes. La caisse est creditee dans la monnaie
+    effectivement recue.
+  - Dans le module Caisse, choisir une monnaie de reference pour l'entreprise,
+    puis creer un taux par monnaie. Le taux indique la valeur d'une unite de
+    cette monnaie en monnaie de reference. Exemple : si CDF est la reference
+    et 1 USD = 2 300 CDF, convertir 2 300 CDF en USD revient a diviser par
+    2 300, soit 1 USD. L'application applique automatiquement le taux inverse
+    selon le sens de la conversion. Il peut etre modifie ou supprime;
+    la monnaie de reference ne peut etre changee qu'apres suppression des taux.
+  - Lors du reglement d'une facture, choisir la monnaie recue. L'application
+    convertit le montant vers la monnaie de la facture, controle le solde du,
+    et enregistre le montant recu, le montant impute et le taux applique. Un
+    taux doit exister pour chaque monnaie utilisee, sauf pour la monnaie de
+    reference (taux 1).
   - Consulter, imprimer une facture ou un recu, enregistrer un paiement
     supplementaire et consulter les paiements.
   - L'annulation d'une vente payee est soumise a une limite de 48 heures et
@@ -117,8 +131,14 @@ Ventes
     en stock.
 
 Caisse
+  - Le menu « Dans ce module » fournit des raccourcis vers les sections
+    disponibles de chaque module; les sections du stock restent accessibles
+    par leurs onglets.
   - Ouvrir une caisse pour une succursale, une monnaie et un mode de paiement;
     un compte bancaire peut etre associe au mode Banque.
+  - Les utilisateurs autorises peuvent creer, modifier ou supprimer une banque.
+    Une banque deja utilisee est archivee pour conserver l'historique; elle
+    n'est plus proposee pour les nouvelles operations.
   - Le solde initial est enregistre a l'ouverture.
   - Consulter le solde courant stocke directement dans caisses.montant.
     L'application ne doit pas recalculer ce solde en additionnant l'historique
@@ -128,6 +148,8 @@ Caisse
   - Les paiements de vente augmentent le montant de la caisse; les paiements
     fournisseurs et remboursements le diminuent. Les mouvements restent
     conserves comme historique et justificatifs.
+  - La conversion de monnaie est prise en charge pour les paiements de vente;
+    les paiements fournisseurs restent dans la monnaie de leur dette.
   - Consulter le journal, les paiements par banque ou Mobile Money et les
     totaux historiques d'entrees/sorties.
   - Cloturer une caisse en saisissant le montant compte. La cloture enregistre

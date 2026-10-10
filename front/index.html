@@ -7,10 +7,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="stock-navigation.css">
-  <link rel="stylesheet" href="reports.css">
-  <link rel="stylesheet" href="crud-actions.css">
+  <link rel="stylesheet" href="styles.css?v=20261010-exchange-conversion-2">
+  <link rel="stylesheet" href="stock-navigation.css?v=20261010-exchange-conversion-2">
+  <link rel="stylesheet" href="reports.css?v=20261010-exchange-conversion-2">
+  <link rel="stylesheet" href="crud-actions.css?v=20261010-exchange-conversion-2">
   <style>
     .app-footer{display:flex;justify-content:center;align-items:center;gap:6px;color:#95a09b;font-size:11px;padding:30px 0 5px}
     .app-footer strong{color:#147c70;font-weight:700}
@@ -60,6 +60,7 @@
         <div class="top-actions"><button class="icon-button" aria-label="Rechercher">⌕</button><button class="icon-button notification" aria-label="Notifications">♢<i></i></button><div class="theme-control"><button class="theme-button" id="theme-button" aria-expanded="false" aria-controls="theme-panel">◐ <span>Thème</span></button><div class="theme-panel" id="theme-panel"><p>Apparence</p><button class="theme-option" data-theme-choice="light"><span>☀</span>Mode clair</button><button class="theme-option" data-theme-choice="dark"><span>☾</span>Mode sombre</button><button class="theme-option" data-theme-choice="auto"><span>◌</span>Automatique</button></div></div><div class="top-avatar" data-session-avatar>--</div></div>
       </header>
 
+      <nav class="module-section-nav" id="module-section-nav" aria-label="Sections du module" hidden></nav>
       <div class="page-content">
         <section class="page-heading"><div><p class="kicker" id="page-kicker">TABLEAU DE BORD</p><h1 id="page-title">Chargement de votre espace…</h1><p class="muted" id="page-description">Récupération des informations de votre compte.</p></div><button class="primary-button" id="primary-action" hidden></button></section>
         <div id="view-container"></div>
@@ -68,6 +69,6 @@
     </main>
   </div>
   <div class="toast" id="toast">Action enregistrée</div>
-  <script src="app.js?v=20261005-accounting-report-balance-print"></script>
+  <script src="app.js?v=20261010-exchange-conversion-2"></script>
 </body>
 </html>

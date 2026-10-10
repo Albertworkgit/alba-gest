@@ -10,6 +10,7 @@ require_once __DIR__ . '/../Services/AuthService.php';
 require_once __DIR__ . '/../Services/ProcurementService.php';
 require_once __DIR__ . '/../Services/SalesService.php';
 require_once __DIR__ . '/../Services/CompanyProfileService.php';
+require_once __DIR__ . '/../Services/ExchangeRateService.php';
 
 use AlbaStock\Core\JsonResponse;
 use AlbaStock\Core\Session;
@@ -19,6 +20,7 @@ use AlbaStock\Services\AuthService;
 use AlbaStock\Services\ProcurementService;
 use AlbaStock\Services\SalesService;
 use AlbaStock\Services\CompanyProfileService;
+use AlbaStock\Services\ExchangeRateService;
 use AlbaStock\Core\Database;
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -219,6 +221,94 @@ try {
         $actor=AuthGuard::requireAuthenticated();if(!$actor||$actor['type']!=='user')JsonResponse::error('Action réservée à une entreprise.',403);Authorization::requirePermission($actor,'modifier_caisse');
         $body=json_decode((string)file_get_contents('php://input'),true)?:[];$name=trim((string)($body['name']??''));$account=trim((string)($body['account_number']??''));if($name===''||mb_strlen($name,'UTF-8')>120||mb_strlen($account,'UTF-8')>80)JsonResponse::error('Nom de banque requis; numéro de compte limité à 80 caractères.',422);$accountValue=$account!==''?$account:null;$enterprise=(int)$actor['entreprise_id'];$db=Database::connection();$db->begin_transaction();$enterpriseLock=$db->prepare('SELECT entreprise_id FROM entreprises WHERE entreprise_id=? FOR UPDATE');$enterpriseLock->bind_param('i',$enterprise);$enterpriseLock->execute();if(!$enterpriseLock->get_result()->fetch_assoc()){$db->rollback();JsonResponse::error('Entreprise introuvable.',404);}$duplicate=$db->prepare('SELECT banque_id FROM banques WHERE entreprise_id=? AND name=? AND account_number <=> ? AND is_active=1 LIMIT 1');$duplicate->bind_param('iss',$enterprise,$name,$accountValue);$duplicate->execute();if($duplicate->get_result()->fetch_assoc()){$db->rollback();JsonResponse::error('Cette banque avec ce numéro de compte existe déjà.',409);}$query=$db->prepare('INSERT INTO banques (entreprise_id,name,account_number) VALUES (?,?,?)');$query->bind_param('iss',$enterprise,$name,$accountValue);$query->execute();$bankId=(int)$db->insert_id;$db->commit();JsonResponse::send(['success'=>true,'data'=>['banque_id'=>$bankId]],201);
     }
+    if ($action === 'banks' && in_array($method, ['PUT', 'DELETE'], true)) {
+        $actor=AuthGuard::requireAuthenticated();
+        if(!$actor||$actor['type']!=='user')JsonResponse::error('Action réservée à une entreprise.',403);
+        Authorization::requirePermission($actor,'modifier_caisse');
+        $enterprise=(int)$actor['entreprise_id'];
+        $db=Database::connection();
+        if($method==='PUT'){
+            $body=json_decode((string)file_get_contents('php://input'),true);
+            if(!is_array($body))JsonResponse::error('Corps JSON invalide.',400);
+            $bankId=(int)($body['banque_id']??0);
+            $name=trim((string)($body['name']??''));
+            $account=trim((string)($body['account_number']??''));
+            if($bankId<1||$name===''||mb_strlen($name,'UTF-8')>120||mb_strlen($account,'UTF-8')>80)JsonResponse::error('Banque, nom et numéro de compte valides requis.',422);
+            $accountValue=$account!==''?$account:null;
+            $db->begin_transaction();
+            try{
+                $current=$db->prepare('SELECT banque_id FROM banques WHERE banque_id=? AND entreprise_id=? AND is_active=1 FOR UPDATE');
+                $current->bind_param('ii',$bankId,$enterprise);$current->execute();
+                if(!$current->get_result()->fetch_assoc())throw new RuntimeException('Banque introuvable ou déjà supprimée.');
+                $duplicate=$db->prepare('SELECT banque_id FROM banques WHERE entreprise_id=? AND name=? AND account_number <=> ? AND banque_id<>? AND is_active=1 LIMIT 1');
+                $duplicate->bind_param('issi',$enterprise,$name,$accountValue,$bankId);$duplicate->execute();
+                if($duplicate->get_result()->fetch_assoc())throw new RuntimeException('Une autre banque utilise déjà ce nom et ce numéro de compte.');
+                $update=$db->prepare('UPDATE banques SET name=?,account_number=? WHERE banque_id=? AND entreprise_id=? AND is_active=1');
+                $update->bind_param('ssii',$name,$accountValue,$bankId,$enterprise);$update->execute();
+                $db->commit();
+                JsonResponse::send(['success'=>true,'data'=>['banque_id'=>$bankId]]);
+            }catch(Throwable $exception){$db->rollback();throw $exception;}
+        }
+        $bankId=(int)($_GET['banque_id']??0);
+        if($bankId<1)JsonResponse::error('Identifiant de banque invalide.',422);
+        $db->begin_transaction();
+        try{
+            $current=$db->prepare('SELECT banque_id FROM banques WHERE banque_id=? AND entreprise_id=? AND is_active=1 FOR UPDATE');
+            $current->bind_param('ii',$bankId,$enterprise);$current->execute();
+            if(!$current->get_result()->fetch_assoc())throw new RuntimeException('Banque introuvable ou déjà supprimée.');
+            $openCash=$db->prepare("SELECT caisse_id FROM caisses WHERE entreprise_id=? AND banque_id=? AND statut='OUVERTE' LIMIT 1 FOR UPDATE");
+            $openCash->bind_param('ii',$enterprise,$bankId);$openCash->execute();
+            if($openCash->get_result()->fetch_assoc())throw new RuntimeException('Cette banque est associée à une caisse ouverte. Fermez ou modifiez d’abord cette caisse.');
+            $references=[];
+            foreach(['caisses','paiements_ventes','paiements_fournisseurs','mouvements_caisse'] as $table){
+                $reference=$db->prepare("SELECT banque_id FROM {$table} WHERE entreprise_id=? AND banque_id=? LIMIT 1");
+                $reference->bind_param('ii',$enterprise,$bankId);$reference->execute();
+                if($reference->get_result()->fetch_assoc()){$references[]=$table;break;}
+            }
+            if($references){
+                $delete=$db->prepare('UPDATE banques SET is_active=0 WHERE banque_id=? AND entreprise_id=? AND is_active=1');
+                $delete->bind_param('ii',$bankId,$enterprise);$delete->execute();
+            }else{
+                $delete=$db->prepare('DELETE FROM banques WHERE banque_id=? AND entreprise_id=? AND is_active=1');
+                $delete->bind_param('ii',$bankId,$enterprise);$delete->execute();
+            }
+            $db->commit();
+            JsonResponse::send(['success'=>true,'data'=>['deleted'=>true,'archived'=>(bool)$references]]);
+        }catch(Throwable $exception){$db->rollback();throw $exception;}
+    }
+
+    if ($action === 'exchange-rates' && in_array($method, ['GET', 'POST', 'PUT', 'DELETE'], true)) {
+        $actor = AuthGuard::requireAuthenticated();
+        if (!$actor || $actor['type'] !== 'user') JsonResponse::error('Action réservée à un utilisateur d’entreprise.', 403);
+        $enterpriseId = (int) $actor['entreprise_id'];
+        $rateService = new ExchangeRateService(Database::connection());
+        if ($method === 'GET') {
+            Authorization::requireAnyPermission($actor, ['voir_caisse', 'modifier_caisse']);
+            JsonResponse::send(['success' => true, 'data' => $rateService->list($enterpriseId)]);
+        }
+        Authorization::requirePermission($actor, 'voir_caisse');
+        if ($method === 'DELETE') {
+            if (($_GET['type'] ?? '') === 'reference') {
+                $rateService->deleteReference($enterpriseId);
+            } else {
+                $rateService->deleteRate($enterpriseId, (string) ($_GET['monais'] ?? ''));
+            }
+            JsonResponse::send(['success' => true, 'data' => $rateService->list($enterpriseId)]);
+        }
+        $body = json_decode((string) file_get_contents('php://input'), true);
+        if (!is_array($body)) JsonResponse::error('Corps JSON invalide.', 400);
+        $type = (string) ($body['type'] ?? '');
+        if ($type === 'reference' && $method === 'POST') {
+            $rateService->setReference($enterpriseId, (string) ($body['monais'] ?? ''));
+        } elseif ($type === 'rate' && in_array($method, ['POST', 'PUT'], true)) {
+            $value = $body['taux_vers_reference'] ?? null;
+            if (!is_numeric($value)) JsonResponse::error('Saisissez un taux de change numérique.', 422);
+            $rateService->saveRate($enterpriseId, (string) ($body['monais'] ?? ''), (float) $value, (int) $actor['id'], $method === 'PUT');
+        } else {
+            JsonResponse::error('Opération de taux de change invalide.', 422);
+        }
+        JsonResponse::send(['success' => true, 'data' => $rateService->list($enterpriseId)]);
+    }
 
     if ($action === 'currencies' && $method === 'GET') {
         AuthGuard::requireAuthenticated();
@@ -388,7 +478,7 @@ try {
         $body=json_decode((string)file_get_contents('php://input'),true)?:[];$source=strtoupper((string)($body['source']??''));
         if($source!=='CASH')JsonResponse::error('Le paiement doit être validé depuis le module de caisse.',403);
         Authorization::requirePermission($actor,'modifier_caisse');
-        $salePaid=(new SalesService(Database::connection()))->collectPayment($actor,(int)($body['vente_id']??0),trim((string)($body['monais']??'')),(float)($body['amount']??0),(int)($body['mode_paiement_id']??0),isset($body['caisse_id'])&&$body['caisse_id']!==''?(int)$body['caisse_id']:null,trim((string)($body['reference']??'')),isset($body['banque_id'])&&$body['banque_id']!==''?(int)$body['banque_id']:null);
+        $invoiceCurrency=trim((string)($body['monais']??''));$receivedCurrency=trim((string)($body['received_monais']??$invoiceCurrency));$salePaid=(new SalesService(Database::connection()))->collectPayment($actor,(int)($body['vente_id']??0),$invoiceCurrency,(float)($body['amount']??0),$receivedCurrency,(int)($body['mode_paiement_id']??0),isset($body['caisse_id'])&&$body['caisse_id']!==''?(int)$body['caisse_id']:null,trim((string)($body['reference']??'')),isset($body['banque_id'])&&$body['banque_id']!==''?(int)$body['banque_id']:null);
         JsonResponse::send(['success'=>true,'message'=>$salePaid?'Paiement enregistré en caisse. Facture réglée.':'Paiement partiel enregistré en caisse. Un solde reste dû.']);
     }
     if ($action === 'cancel-sale' && in_array($method,['POST','PATCH'],true)) {
