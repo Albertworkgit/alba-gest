@@ -61,11 +61,14 @@ try {
     );
     JsonResponse::send(['success' => true, 'data' => $result]);
 } catch (\RuntimeException $exception) {
+    if ($exception instanceof \mysqli_sql_exception) {
+        JsonResponse::error(JsonResponse::messageFor($exception), 500);
+    }
     // Renvoie un statut HTTP adapté pour distinguer session, permission et saisie invalide.
     $message = $exception->getMessage();
     $status = str_contains($message, 'Authentification requise') ? 401
         : (str_contains($message, 'Permission requise') || str_contains($message, 'Accès refusé') || str_contains($message, 'Accès limité') ? 403 : 422);
     JsonResponse::error($message, $status);
 } catch (\Throwable $exception) {
-    JsonResponse::error($exception->getMessage(), 500);
+    JsonResponse::error(JsonResponse::messageFor($exception), 500);
 }

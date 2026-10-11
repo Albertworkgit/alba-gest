@@ -66,12 +66,41 @@ try {
         JsonResponse::send(['success' => true, 'data' => ['super_admin_id' => $adminId]], 201);
     }
 
+    if ($action === 'super-admin-admins' && $method === 'PATCH') {
+        $session = Session::current();
+        if (!$session || $session['type'] !== 'super_admin') JsonResponse::error('Accès réservé au super administrateur.', 403);
+        $body = json_decode((string) file_get_contents('php://input'), true);
+        if (!is_array($body)) JsonResponse::error('Corps JSON invalide.', 400);
+        $service->updateSuperAdmin((int) ($_GET['id'] ?? 0), $body);
+        JsonResponse::send(['success' => true, 'message' => 'Super administrateur modifié.']);
+    }
+
+    if ($action === 'super-admin-admins' && $method === 'DELETE') {
+        $session = Session::current();
+        if (!$session || $session['type'] !== 'super_admin') JsonResponse::error('Accès réservé au super administrateur.', 403);
+        $service->deleteSuperAdmin((int) ($_GET['id'] ?? 0), (int) ($session['id'] ?? 0));
+        JsonResponse::send(['success' => true, 'message' => 'Super administrateur supprimé.']);
+    }
+
     if ($action === 'super-admin-enterprises' && $method === 'GET') {
         $session = Session::current();
         if (!$session || $session['type'] !== 'super_admin') {
             JsonResponse::error('Accès réservé au super administrateur.', 403);
         }
         JsonResponse::send(['success' => true, 'data' => $service->enterprises()]);
+    }
+
+    if ($action === 'super-admin-enterprise-branch-limit' && $method === 'PUT') {
+        $session = Session::current();
+        if (!$session || $session['type'] !== 'super_admin') JsonResponse::error('Accès réservé au super administrateur.', 403);
+        $body = json_decode((string) file_get_contents('php://input'), true);
+        if (!is_array($body)) JsonResponse::error('Corps JSON invalide.', 400);
+        $limit = filter_var($body['max_succursales'] ?? null, FILTER_VALIDATE_INT);
+        if ($limit === false || $limit < 2) {
+            JsonResponse::error('Le nombre maximal de succursales doit être un entier au moins égal à 2.', 422);
+        }
+        $service->setEnterpriseBranchLimit((int) ($body['entreprise_id'] ?? 0), $limit);
+        JsonResponse::send(['success' => true, 'message' => 'Plafond de succursales mis à jour.']);
     }
 
     if ($action === 'super-admin-enterprise-status' && $method === 'POST') {
@@ -562,8 +591,9 @@ try {
     JsonResponse::error('Action d’authentification inconnue.', 404);
 } catch (Throwable $exception) {
     $message = $exception->getMessage();
-    $status = str_contains($message, 'Authentification requise') ? 401
+    $status = $exception instanceof \mysqli_sql_exception ? 500
+        : (str_contains($message, 'Authentification requise') ? 401
         : (str_contains($message, 'Permission requise') || str_contains($message, 'Accès refusé') || str_contains($message, 'Accès limité') || str_contains($message, 'Seul un administrateur') ? 403
-            : ($exception instanceof RuntimeException ? 422 : 500));
-    JsonResponse::error($message, $status);
+            : ($exception instanceof RuntimeException ? 422 : 500)));
+    JsonResponse::error(JsonResponse::messageFor($exception), $status);
 }

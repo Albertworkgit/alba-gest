@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS entreprises (
     address TEXT,
     logo VARCHAR(255) NULL,
     cachet VARCHAR(255) NULL,
+    max_succursales INT NOT NULL DEFAULT 2,
     is_active TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1=active, 0=desactivee',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;

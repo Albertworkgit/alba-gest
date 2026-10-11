@@ -17,6 +17,36 @@ final class AuthService
         $this->db = Database::connection();
     }
 
+    public function setEnterpriseBranchLimit(int $enterpriseId, int $limit): void
+    {
+        if ($enterpriseId < 1) throw new RuntimeException('Identifiant d’entreprise invalide.');
+        if ($limit < 2) throw new RuntimeException('Le nombre maximal de succursales doit être au moins égal à 2.');
+
+        $this->db->begin_transaction();
+        try {
+            $enterprise = $this->db->prepare('SELECT entreprise_id FROM entreprises WHERE entreprise_id = ? LIMIT 1 FOR UPDATE');
+            $enterprise->bind_param('i', $enterpriseId);
+            $enterprise->execute();
+            if (!$enterprise->get_result()->fetch_assoc()) throw new RuntimeException('Entreprise introuvable.');
+
+            $branches = $this->db->prepare('SELECT COUNT(*) AS total FROM succursales WHERE entreprise_id = ?');
+            $branches->bind_param('i', $enterpriseId);
+            $branches->execute();
+            $currentCount = (int) ($branches->get_result()->fetch_assoc()['total'] ?? 0);
+            if ($limit < $currentCount) {
+                throw new RuntimeException("Le plafond ne peut pas être inférieur aux {$currentCount} succursales déjà créées.");
+            }
+
+            $update = $this->db->prepare('UPDATE entreprises SET max_succursales = ? WHERE entreprise_id = ?');
+            $update->bind_param('ii', $limit, $enterpriseId);
+            $update->execute();
+            $this->db->commit();
+        } catch (\Throwable $exception) {
+            $this->db->rollback();
+            throw $exception;
+        }
+    }
+
     public function login(string $emailOrUsername, string $password): array
     {
         return $this->loginUser($emailOrUsername, $password);
@@ -68,8 +98,8 @@ final class AuthService
         if ($fullName === '' || mb_strlen($fullName, 'UTF-8') > 100) {
             throw new RuntimeException('Le nom complet est obligatoire (100 caractères maximum).');
         }
-        if (strlen($password) < 8) {
-            throw new RuntimeException('Le mot de passe doit contenir au moins 8 caractères.');
+        if (strlen($password) < 6) {
+            throw new RuntimeException('Le mot de passe doit contenir au moins 6 caractères.');
         }
         $exists = $this->db->prepare('SELECT super_admin_id FROM super_admins WHERE email = ? LIMIT 1');
         $exists->bind_param('s', $email);
@@ -91,10 +121,63 @@ final class AuthService
         return (int) $this->db->insert_id;
     }
 
+    public function updateSuperAdmin(int $superAdminId, array $data): void
+    {
+        $fullName = trim((string) ($data['full_name'] ?? ''));
+        $email = strtolower(trim((string) ($data['email'] ?? '')));
+        $password = (string) ($data['password'] ?? '');
+        if ($superAdminId < 1) throw new RuntimeException('Identifiant super administrateur invalide.');
+        if ($fullName === '' || mb_strlen($fullName, 'UTF-8') > 100) {
+            throw new RuntimeException('Le nom complet est obligatoire (100 caractères maximum).');
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 150) {
+            throw new RuntimeException('Saisissez une adresse électronique valide (150 caractères maximum).');
+        }
+        if ($password !== '' && strlen($password) < 6) {
+            throw new RuntimeException('Le mot de passe doit contenir au moins 6 caractères.');
+        }
+
+        $exists = $this->db->prepare('SELECT super_admin_id FROM super_admins WHERE email = ? AND super_admin_id <> ? LIMIT 1');
+        $exists->bind_param('si', $email, $superAdminId);
+        $exists->execute();
+        if ($exists->get_result()->fetch_assoc()) {
+            throw new RuntimeException('Un super administrateur utilise déjà cette adresse électronique.');
+        }
+
+        if ($password === '') {
+            $statement = $this->db->prepare('UPDATE super_admins SET full_name = ?, email = ? WHERE super_admin_id = ?');
+            $statement->bind_param('ssi', $fullName, $email, $superAdminId);
+        } else {
+            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+            $statement = $this->db->prepare('UPDATE super_admins SET full_name = ?, email = ?, password_hash = ? WHERE super_admin_id = ?');
+            $statement->bind_param('sssi', $fullName, $email, $passwordHash, $superAdminId);
+        }
+        try {
+            $statement->execute();
+        } catch (\mysqli_sql_exception $exception) {
+            if ($exception->getCode() === 1062) {
+                throw new RuntimeException('Un super administrateur utilise déjà cette adresse électronique.', 0, $exception);
+            }
+            throw $exception;
+        }
+    }
+
+    public function deleteSuperAdmin(int $superAdminId, int $currentSuperAdminId): void
+    {
+        if ($superAdminId < 1) throw new RuntimeException('Identifiant super administrateur invalide.');
+        if ($superAdminId === $currentSuperAdminId) {
+            throw new RuntimeException('Vous ne pouvez pas supprimer le compte super administrateur actuellement connecté.');
+        }
+        $statement = $this->db->prepare('DELETE FROM super_admins WHERE super_admin_id = ?');
+        $statement->bind_param('i', $superAdminId);
+        $statement->execute();
+        if ($statement->affected_rows === 0) throw new RuntimeException('Super administrateur introuvable.');
+    }
+
     // Retourne toutes les entreprises visibles par le super administrateur.
     public function enterprises(): array
     {
-        $result = $this->db->query('SELECT e.entreprise_id, e.name, e.email, e.phone, e.is_active, e.created_at, d.modules_autorises FROM entreprises e LEFT JOIN entreprise_droits_modules d ON d.entreprise_id = e.entreprise_id ORDER BY e.entreprise_id DESC');
+        $result = $this->db->query('SELECT e.entreprise_id, e.name, e.email, e.phone, e.is_active, e.created_at, e.max_succursales, (SELECT COUNT(*) FROM succursales s WHERE s.entreprise_id = e.entreprise_id) AS succursales_count, d.modules_autorises FROM entreprises e LEFT JOIN entreprise_droits_modules d ON d.entreprise_id = e.entreprise_id ORDER BY e.entreprise_id DESC');
         $enterprises = $result->fetch_all(MYSQLI_ASSOC);
         foreach ($enterprises as &$enterprise) {
             $modules = $enterprise['modules_autorises'] !== null
@@ -236,7 +319,10 @@ final class AuthService
     // Vérifie le mot de passe actuel avant de le remplacer par un hash sécurisé.
     public function changePassword(array $actor, string $currentPassword, string $newPassword, string $confirmation): void
     {
-        if (strlen($newPassword) < 8) throw new RuntimeException('Le nouveau mot de passe doit contenir au moins 8 caractères.');
+        $minimumLength = ($actor['type'] ?? '') === 'super_admin' ? 6 : 4;
+        if (strlen($newPassword) < $minimumLength) {
+            throw new RuntimeException("Le nouveau mot de passe doit contenir au moins {$minimumLength} caractères.");
+        }
         if ($newPassword !== $confirmation) throw new RuntimeException('La confirmation du nouveau mot de passe ne correspond pas.');
 
         $userId = (int) ($actor['id'] ?? 0);
@@ -381,8 +467,8 @@ final class AuthService
     public function createUser(int $enterpriseId, array $data): int
     {
         $password = (string) ($data['password'] ?? '');
-        if (strlen($password) < 8) {
-            throw new RuntimeException('Le mot de passe doit contenir au moins 8 caractères.');
+        if (strlen($password) < 4) {
+            throw new RuntimeException('Le mot de passe doit contenir au moins 4 caractères.');
         }
 
         $statement = $this->db->prepare('INSERT INTO users (entreprise_id, succursale_id, role_id, username, email, password_hash, full_name, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)');
@@ -455,7 +541,7 @@ final class AuthService
         }
 
         $password = (string) ($data['password'] ?? '');
-        if ($password !== '' && strlen($password) < 8) throw new RuntimeException('Le mot de passe doit contenir au moins 8 caractères.');
+        if ($password !== '' && strlen($password) < 4) throw new RuntimeException('Le mot de passe doit contenir au moins 4 caractères.');
         if ($password === '') {
             $statement = $this->db->prepare('UPDATE users SET succursale_id = ?, role_id = ?, username = ?, email = ?, full_name = ?, is_active = ? WHERE user_id = ? AND entreprise_id = ?');
             $statement->bind_param('iisssiii', $branchId, $roleId, $username, $email, $fullName, $active, $userId, $enterpriseId);
@@ -569,8 +655,8 @@ final class AuthService
         $username = trim((string) ($data['username'] ?? ''));
         $password = (string) ($data['password'] ?? '');
 
-        if ($name === '' || $email === '' || $fullName === '' || $username === '' || strlen($password) < 8) {
-            throw new RuntimeException('Tous les champs sont obligatoires et le mot de passe doit contenir au moins 8 caractères.');
+        if ($name === '' || $email === '' || $fullName === '' || $username === '' || strlen($password) < 6) {
+            throw new RuntimeException('Tous les champs sont obligatoires et le mot de passe doit contenir au moins 6 caractères.');
         }
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new RuntimeException('Adresse email invalide.');

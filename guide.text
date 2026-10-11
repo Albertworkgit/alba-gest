@@ -42,6 +42,8 @@ migration 029 ajoute caisses.montant, qui stocke le solde courant de chaque
 caisse. La migration 033 ajoute les index necessaires aux filtres et au tri des
 listes paginees. La migration 034 ajoute les monnaies de reference et taux de
 change de caisse ainsi que les informations de conversion des paiements.
+La migration 035 ajoute le plafond de succursales par entreprise. L'appliquer
+avant d'utiliser la limite configurable dans la super administration.
 
 Les rapports PDF utilisent FPDF. Apres avoir installe Composer, executer
 `composer install` a la racine du projet pour installer cette dependance. Les

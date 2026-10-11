@@ -642,5 +642,5 @@ try {
     $message = $exception->getMessage();
     $status = str_contains($message, 'Authentification requise') ? 401
         : (str_contains($message, 'Permission requise') || str_contains($message, 'Accès refusé') || str_contains($message, 'Accès limité') ? 403 : 500);
-    JsonResponse::error($message, $status);
+    JsonResponse::error(JsonResponse::messageFor($exception), $status);
 }

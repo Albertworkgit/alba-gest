@@ -2,6 +2,8 @@ const enterpriseList = document.getElementById('enterprise-list');
 const superAdminList = document.getElementById('super-admin-list');
 const superAdminForm = document.getElementById('super-admin-form');
 const superAdminPagination = document.getElementById('super-admin-pagination');
+const superAdminEditModal = document.getElementById('super-admin-edit-modal');
+const superAdminEditForm = document.getElementById('super-admin-edit-form');
 const moduleAccessForm = document.getElementById('module-access-form');
 const moduleAccessEnterprise = document.getElementById('module-access-enterprise');
 const moduleAccessList = document.getElementById('module-access-list');
@@ -14,6 +16,7 @@ const adminPageDescription = document.getElementById('admin-page-description');
 let editingCurrencyCode = null;
 let superAdminPage = 1;
 let superAdminPageSize = 10;
+let currentSuperAdminId = 0;
 
 // Affiche le module choisi dans le menu du super administrateur.
 function setAdminView(viewName, updateAddress = true) {
@@ -36,11 +39,11 @@ async function loadSuperAdmins(page = 1) {
   superAdminPage = page;
   try {
     const result = await requestJson(`../backend/public/auth.php?action=super-admin-admins&page=${page}&per_page=${superAdminPageSize}`);
-    superAdminList.innerHTML = result.data.length ? result.data.map(admin => `<tr><td><strong>${escapeHtml(admin.full_name)}</strong></td><td>${escapeHtml(admin.email)}</td><td>${escapeHtml(admin.created_at)}</td><td><span class="status ${Number(admin.is_active) === 1 ? 'success' : 'danger'}">${Number(admin.is_active) === 1 ? 'Actif' : 'Inactif'}</span></td></tr>`).join('') : '<tr><td colspan="4">Aucun super administrateur enregistré.</td></tr>';
+    superAdminList.innerHTML = result.data.length ? result.data.map(admin => `<tr><td><strong>${escapeHtml(admin.full_name)}</strong></td><td>${escapeHtml(admin.email)}</td><td>${escapeHtml(admin.created_at)}</td><td><span class="status ${Number(admin.is_active) === 1 ? 'success' : 'danger'}">${Number(admin.is_active) === 1 ? 'Actif' : 'Inactif'}</span></td><td>${Number(admin.super_admin_id) === currentSuperAdminId ? 'Compte actuel · gérer dans Mon profil' : `<div class="super-admin-row-actions"><button type="button" data-super-admin-edit="${Number(admin.super_admin_id)}" data-full-name="${escapeHtml(admin.full_name)}" data-email="${escapeHtml(admin.email)}">Modifier</button><button type="button" class="delete-super-admin" data-super-admin-delete="${Number(admin.super_admin_id)}">Supprimer</button></div>`}</td></tr>`).join('') : '<tr><td colspan="5">Aucun super administrateur enregistré.</td></tr>';
     const info = result.pagination;
     superAdminPagination.innerHTML = `<span>Page ${info.page} sur ${info.pages} · ${Number(info.total).toLocaleString('fr-FR')} compte${Number(info.total) === 1 ? '' : 's'}</span><div><label>Lignes par page<select data-super-admin-page-size>${[5, 10, 20, 25, 100].map(size => `<option value="${size}"${superAdminPageSize === size ? ' selected' : ''}>${size}</option>`).join('')}</select></label><button type="button" data-super-admin-page="${info.page - 1}" ${info.page <= 1 ? 'disabled' : ''}>Précédent</button><button type="button" data-super-admin-page="${info.page + 1}" ${info.page >= info.pages ? 'disabled' : ''}>Suivant</button></div>`;
   } catch (error) {
-    superAdminList.innerHTML = `<tr><td colspan="4">${escapeHtml(error.message)}</td></tr>`;
+    superAdminList.innerHTML = `<tr><td colspan="5">${escapeHtml(error.message)}</td></tr>`;
   }
 }
 
@@ -62,6 +65,59 @@ superAdminForm.addEventListener('submit', async event => {
   } finally {
     submitButton.disabled = false;
   }
+});
+
+superAdminList.addEventListener('click', async event => {
+  const editButton = event.target.closest('[data-super-admin-edit]');
+  if (editButton) {
+    superAdminEditForm.elements.namedItem('super_admin_id').value = editButton.dataset.superAdminEdit;
+    superAdminEditForm.elements.namedItem('full_name').value = editButton.dataset.fullName;
+    superAdminEditForm.elements.namedItem('email').value = editButton.dataset.email;
+    superAdminEditForm.elements.namedItem('password').value = '';
+    superAdminEditModal.hidden = false;
+    superAdminEditForm.elements.namedItem('full_name').focus();
+    return;
+  }
+  const deleteButton = event.target.closest('[data-super-admin-delete]');
+  if (!deleteButton || !window.confirm('Supprimer définitivement ce compte super administrateur ?')) return;
+  deleteButton.disabled = true;
+  try {
+    const id = deleteButton.dataset.superAdminDelete;
+    await requestJson(`../backend/public/auth.php?action=super-admin-admins&id=${encodeURIComponent(id)}`, {method: 'DELETE'});
+    notify('Super administrateur supprimé.');
+    await loadSuperAdmins(superAdminPage);
+  } catch (error) {
+    notify(error.message);
+    deleteButton.disabled = false;
+  }
+});
+
+superAdminEditForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const submitButton = superAdminEditForm.querySelector('[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    const data = Object.fromEntries(new FormData(superAdminEditForm));
+    const id = data.super_admin_id;
+    delete data.super_admin_id;
+    await requestJson(`../backend/public/auth.php?action=super-admin-admins&id=${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    superAdminEditModal.hidden = true;
+    superAdminEditForm.reset();
+    notify('Super administrateur modifié.');
+    await loadSuperAdmins(superAdminPage);
+  } catch (error) {
+    notify(error.message);
+  } finally {
+    submitButton.disabled = false;
+  }
+});
+document.getElementById('super-admin-edit-cancel').addEventListener('click', () => {
+  superAdminEditModal.hidden = true;
+  superAdminEditForm.reset();
 });
 
 superAdminPagination.addEventListener('click', event => {
@@ -101,8 +157,31 @@ async function loadEnterprises() {
   const selectedEnterprise = moduleAccessEnterprise.value;
   moduleAccessEnterprise.innerHTML = '<option value="">Sélectionner une entreprise</option>' + result.data.map(enterprise => `<option value="${Number(enterprise.entreprise_id)}">${escapeHtml(enterprise.name)}</option>`).join('');
   if (result.data.some(enterprise => String(enterprise.entreprise_id) === selectedEnterprise)) moduleAccessEnterprise.value = selectedEnterprise;
-  enterpriseList.innerHTML = result.data.length ? result.data.map(enterprise => `<tr><td><strong>${escapeHtml(enterprise.name)}</strong></td><td>${escapeHtml(enterprise.email || '—')}</td><td>${escapeHtml(enterprise.created_at)}</td><td><span class="status ${Number(enterprise.is_active) === 1 ? 'success' : 'danger'}">${Number(enterprise.is_active) === 1 ? 'Active' : 'Inactive'}</span></td><td><button class="status-button ${Number(enterprise.is_active) === 1 ? 'deactivate' : 'activate'}" data-enterprise-id="${Number(enterprise.entreprise_id)}" data-next-status="${Number(enterprise.is_active) === 1 ? 0 : 1}">${Number(enterprise.is_active) === 1 ? 'Désactiver' : 'Activer'}</button></td><td><button class="text-button" data-modules-enterprise="${Number(enterprise.entreprise_id)}">${enterprise.modules_autorises.length} modules autorisés</button></td><td><button class="status-button deactivate" data-enterprise-delete="${Number(enterprise.entreprise_id)}" data-enterprise-name="${escapeHtml(enterprise.name)}">Supprimer</button></td></tr>`).join('') : '<tr><td colspan="7">Aucune entreprise enregistrée.</td></tr>';
+  enterpriseList.innerHTML = result.data.length ? result.data.map(enterprise => `<tr><td><strong>${escapeHtml(enterprise.name)}</strong></td><td>${escapeHtml(enterprise.email || '—')}</td><td>${escapeHtml(enterprise.created_at)}</td><td><span class="status ${Number(enterprise.is_active) === 1 ? 'success' : 'danger'}">${Number(enterprise.is_active) === 1 ? 'Active' : 'Inactive'}</span></td><td><button class="status-button ${Number(enterprise.is_active) === 1 ? 'deactivate' : 'activate'}" data-enterprise-id="${Number(enterprise.entreprise_id)}" data-next-status="${Number(enterprise.is_active) === 1 ? 0 : 1}">${Number(enterprise.is_active) === 1 ? 'Désactiver' : 'Activer'}</button></td><td><form class="branch-limit-form" data-enterprise-limit-form="${Number(enterprise.entreprise_id)}"><span>${Number(enterprise.succursales_count)} /</span><input name="max_succursales" type="number" min="2" step="1" required aria-label="Nombre maximal de succursales pour ${escapeHtml(enterprise.name)}" value="${Math.max(2, Number(enterprise.max_succursales))}"><button type="submit">Enregistrer</button></form></td><td><button class="text-button" data-modules-enterprise="${Number(enterprise.entreprise_id)}">${enterprise.modules_autorises.length} modules autorisés</button></td><td><button class="status-button deactivate" data-enterprise-delete="${Number(enterprise.entreprise_id)}" data-enterprise-name="${escapeHtml(enterprise.name)}">Supprimer</button></td></tr>`).join('') : '<tr><td colspan="8">Aucune entreprise enregistrée.</td></tr>';
 }
+
+enterpriseList.addEventListener('submit', async event => {
+  const form = event.target.closest('[data-enterprise-limit-form]');
+  if (!form) return;
+  event.preventDefault();
+  const submitButton = form.querySelector('[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    await requestJson('../backend/public/auth.php?action=super-admin-enterprise-branch-limit', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        entreprise_id: form.dataset.enterpriseLimitForm,
+        max_succursales: Number(form.elements.namedItem('max_succursales').value)
+      })
+    });
+    notify('Plafond de succursales mis à jour.');
+    await loadEnterprises();
+  } catch (error) {
+    notify(error.message);
+    submitButton.disabled = false;
+  }
+});
 
 async function loadEnterpriseModules() {
   const enterpriseId = moduleAccessEnterprise.value;
@@ -152,6 +231,7 @@ async function loadCurrencies() {
 // Charge les données du compte dans le module profil.
 async function loadAdminProfile() {
   const result = await requestJson('../backend/public/auth.php?action=me');
+  currentSuperAdminId = Number(result.data.id);
   document.getElementById('admin-profile-name').value = result.data.full_name || '';
   document.getElementById('admin-profile-email').value = result.data.email || '';
 }
@@ -298,7 +378,9 @@ if (savedCurrency) {
 }
 
 // Charge les deux listes au démarrage de la page d'administration.
-loadEnterprises().catch(error => { enterpriseList.innerHTML = `<tr><td colspan="6">${escapeHtml(error.message)}</td></tr>`; });
-loadSuperAdmins().catch(error => { superAdminList.innerHTML = `<tr><td colspan="4">${escapeHtml(error.message)}</td></tr>`; });
+loadEnterprises().catch(error => { enterpriseList.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`; });
+loadAdminProfile().then(() => loadSuperAdmins()).catch(error => {
+  superAdminList.innerHTML = `<tr><td colspan="5">${escapeHtml(error.message)}</td></tr>`;
+  notify(error.message);
+});
 loadCurrencies().catch(error => { currencyList.innerHTML = `<tr><td colspan="3">${escapeHtml(error.message)}</td></tr>`; });
-loadAdminProfile().catch(error => notify(error.message));

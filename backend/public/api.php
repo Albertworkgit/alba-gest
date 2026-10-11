@@ -32,6 +32,7 @@ if ($resource === 'users' && $_SERVER['REQUEST_METHOD'] === 'GET') {
 
 $productCreationTransaction = false;
 $mainBranchTransaction = false;
+$branchCreationTransaction = false;
 try {
     // L'accès à la base et la session sont maintenant dans try afin que leurs erreurs restent JSON.
     $repository = new CrudRepository($configuration['table'], $configuration['key'], $configuration['columns']);
@@ -83,10 +84,28 @@ try {
     } else {
         Authorization::requirePermission($authenticatedUser, Authorization::resourcePermission($resource, $method));
     }
+    if ($resource === 'succursales' && $method === 'POST') {
+        $db = AlbaStock\Core\Database::connection();
+        $db->begin_transaction();
+        $branchCreationTransaction = true;
+        $limitQuery = $db->prepare('SELECT max_succursales FROM entreprises WHERE entreprise_id = ? FOR UPDATE');
+        $limitQuery->bind_param('i', $enterpriseId);
+        $limitQuery->execute();
+        $enterprise = $limitQuery->get_result()->fetch_assoc();
+        if (!$enterprise) throw new RuntimeException('Entreprise introuvable.');
+
+        $countQuery = $db->prepare('SELECT COUNT(*) AS total FROM succursales WHERE entreprise_id = ?');
+        $countQuery->bind_param('i', $enterpriseId);
+        $countQuery->execute();
+        $branchCount = (int) ($countQuery->get_result()->fetch_assoc()['total'] ?? 0);
+        if ($branchCount >= (int) $enterprise['max_succursales']) {
+            throw new RuntimeException('La limite de succursales définie pour cette entreprise est atteinte.');
+        }
+    }
     if ($resource === 'succursales' && in_array($method, ['POST', 'PUT', 'PATCH'], true)
         && (int) ($body['est_sucursal_mere'] ?? 0) === 1) {
         // Une entreprise ne garde qu'une succursale mère, modifiée dans la même transaction.
-        AlbaStock\Core\Database::connection()->begin_transaction();
+        if (!$branchCreationTransaction) AlbaStock\Core\Database::connection()->begin_transaction();
         $mainBranchTransaction = true;
         $resetMainBranch = AlbaStock\Core\Database::connection()->prepare('UPDATE succursales SET est_sucursal_mere = 0 WHERE entreprise_id = ?');
         $resetMainBranch->bind_param('i', $enterpriseId);
@@ -179,11 +198,11 @@ try {
         $stock = $db->prepare('INSERT INTO stocks (entreprise_id, succursale_id, produit_id, quantity, min_stock_level) VALUES (?, ?, ?, 0, ?)');
         foreach ($branches as $branch) { $stock->bind_param('iiii', $enterpriseId, $branch, $productId, $threshold); $stock->execute(); }
     }
-    if ($productCreationTransaction || $mainBranchTransaction) AlbaStock\Core\Database::connection()->commit();
+    if ($productCreationTransaction || $mainBranchTransaction || $branchCreationTransaction) AlbaStock\Core\Database::connection()->commit();
     JsonResponse::send(['success' => true, 'data' => $result]);
 } catch (Throwable $exception) {
-    if ($mainBranchTransaction) {
-        try { AlbaStock\Core\Database::connection()->rollback(); } catch (Throwable) { /* La transaction de succursale mère a pu être annulée par MySQL. */ }
+    if ($mainBranchTransaction || $branchCreationTransaction) {
+        try { AlbaStock\Core\Database::connection()->rollback(); } catch (Throwable) { /* La transaction de succursale a pu être annulée par MySQL. */ }
     }
     if ($productCreationTransaction) {
         try { AlbaStock\Core\Database::connection()->rollback(); } catch (Throwable) { /* La transaction a pu déjà être annulée par MySQL. */ }
@@ -191,6 +210,7 @@ try {
     // Les erreurs de permission deviennent 403; l'API renvoie toujours une réponse JSON structurée.
     $message = $exception->getMessage();
     $status = str_contains($message, 'Authentification requise') ? 401
-        : (str_contains($message, 'Permission requise') || str_contains($message, 'Accès refusé') || str_contains($message, 'Accès limité') ? 403 : 500);
-    JsonResponse::error($message, $status);
+        : (str_contains($message, 'Permission requise') || str_contains($message, 'Accès refusé') || str_contains($message, 'Accès limité') ? 403
+            : (str_contains($message, 'limite de succursales') ? 409 : 500));
+    JsonResponse::error(JsonResponse::messageFor($exception), $status);
 }

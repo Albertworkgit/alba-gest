@@ -5,6 +5,7 @@ button[data-branch-edit],
 button[data-role-edit],
 button[data-user-edit],
 button[data-supplier-edit],
+button[data-client-edit],
 button[data-currency-edit],
 button[data-stock-edit] {
   display: inline-flex;
@@ -29,6 +30,7 @@ button[data-branch-edit]::before,
 button[data-role-edit]::before,
 button[data-user-edit]::before,
 button[data-supplier-edit]::before,
+button[data-client-edit]::before,
 button[data-currency-edit]::before {
   content: "✎";
   font-size: 13px;
@@ -42,6 +44,7 @@ button[data-branch-edit]:hover,
 button[data-role-edit]:hover,
 button[data-user-edit]:hover,
 button[data-supplier-edit]:hover,
+button[data-client-edit]:hover,
 button[data-currency-edit]:hover,
 button[data-stock-edit]:hover {
   border-color: #9ccbbb;
@@ -55,6 +58,7 @@ button[data-branch-delete],
 button[data-role-delete],
 button[data-user-delete],
 button[data-supplier-delete],
+button[data-client-delete],
 button[data-currency-delete] {
   display: inline-flex;
   align-items: center;
@@ -78,6 +82,7 @@ button[data-branch-delete]::before,
 button[data-role-delete]::before,
 button[data-user-delete]::before,
 button[data-supplier-delete]::before,
+button[data-client-delete]::before,
 button[data-currency-delete]::before {
   content: "×";
   font-size: 16px;
@@ -90,6 +95,7 @@ button[data-branch-delete]:hover,
 button[data-role-delete]:hover,
 button[data-user-delete]:hover,
 button[data-supplier-delete]:hover,
+button[data-client-delete]:hover,
 button[data-currency-delete]:hover {
   border-color: #e5aaa2;
   background: #fde4df;
@@ -101,6 +107,7 @@ button[data-category-edit]:focus-visible,
 button[data-branch-edit]:focus-visible,
 button[data-role-edit]:focus-visible,
 button[data-user-edit]:focus-visible,
+button[data-client-edit]:focus-visible,
 button[data-supplier-edit]:focus-visible,
 button[data-currency-edit]:focus-visible,
 button[data-stock-edit]:focus-visible,
@@ -109,6 +116,7 @@ button[data-category-delete]:focus-visible,
 button[data-branch-delete]:focus-visible,
 button[data-role-delete]:focus-visible,
 button[data-user-delete]:focus-visible,
+button[data-client-delete]:focus-visible,
 button[data-supplier-delete]:focus-visible,
 button[data-currency-delete]:focus-visible {
   outline: 3px solid #83b9a8;
@@ -121,6 +129,7 @@ button[data-currency-delete]:focus-visible {
 .dark-theme button[data-role-edit],
 .dark-theme button[data-user-edit],
 .dark-theme button[data-supplier-edit],
+.dark-theme button[data-client-edit],
 .dark-theme button[data-currency-edit],
 .dark-theme button[data-stock-edit] {
   border-color: #416e61;
@@ -134,6 +143,7 @@ button[data-currency-delete]:focus-visible {
 .dark-theme button[data-role-delete],
 .dark-theme button[data-user-delete],
 .dark-theme button[data-supplier-delete],
+.dark-theme button[data-client-delete],
 .dark-theme button[data-currency-delete] {
   border-color: #764944;
   background: #4b302d;
@@ -147,6 +157,7 @@ button[data-branch-edit],
 button[data-role-edit],
 button[data-user-edit],
 button[data-supplier-edit],
+button[data-client-edit],
 button[data-stock-edit],
 button[data-unit-edit],
 button[data-currency-edit],
@@ -156,6 +167,7 @@ button[data-branch-delete],
 button[data-role-delete],
 button[data-user-delete],
 button[data-supplier-delete],
+button[data-client-delete],
 button[data-unit-delete],
 button[data-currency-delete],
 button[data-cash-delete] {
@@ -182,6 +194,7 @@ button[data-branch-edit]::before,
 button[data-role-edit]::before,
 button[data-user-edit]::before,
 button[data-supplier-edit]::before,
+button[data-client-edit]::before,
 button[data-stock-edit]::before,
 button[data-unit-edit]::before,
 button[data-currency-edit]::before { content: "\270E"; font-size: 15px; }
@@ -192,6 +205,7 @@ button[data-branch-delete]::before,
 button[data-role-delete]::before,
 button[data-user-delete]::before,
 button[data-supplier-delete]::before,
+button[data-client-delete]::before,
 button[data-unit-delete]::before,
 button[data-currency-delete]::before,
 button[data-cash-delete]::before { content: "\1F5D1"; font-size: 14px; }
@@ -211,6 +225,7 @@ button[data-branch-edit]:focus-visible,
 button[data-role-edit]:focus-visible,
 button[data-user-edit]:focus-visible,
 button[data-supplier-edit]:focus-visible,
+button[data-client-edit]:focus-visible,
 button[data-stock-edit]:focus-visible,
 button[data-unit-edit]:focus-visible,
 button[data-currency-edit]:focus-visible,
@@ -220,6 +235,7 @@ button[data-branch-delete]:focus-visible,
 button[data-role-delete]:focus-visible,
 button[data-user-delete]:focus-visible,
 button[data-supplier-delete]:focus-visible,
+button[data-client-delete]:focus-visible,
 button[data-unit-delete]:focus-visible,
 button[data-currency-delete]:focus-visible,
 button[data-cash-delete]:focus-visible,

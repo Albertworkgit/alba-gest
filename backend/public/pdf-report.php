@@ -192,6 +192,9 @@ try {
     $filename = preg_replace('/[^a-z0-9-]+/', '-', strtolower(iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $title) ?: 'rapport'));
     $pdf->Output('D', trim((string) $filename, '-') . '.pdf');
 } catch (RuntimeException $exception) {
+    if ($exception instanceof mysqli_sql_exception) {
+        JsonResponse::error(JsonResponse::messageFor($exception), 500);
+    }
     $message = $exception->getMessage();
     $status = str_contains($message, 'Authentification requise') ? 401
         : (str_contains($message, 'Permission requise') || str_contains($message, 'Accès refusé') ? 403 : 422);
@@ -204,5 +207,7 @@ try {
         $exception->getFile(),
         $exception->getLine()
     ));
-    JsonResponse::error('La génération du rapport PDF a échoué.', 500);
+    JsonResponse::error(JsonResponse::messageFor($exception) === $exception->getMessage()
+        ? 'La génération du rapport PDF a échoué.'
+        : JsonResponse::messageFor($exception), 500);
 }
