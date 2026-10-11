@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../Core/Database.php';
 require_once __DIR__ . '/../Core/JsonResponse.php';
+require_once __DIR__ . '/../Core/Session.php';
 require_once __DIR__ . '/../Core/AuthGuard.php';
 require_once __DIR__ . '/../Core/Authorization.php';
 
@@ -20,6 +21,7 @@ final class AlbaReportPdf extends FPDF
 {
     public string $companyName = '';
     public string $reportTitle = '';
+    public string $pageOrientation = 'P';
     public array $repeatHeaders = [];
     public array $repeatWidths = [];
 
@@ -51,7 +53,7 @@ final class AlbaReportPdf extends FPDF
         }
         $rowHeight = max(1, ...$lineCounts) * $lineHeight + 2;
         if ($this->GetY() + $rowHeight > $this->GetPageHeight() - 15) {
-            $this->AddPage('L');
+            $this->AddPage($this->pageOrientation);
             if (!$header && $this->repeatHeaders !== []) {
                 $this->tableRow($this->repeatHeaders, $this->repeatWidths, true);
             }
@@ -167,12 +169,14 @@ try {
     $companyQuery->execute();
     $companyName = (string) ($companyQuery->get_result()->fetch_assoc()['name'] ?? 'ALBA-STOCK');
 
-    $pdf = new AlbaReportPdf('L', 'mm', 'A4');
+    $orientation = max(array_map(static fn (array $table): int => count($table['headers']), $validatedTables)) >= 6 ? 'L' : 'P';
+    $pdf = new AlbaReportPdf($orientation, 'mm', 'A4');
     $pdf->companyName = $companyName;
     $pdf->reportTitle = $title;
+    $pdf->pageOrientation = $orientation;
     $pdf->SetMargins(10, 10, 10);
     $pdf->SetAutoPageBreak(true, 15);
-    $pdf->AddPage('L');
+    $pdf->AddPage($orientation);
     $usableWidth = $pdf->GetPageWidth() - 20;
     foreach ($validatedTables as $table) {
         $widths = array_fill(0, count($table['headers']), $usableWidth / count($table['headers']));
@@ -193,5 +197,12 @@ try {
         : (str_contains($message, 'Permission requise') || str_contains($message, 'Accès refusé') ? 403 : 422);
     JsonResponse::error($message, $status);
 } catch (Throwable $exception) {
+    error_log(sprintf(
+        '[pdf-report] %s: %s in %s:%d',
+        get_class($exception),
+        $exception->getMessage(),
+        $exception->getFile(),
+        $exception->getLine()
+    ));
     JsonResponse::error('La génération du rapport PDF a échoué.', 500);
 }

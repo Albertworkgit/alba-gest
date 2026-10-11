@@ -386,6 +386,20 @@ try {
                 $purchaseRow['monais'] = $details['monais'] ?? null;
             }
             unset($purchaseRow);
+            $amountsQuery = $db->prepare('SELECT ad.achat_id, p.monais, SUM(CASE WHEN a.movement_type = \'IN\' THEN ad.quantity * ad.unit_cost WHEN sortie.sortie_detail_id IS NULL THEN ad.quantity * COALESCE(p.cost_price, 0) ELSE sortie.quantity * COALESCE(source_detail.unit_cost, p.cost_price, 0) END) AS amount FROM achats a JOIN achat_details ad ON ad.achat_id = a.achat_id AND ad.entreprise_id = a.entreprise_id JOIN produits p ON p.produit_id = ad.produit_id AND p.entreprise_id = ad.entreprise_id LEFT JOIN achat_detail_sorties sortie ON sortie.sortie_detail_id = ad.achat_detail_id AND sortie.entreprise_id = ad.entreprise_id LEFT JOIN achat_details source_detail ON source_detail.achat_detail_id = sortie.lot_detail_id AND source_detail.entreprise_id = sortie.entreprise_id WHERE a.entreprise_id = ? AND a.achat_id IN (' . $purchaseIds . ') GROUP BY ad.achat_id, p.monais');
+            $amountsQuery->bind_param('i', $enterpriseId);
+            $amountsQuery->execute();
+            $purchaseAmounts = [];
+            foreach ($amountsQuery->get_result()->fetch_all(MYSQLI_ASSOC) as $amountRow) {
+                $purchaseAmounts[(int) $amountRow['achat_id']][] = [
+                    'currency' => (string) ($amountRow['monais'] ?? ''),
+                    'amount' => (float) ($amountRow['amount'] ?? 0),
+                ];
+            }
+            foreach ($response['data'] as &$purchaseRow) {
+                $purchaseRow['movement_amounts'] = $purchaseAmounts[(int) $purchaseRow['achat_id']] ?? [];
+            }
+            unset($purchaseRow);
             $lotQuery = $db->prepare('SELECT achat_id, MAX(date_expiration) AS date_expiration, SUM(quantity_out) AS quantity_out, SUM(quantity) AS lot_quantity FROM achat_details WHERE entreprise_id = ? AND achat_id IN (' . $purchaseIds . ') GROUP BY achat_id');
             $lotQuery->bind_param('i', $enterpriseId);
             $lotQuery->execute();

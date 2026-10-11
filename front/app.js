@@ -338,7 +338,7 @@ function removeBranchColumns(root) {
     const indices = headers.map((cell, index) => /succursale|branche/i.test(cell.textContent.trim()) ? index : -1).filter(index => index >= 0).reverse();
     indices.forEach(index => table.querySelectorAll('tr').forEach(row => row.children[index]?.remove()));
   });
-  addReportTableTotals(currentReportSource());
+  addReportTableTotals(root);
 }
 function addReportTableTotals(root) {
   root.querySelectorAll('table').forEach(table => {
@@ -346,6 +346,47 @@ function addReportTableTotals(root) {
     const headers = [...table.querySelectorAll('thead th')];
     const body = table.tBodies[0];
     if (!headers.length || !body || !body.rows.length || body.querySelector('[data-report-total]')) return;
+    if (body.querySelector('[data-purchase-movement]')) {
+      const totals = new Map();
+      [...body.rows].forEach(row => {
+        if (row.hidden || row.dataset.purchaseStatus !== 'RECEIVED') return;
+        const movement = row.dataset.purchaseMovement;
+        if (movement !== 'IN' && movement !== 'OUT') return;
+        const unit = row.dataset.purchaseUnit || '';
+        const key = `${movement}\u0000${unit}`;
+        const total = totals.get(key) || {movement, unit, quantity:0, amounts:new Map()};
+        total.quantity += Number(row.dataset.purchaseQuantity || 0);
+        const amounts = JSON.parse(row.dataset.purchaseAmounts || '[]');
+        amounts.forEach(({currency = '', amount = 0}) => {
+          total.amounts.set(currency, (total.amounts.get(currency) || 0) + Number(amount));
+        });
+        totals.set(key, total);
+      });
+      const quantityIndex = headers.findIndex(header => /^quantité$/i.test(header.textContent.trim()));
+      const exitIndex = headers.findIndex(header => /quantité sortie/i.test(header.textContent));
+      const entryIndex = headers.findIndex(header => /quantité entrée/i.test(header.textContent));
+      const amountIndex = headers.findIndex(header => /^total$/i.test(header.textContent.trim()));
+      if (quantityIndex >= 0 && exitIndex >= 0 && entryIndex >= 0 && amountIndex >= 0) {
+        for (const total of totals.values()) {
+          const row = body.insertRow();
+          row.dataset.reportTotal = 'true';
+          row.className = 'report-total-row';
+          const label = row.insertCell();
+          label.colSpan = quantityIndex;
+          label.textContent = `Total ${total.movement === 'IN' ? 'des entrées' : 'des sorties'}${total.unit ? ` (${total.unit})` : ''}`;
+          headers.forEach((_, index) => {
+            if (index < quantityIndex) return;
+            const cell = row.insertCell();
+            if (index === (total.movement === 'IN' ? entryIndex : exitIndex)) {
+              cell.textContent = `${total.quantity.toLocaleString('fr-FR', {maximumFractionDigits:2})}${total.unit ? ` ${total.unit}` : ''}`;
+            } else if (index === amountIndex && total.amounts.size) {
+              cell.textContent = [...total.amounts].map(([currency, amount]) => moneyCurrencyLabel(amount, currency)).join(' / ');
+            }
+          });
+        }
+      }
+      return;
+    }
     const totalColumns = headers.map((header, index) => /quantit|entr[eé]e|sortie|ajustement|solde|total|montant|articles?|avant|apr[eè]s|op[eé]rations/i.test(header.textContent) ? index : -1).filter(index => index >= 0);
     if (!totalColumns.length) return;
     const totals = new Map();
@@ -380,16 +421,67 @@ function addReportTableTotals(root) {
 }
 async function selectedReportNode(){
   const kind=selectedReportKind();
-  if((kind==='sales'&&currentViewName==='sales')||(kind==='cash'&&currentViewName==='cash'))return (kind==='sales'?container.querySelector('#sales-rows')?.closest('.panel'):container.querySelector('#cash-movement-rows')?.closest('.panel'))?.cloneNode(true)||document.createElement('div');
-  const action=kind==='sales'?'sales-list':'cash-movements';let result=await fetchReportPage(action,1);const rows=[...result.rows];for(let page=2;page<=result.pagination.pages;page++){result=await fetchReportPage(action,page);rows.push(...result.rows);}
-  const headers=kind==='sales'?['Facture','Client','Succursale','Caissier','Date','Articles','Total','Payé','Statut']:['Date','Caisse','Type','Motif','Référence','Montant'];
+  const action=kind==='sales'?'sales-list':'cash-movements';
+  const rows=await fetchAllReportRows(action);
+  const isSales=kind==='sales';
+  const headers=isSales?['Facture','Client','Succursale','Caissier','Date','Articles','Total','Payé','Statut']:['Date','Caisse','Motif','Référence','Entrées','Sorties'];
   const node=document.createElement('section');node.className='panel';node.innerHTML=`<div class="panel-header"><h2>${currentReportTitle()}</h2></div><table class="data-table"><thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody></tbody></table>`;
-  const body=node.querySelector('tbody');rows.forEach(item=>{const isSales=kind==='sales';const day=String(isSales?item.sale_date:item.movement_date).slice(0,10);const values=isSales?[item.invoice_no,item.client_name||'Client comptoir',item.branch_name||'—',item.cashier||'—',dateLabel(item.sale_date),Number(item.item_count||0),moneyCurrencyLabel(item.total_amount,item.monais),moneyCurrencyLabel(item.amount_paid,item.monais),item.status]:[dateLabel(item.movement_date),item.cash_name,item.type==='ENTREE'?'Entrée':'Sortie',item.reason||'—',item.reference_id?`#${item.reference_id}`:'—',moneyCurrencyLabel(item.amount,item.monais)];const row=body.insertRow();row.dataset.reportDate=day;row.innerHTML=values.map(value=>`<td>${escapeHtml(value)}</td>`).join('');});
-  const {from,to,search}=reportFilterValues();[...body.rows].forEach(row=>{const day=row.dataset.reportDate;row.hidden=Boolean((from&&day<from)||(to&&day>to)||(search&&!row.textContent.toLocaleLowerCase('fr').includes(search)));});return node;
+  const body=node.querySelector('tbody');
+  const {from,to,search}=reportFilterValues();
+  const totalsByCurrency=new Map();
+  rows.forEach(item=>{
+    const day=String(isSales?item.sale_date:item.movement_date).slice(0,10);
+    const type=isSales?'':item.type==='ENTREE'?'Entrée':'Sortie';
+    const reference=item.reference_id?`#${Number(item.reference_id)}`:'—';
+    const amount=isSales?'':moneyCurrencyLabel(item.amount,item.monais);
+    const searchText=isSales
+      ?[item.invoice_no,item.client_name||'Client comptoir',item.branch_name||'—',item.cashier||'—',dateLabel(item.sale_date),Number(item.item_count||0),saleCurrencyAmounts(item,'total_amount'),saleCurrencyAmounts(item,'amount_paid'),item.status].join(' ')
+      :[dateLabel(item.movement_date),item.cash_name,type,item.reason||'—',reference,amount].join(' ');
+    if ((from&&day<from)||(to&&day>to)||(search&&!searchText.toLocaleLowerCase('fr').includes(search))) return;
+    const values=isSales
+      ?[item.invoice_no,item.client_name||'Client comptoir',item.branch_name||'—',item.cashier||'—',dateLabel(item.sale_date),Number(item.item_count||0),saleCurrencyAmounts(item,'total_amount'),saleCurrencyAmounts(item,'amount_paid'),item.status]
+      :[dateLabel(item.movement_date),item.cash_name,item.reason||'—',reference,item.type==='ENTREE'?amount:'—',item.type==='ENTREE'?'—':amount];
+    const row=body.insertRow();
+    row.dataset.reportDate=day;
+    row.innerHTML=values.map(value=>`<td>${escapeHtml(value)}</td>`).join('');
+    if (!isSales) {
+      const currency=String(item.monais||'');
+      const totals=totalsByCurrency.get(currency)||{entries:0,exits:0};
+      const movementAmount=Number(item.amount||0);
+      if (item.type==='ENTREE') totals.entries+=movementAmount;
+      else totals.exits+=movementAmount;
+      totalsByCurrency.set(currency,totals);
+    }
+  });
+  if (!isSales) {
+    if (!body.rows.length) {
+      const emptyRow=body.insertRow();
+      emptyRow.innerHTML='<td colspan="6">Aucun mouvement pour cette période.</td>';
+    }
+    for (const [currency,totals] of totalsByCurrency) {
+      const totalRow=body.insertRow();
+      totalRow.className='report-total-row';
+      totalRow.dataset.reportTotal='true';
+      totalRow.innerHTML=`<td colspan="4">Total (${escapeHtml(currency)})</td><td>${escapeHtml(moneyCurrencyLabel(totals.entries,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(totals.exits,currency))}</td>`;
+    }
+  }
+  return node;
 }
 async function cloneReportContent() {
   const clone = (currentViewName==='cash'||currentViewName==='sales'?await selectedReportNode():currentReportSource().cloneNode(true));
+  for (const body of clone.querySelectorAll('tbody[id]')) {
+    const loadRows = reportRowLoaders.get(body.id);
+    if (loadRows) body.innerHTML = await loadRows();
+  }
+  const {from, to, search} = reportFilterValues();
+  clone.querySelectorAll('table tbody tr').forEach(row => {
+    if (row.dataset.reportTotal === 'true') return;
+    const dateText = reportDateColumn(row) >= 0 ? (row.dataset.reportDate || '') : '';
+    const dateMatch = !dateText || ((!from || dateText >= from) && (!to || dateText <= to));
+    row.hidden = !(dateMatch && (!search || row.textContent.toLocaleLowerCase('fr').includes(search)));
+  });
   clone.querySelectorAll('[hidden], .report-toolbar, .filter-bar, button, input, select, textarea').forEach(node => node.remove());
+  clone.querySelectorAll('.list-pagination').forEach(node => node.remove());
   clone.querySelectorAll('table').forEach(table => {
     const headers = [...table.querySelectorAll('thead th')];
     const removeColumns = headers.map((cell, index) => /^(actions?|bon|utilisateur|caissier|préparé par|créé par|nom de l’utilisateur)$/i.test(cell.textContent.trim()) ? index : -1).filter(index => index >= 0).reverse();
@@ -409,24 +501,35 @@ function reportDocument(title, content, note = '', orientation = 'portrait') {
     @page{size:${orientation === 'landscape' ? 'A4 landscape' : 'A4'};margin:${orientation === 'landscape' ? '8mm' : '12mm'}}*{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#1d2926;margin:0}header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #147c70;padding-bottom:12px;margin-bottom:18px}h1{font-size:21px;color:#126b5e;margin:0 0 6px}h2{font-size:15px;margin:15px 0 8px}p{margin:4px 0;color:#53635d}.report-meta{text-align:right;font-size:10px}.report-table,.data-table{width:100%;border-collapse:collapse;margin:12px 0 18px}.report-table th,.report-table td,.data-table th,.data-table td{border:1px solid #cfd9d3;padding:7px;text-align:left;font-size:10px}.report-table th,.data-table th{background:#eaf3ee;color:#254b42}.report-total-row td{font-weight:800;background:#eaf3ee;border-top:2px solid #147c70}.panel,.stat-card{border:0;box-shadow:none;padding:0;margin:10px 0}.dashboard-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.stat-card{border:1px solid #d9e3dd;padding:10px}.stat-label{display:block;font-size:10px;color:#53635d}.stat-value{font-size:17px;font-weight:bold;margin-top:5px}.status{border:1px solid #ccd8d1;padding:2px 5px}.empty-note{padding:10px;color:#53635d}.report-note{font-size:10px;color:#73807b;margin-top:12px}.report-company-footer{text-align:center;font-size:8px;color:#73807b;margin-top:20px}.signature-row{display:flex;justify-content:space-between;gap:30px;margin-top:38px}.signature-row div{width:42%;border-top:1px solid #697972;padding-top:6px;font-size:10px}.print-controls{position:sticky;top:0;background:#fff;padding:10px;text-align:right;border-bottom:1px solid #ddd}.print-controls button{border:0;border-radius:5px;padding:9px 14px;margin-left:6px;background:#147c70;color:#fff;font-weight:bold;cursor:pointer}@media print{.print-controls{display:none}}
   </style></head><body><div class="print-controls"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button><button onclick="window.close()">Fermer</button></div><header><div><h1>${escapeHtml(title)}</h1>${companyDetails}<p>${branch}</p>${filterSummary ? `<p>Période et filtres : ${escapeHtml(filterSummary)}</p>` : ''}</div><div class="report-meta"><p>Date d’édition : ${new Date().toLocaleString('fr-FR')}</p><p>Format conseillé : A4 ${orientation === 'landscape' ? 'paysage' : 'portrait'} · modifiable dans les options de l’imprimante</p></div></header><main>${content}${note ? `<p class="report-note">${escapeHtml(note)}</p>` : ''}</main><footer class="report-company-footer">${enterprise}</footer></body></html>`;
 }
+function reportPageOrientation(content) {
+  const report = new DOMParser().parseFromString(content, 'text/html');
+  const widestTable = [...report.querySelectorAll('table')].reduce((max, table) =>
+    Math.max(max, table.querySelectorAll('thead th').length), 0);
+  return widestTable >= 6 ? 'landscape' : 'portrait';
+}
 async function openReportPreview() {
   const title = currentReportTitle();
   const modal = document.createElement('div');
   modal.className = 'report-modal';
-  modal.innerHTML = `<section class="report-dialog"><div class="report-dialog-heading"><div><h2>Aperçu du rapport</h2><p>${escapeHtml(title)}</p></div><button type="button" data-report-close aria-label="Fermer">×</button></div><div class="report-preview"><header><h1>${escapeHtml(title)}</h1><p><strong>${escapeHtml(sessionUser?.enterprise_name || 'ALBA-STOCK')}</strong> · ${escapeHtml(currentReportBranch())}</p><p>Édité le ${new Date().toLocaleString('fr-FR')}</p></header>${cloneReportContent()}</div><div class="report-dialog-actions"><button type="button" data-report-close>Fermer</button><button type="button" data-report-action="print">Imprimer</button><button type="button" data-report-action="pdf">Exporter en PDF</button><button type="button" data-report-action="excel">Exporter vers Excel</button></div></section>`;
-  const preview=modal.querySelector('.report-preview');preview.querySelector('header')?.insertAdjacentHTML('afterend',await cloneReportContent());[...preview.childNodes].filter(node=>node.nodeType===3).forEach(node=>node.remove());
-  const previewLogoPath = sessionUser?.enterprise_logo;
-  if (previewLogoPath) {
-    const logo = document.createElement('img');
-    logo.className = 'report-company-logo';
-    logo.src = companyImageUrl(previewLogoPath);
-    logo.alt = `Logo ${sessionUser.enterprise_name || 'entreprise'}`;
-    modal.querySelector('.report-preview header')?.prepend(logo);
+  modal.innerHTML = `<section class="report-dialog"><div class="report-dialog-heading"><div><h2>Aperçu du rapport</h2><p>${escapeHtml(title)}</p></div><button type="button" data-report-close aria-label="Fermer">×</button></div><div class="report-preview"><header><h1>${escapeHtml(title)}</h1><p><strong>${escapeHtml(sessionUser?.enterprise_name || 'ALBA-STOCK')}</strong> · ${escapeHtml(currentReportBranch())}</p><p>Édité le ${new Date().toLocaleString('fr-FR')}</p></header></div><div class="report-dialog-actions"><button type="button" data-report-close>Fermer</button><button type="button" data-report-action="print">Imprimer</button><button type="button" data-report-action="pdf">Exporter en PDF</button><button type="button" data-report-action="excel">Exporter vers Excel</button></div></section>`;
+  const preview=modal.querySelector('.report-preview');
+  try {
+    preview.insertAdjacentHTML('beforeend', await cloneReportContent());
+    const previewLogoPath = sessionUser?.enterprise_logo;
+    if (previewLogoPath) {
+      const logo = document.createElement('img');
+      logo.className = 'report-company-logo';
+      logo.src = companyImageUrl(previewLogoPath);
+      logo.alt = `Logo ${sessionUser.enterprise_name || 'entreprise'}`;
+      modal.querySelector('.report-preview header')?.prepend(logo);
+    }
+    document.body.appendChild(modal);
+  } catch (error) {
+    showToast(error.message);
   }
-  document.body.appendChild(modal);
 }
 async function reportRowsForExcel() {
-  const clone = (currentViewName==='sales'||currentViewName==='cash'?await selectedReportNode():currentReportSource().cloneNode(true));
+  const clone = new DOMParser().parseFromString(await cloneReportContent(), 'text/html');
   clone.querySelectorAll('[hidden], .report-toolbar, .filter-bar, button, input, select, textarea').forEach(node => node.remove());
   addReportTableTotals(clone);
   const rows = [[currentReportTitle()], [`${sessionUser?.enterprise_name || 'ALBA-STOCK'} · ${currentReportBranch()}`], [`Édité le ${new Date().toLocaleString('fr-FR')}`], []];
@@ -441,16 +544,31 @@ async function reportRowsForExcel() {
   return rows.length > 4 ? rows : [...rows, ...clone.innerText.split('\n').map(line => [line.trim()]).filter(row => row[0])];
 }
 async function exportReportExcel() {
-  const rows=await reportRowsForExcel();
-  const csv = rows.map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
-  const blob = new Blob(['\ufeff', csv], {type:'text/csv;charset=utf-8'});
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `${currentReportTitle().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'rapport'}.csv`;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  try {
+    const rows=await reportRowsForExcel();
+    const csv = rows.map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    const blob = new Blob(['\ufeff', csv], {type:'text/csv;charset=utf-8'});
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${currentReportTitle().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'rapport'}.csv`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  } catch (error) {
+    showToast(error.message);
+  }
 }
 async function printCurrentReport(title = currentReportTitle(), sourceHtml = null) {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) { showToast('Autorisez les fenêtres contextuelles pour imprimer le rapport.'); return; }
+  try {
+    const content = sourceHtml ?? await cloneReportContent();
+    printReportInWindow(printWindow, title, content, '', reportPageOrientation(content));
+  } catch (error) {
+    if (!printWindow.closed) printWindow.close();
+    showToast(error.message);
+  }
+}
+async function exportCurrentReportPdf(title = currentReportTitle(), sourceHtml = null) {
   try {
     const clone = new DOMParser().parseFromString(sourceHtml ?? await cloneReportContent(), 'text/html');
     const tables = [...clone.querySelectorAll('table')].map(table => ({
@@ -458,12 +576,13 @@ async function printCurrentReport(title = currentReportTitle(), sourceHtml = nul
       rows: [...table.querySelectorAll('tbody tr')].filter(row => !row.hidden).map(row => [...row.cells].flatMap(cell => [cell.textContent.trim().replace(/\s+/g, ' '), ...Array(Math.max(0, cell.colSpan - 1)).fill('')]))
     })).filter(table => table.headers.length > 0);
     if (!tables.length) throw new Error('Aucun tableau de données à exporter en PDF.');
+    const orientation = Math.max(...tables.map(table => table.headers.length)) >= 6 ? 'L' : 'P';
     const branchId = activeBranchId || (currentViewName === 'stock' ? document.getElementById('stock-branch')?.value : '');
     const response = await fetch('../backend/public/pdf-report.php', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       credentials: 'include',
-      body: JSON.stringify({title, succursale_id: branchId || null, tables})
+      body: JSON.stringify({title, succursale_id: branchId || null, orientation, tables})
     });
     if (!response.ok) {
       const result = await readJson(response);
@@ -619,6 +738,7 @@ let PAGE_SIZE = PAGE_SIZE_OPTIONS.includes(Number(localStorage.getItem('alba-sto
   ? Number(localStorage.getItem('alba-stock-page-size'))
   : 10;
 const paginationLoaders = new Map();
+const reportRowLoaders = new Map();
 async function apiGetPage(resource, page, branchId) {
   const endpoint = new URL(resource === 'stocks' ? '../backend/public/stock.php' : apiUrl(resource), window.location.href);
   const selectedBranchId = arguments.length > 2 ? branchId : activeBranchId;
@@ -631,7 +751,7 @@ async function apiGetPage(resource, page, branchId) {
   if (!response.ok || !result.success) throw new Error(result.message || 'Chargement impossible.');
   return {rows:result.data || [], summary:result.summary || [], pagination:result.pagination || {page, per_page:PAGE_SIZE, total:(result.data || []).length, pages:1}};
 }
-function showPagination(body, key, info, onPage) {
+function showPagination(body, key, info, onPage, loadReportRows = null) {
   if (!body) return;
   if (body.id === 'pending-sale-rows') labelSaleInvoiceButtons(body);
   const resultTable = body.closest('table');
@@ -646,6 +766,7 @@ function showPagination(body, key, info, onPage) {
   if (!controls) return;
   const page = Number(info?.page || 1), pages = Number(info?.pages || 1), total = Number(info?.total || 0);
   paginationLoaders.set(key, onPage);
+  if (body.id && loadReportRows) reportRowLoaders.set(body.id, loadReportRows);
   controls.innerHTML = `<span>Page ${page} sur ${pages} · ${total.toLocaleString('fr-FR')} résultat${total === 1 ? '' : 's'}</span><div><label class="pagination-size">Lignes par page<select data-page-size-key="${key}">${PAGE_SIZE_OPTIONS.map(size => `<option value="${size}"${PAGE_SIZE === size ? ' selected' : ''}>${size}</option>`).join('')}</select></label><button type="button" data-page-key="${key}" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>&#8249; Précédent</button><button type="button" data-page-key="${key}" data-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>Suivant &#8250;</button></div>`;
 }
 let stockData = {products:[], stocks:[], categories:[], branches:[], units:[], summary:[]};
@@ -715,14 +836,24 @@ function setQuantitySummary(target, rows) {
   target.textContent = quantityRowsLabel(rows);
   target.classList.add('quantity-by-unit');
 }
+function renderUserRow(user) {
+  return `<tr><td>${escapeHtml(user.full_name || user.username)}</td><td>${escapeHtml(user.username)}</td><td>${escapeHtml(user.email || '—')}</td><td>${escapeHtml(user.role_name)}</td><td>${escapeHtml(user.branch_name || 'Entreprise mère')}</td><td><span class="status ${Number(user.is_active) ? 'success' : 'danger'}">${Number(user.is_active) ? 'Actif' : 'Inactif'}</span></td><td>${hasAccess('gerer_utilisateurs') ? `<div class="user-action-group"><button class="user-action-button user-action-edit" title="Modifier l’utilisateur" aria-label="Modifier ${escapeHtml(user.full_name || user.username)}" data-user-edit="${Number(user.user_id)}"><span aria-hidden="true">✎</span> Modifier</button><button class="user-action-button user-action-delete" title="Supprimer l’utilisateur" aria-label="Supprimer ${escapeHtml(user.full_name || user.username)}" data-user-delete="${Number(user.user_id)}"><span aria-hidden="true">×</span> Supprimer</button></div>` : '—'}</td></tr>`;
+}
+async function allUserRows() {
+  const branch = activeBranchId ? `&succursale_id=${encodeURIComponent(activeBranchId)}` : '';
+  const response = await fetch(`../backend/public/auth.php?action=list-users${branch}`, {credentials:'include'});
+  const users = await readJson(response);
+  if (!response.ok || !users.success) throw new Error(users.message || 'Chargement des utilisateurs impossible.');
+  return users.data.length ? users.data.map(renderUserRow).join('') : '<tr><td colspan="7">Aucun utilisateur enregistré.</td></tr>';
+}
 async function loadUserRows(page = 1) {
   const body = document.getElementById('user-rows'); if (!body) return;
   try {
     const users = await readJson(await fetch(`../backend/public/auth.php?action=list-users&page=${page}&per_page=${PAGE_SIZE}`, {credentials:'include'}));
     if (!users.success) throw new Error(users.message || 'Chargement des utilisateurs impossible.');
     userData = users.data;
-    body.innerHTML = users.data.length ? users.data.map(user => `<tr><td>${escapeHtml(user.full_name || user.username)}</td><td>${escapeHtml(user.username)}</td><td>${escapeHtml(user.email || '—')}</td><td>${escapeHtml(user.role_name)}</td><td>${escapeHtml(user.branch_name || 'Entreprise mère')}</td><td><span class="status ${Number(user.is_active) ? 'success' : 'danger'}">${Number(user.is_active) ? 'Actif' : 'Inactif'}</span></td><td>${hasAccess('gerer_utilisateurs') ? `<div class="user-action-group"><button class="user-action-button user-action-edit" title="Modifier l’utilisateur" aria-label="Modifier ${escapeHtml(user.full_name || user.username)}" data-user-edit="${Number(user.user_id)}"><span aria-hidden="true">✎</span> Modifier</button><button class="user-action-button user-action-delete" title="Supprimer l’utilisateur" aria-label="Supprimer ${escapeHtml(user.full_name || user.username)}" data-user-delete="${Number(user.user_id)}"><span aria-hidden="true">×</span> Supprimer</button></div>` : '—'}</td></tr>`).join('') : '<tr><td colspan="7">Aucun utilisateur enregistré.</td></tr>';
-    showPagination(body, 'users', users.pagination, loadUserRows);
+    body.innerHTML = users.data.length ? users.data.map(renderUserRow).join('') : '<tr><td colspan="7">Aucun utilisateur enregistré.</td></tr>';
+    showPagination(body, 'users', users.pagination, loadUserRows, allUserRows);
   } catch (error) { showLoadError('user-rows', error, 7); }
 }
 async function loadSimpleRows(resource, bodyId, columns, renderRow, emptyLabel, page = 1) {
@@ -731,7 +862,10 @@ async function loadSimpleRows(resource, bodyId, columns, renderRow, emptyLabel, 
     const result = await apiGetPage(resource, page);
     const rows = result.rows;
     body.innerHTML = rows.length ? rows.map(renderRow).join('') : `<tr><td colspan="${columns}">${emptyLabel}</td></tr>`;
-    showPagination(body, bodyId, result.pagination, nextPage => loadSimpleRows(resource, bodyId, columns, renderRow, emptyLabel, nextPage));
+    showPagination(body, bodyId, result.pagination, nextPage => loadSimpleRows(resource, bodyId, columns, renderRow, emptyLabel, nextPage), async () => {
+      const allRows = await apiGet(resource);
+      return allRows.length ? allRows.map(renderRow).join('') : `<tr><td colspan="${columns}">${emptyLabel}</td></tr>`;
+    });
   } catch (error) { showLoadError(bodyId, error, columns); }
 }
 async function openSaleClientForm(branchId,onSaved){
@@ -1099,6 +1233,24 @@ async function openCashForm(reopenCash=null){
   modeSelect.addEventListener('change',syncMode);syncMode();modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());
   form.addEventListener('submit',async event=>{event.preventDefault();const data=Object.fromEntries(new FormData(form));if(reopenCash)data.mode_paiement_id=Number(reopenCash.mode_paiement_id);data.banque_id=data.banque_id?Number(data.banque_id):null;try{const response=await fetch('../backend/public/auth.php?action=open-cash',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(data)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Ouverture impossible.');modal.remove();showToast('Caisse ouverte.');loadCashRows();}catch(error){showToast(error.message);}});
 }async function openCashMovementForm(type='ENTREE'){if(!hasAccess('modifier_caisse'))return;let boxes=[],banks=[];try{let page=1,pages=1;while(page<=pages){const result=await fetchReportPage('cashboxes-list',page);boxes.push(...result.rows);pages=result.pagination.pages;page++;}boxes=boxes.filter(c=>c.statut==='OUVERTE');const response=await fetch('../backend/public/auth.php?action=banks',{credentials:'include'}),result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Chargement des banques impossible.');banks=result.data||[];}catch(error){showToast(error.message);return;}if(!boxes.length){showToast('Ouvrez une caisse avant d’enregistrer un mouvement.');return;}const isEntry=type==='ENTREE';const modal=document.createElement('div');modal.className='entity-modal';modal.innerHTML=`<section class="entity-dialog"><h2>${isEntry?'Entrée manuelle en caisse':'Sortie manuelle de caisse'}</h2><form class="entity-form"><input type="hidden" name="type" value="${type}"><label class="full">Caisse<select name="caisse_id" required>${boxes.map(c=>`<option value="${Number(c.caisse_id)}" data-mode-code="${escapeHtml(c.payment_mode_code)}" data-bank-id="${Number(c.banque_id||0)}">${escapeHtml(c.name)} · ${escapeHtml(c.payment_mode)} · ${escapeHtml(c.monais)}</option>`).join('')}</select></label><label class="full" data-manual-bank-label>Banque<select name="banque_id">${banks.map(bank=>`<option value="${Number(bank.banque_id)}">${escapeHtml(bank.name)}${bank.account_number?` · ${escapeHtml(bank.account_number)}`:''}</option>`).join('')}</select><small data-manual-no-banks ${banks.length?'hidden':''}>Créez d’abord une banque dans le module Caisse.</small></label><label class="full">Montant<input name="amount" type="number" min="0.01" step="0.01" required></label><label class="full">Motif<input name="reason" maxlength="150" required placeholder="${isEntry?'Ex. Dépôt, autre revenu…':'Ex. Dépense, retrait…'}"></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit ${isEntry?'cash-submit-in':'cash-submit-out'}">${isEntry?'＋ Enregistrer l’entrée':'－ Enregistrer la sortie'}</button></div></form></section>`;document.body.appendChild(modal);const form=modal.querySelector('form'),cashSelect=form.elements.namedItem('caisse_id'),bankLabel=modal.querySelector('[data-manual-bank-label]'),bankSelect=form.elements.namedItem('banque_id'),submit=form.querySelector('.modal-submit'),bankReferenceLabel=document.createElement('label');bankReferenceLabel.className='full';bankReferenceLabel.innerHTML='<span>Référence de l’opération bancaire</span><input name="bank_reference" maxlength="120" placeholder="N° de virement ou reçu">';bankLabel.after(bankReferenceLabel);const bankReference=bankReferenceLabel.querySelector('input');const syncCash=()=>{const selected=cashSelect.selectedOptions[0],isBank=selected?.dataset.modeCode==='BANK',linkedBank=selected?.dataset.bankId||'';if(linkedBank)bankSelect.value=linkedBank;bankLabel.hidden=!isBank;bankSelect.required=isBank;bankSelect.disabled=!isBank||Boolean(linkedBank);bankReferenceLabel.hidden=!isBank;bankReference.required=isBank;bankReference.disabled=!isBank;submit.disabled=isBank&&!banks.length;};cashSelect.addEventListener('change',syncCash);syncCash();modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());form.addEventListener('submit',async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(form));data.banque_id=Number(cashSelect.selectedOptions[0]?.dataset.bankId||data.banque_id||0)||null;try{const response=await fetch('../backend/public/auth.php?action=create-cash-movement',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(data)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Enregistrement impossible.');modal.remove();showToast(isEntry?'Entrée manuelle enregistrée.':'Sortie manuelle enregistrée.');loadCashRows();}catch(error){showToast(error.message);}});}
+function renderPurchaseRow(item) {
+  const unit = item.unit_abbreviation || item.unit_name || '';
+  const movementAmounts = Array.isArray(item.movement_amounts) ? item.movement_amounts : [{currency:item.monais || '', amount:Number(item.total_amount || 0)}];
+  const amountLabel = movementAmounts.map(({currency, amount}) => moneyCurrencyLabel(amount, currency)).join(' / ');
+  const isPerishableLot = Boolean(item.date_expiration);
+  const quantityOut = item.movement_type === 'OUT'
+    ? `${Number(item.total_quantity || 0).toLocaleString('fr-FR')} ${unit}`.trim()
+    : isPerishableLot ? `${Number(item.quantity_out || 0).toLocaleString('fr-FR')} ${unit}`.trim() : '—';
+  const remaining = isPerishableLot ? `${Number(item.remaining_quantity || 0).toLocaleString('fr-FR')} ${unit}`.trim() : '—';
+  const incoming = item.movement_type === 'IN' ? `${Number(item.total_quantity || 0).toLocaleString('fr-FR')} ${unit}`.trim() : '—';
+  const reason = item.movement_type === 'OUT' ? (item.motif_sortie || 'Sortie stock') : (item.supplier_name || 'Approvisionnement');
+  const canCancelValidated = item.status === 'RECEIVED' && item.validation_date && Date.now() - new Date(item.validation_date).getTime() < 172800000;
+  return `<tr data-report-date="${escapeHtml(String(item.validation_date || '').slice(0, 10))}" data-purchase-movement="${escapeHtml(item.movement_type)}" data-purchase-status="${escapeHtml(item.status)}" data-purchase-quantity="${Number(item.total_quantity || 0)}" data-purchase-amounts="${escapeHtml(JSON.stringify(movementAmounts))}" data-purchase-unit="${escapeHtml(unit)}"><td>${escapeHtml(item.purchase_no)}</td><td>${escapeHtml(reason)}</td><td>${escapeHtml(item.validation_date ? dateLabel(item.validation_date) : '—')}</td><td>${Number(item.total_quantity || 0).toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(quantityOut)}</td><td>${escapeHtml(incoming)}</td><td>${escapeHtml(remaining)}</td><td>${escapeHtml(amountLabel || moneyCurrencyLabel(item.total_amount, item.monais))}</td><td>${escapeHtml(purchaseStatusLabel(item.status))}${item.status === 'PENDING' ? ` <button type="button" data-purchase-validate="${Number(item.achat_id)}">Valider</button><button type="button" data-purchase-cancel="${Number(item.achat_id)}">Annuler</button>` : canCancelValidated ? ` <button type="button" data-purchase-cancel="${Number(item.achat_id)}">Annuler</button>` : ''}</td><td><button type="button" class="document-action-button purchase-voucher-button" title="Imprimer le bon" aria-label="Imprimer le bon" data-purchase-voucher="${Number(item.achat_id)}"><span>Bon</span></button></td></tr>`;
+}
+async function allPurchaseRows() {
+  const purchases = await fetchAllReportRows('procurement-list');
+  return purchases.length ? purchases.map(renderPurchaseRow).join('') : '<tr><td colspan="10">Aucun approvisionnement enregistré.</td></tr>';
+}
 async function loadPurchaseRows(page = 1) {
   const body = document.getElementById('purchase-rows'); if (!body) return;
   try {
@@ -1106,35 +1258,27 @@ async function loadPurchaseRows(page = 1) {
     const purchases = pageResult.rows;
     const header = body.closest('table')?.tHead?.rows[0];
     if (header) header.innerHTML = '<th>Référence</th><th>Motif</th><th>Date</th><th>Quantité</th><th>Quantité sortie</th><th>Quantité entrée</th><th>Solde du lot</th><th>Total</th><th>Statut</th><th>Bon</th>';
-    body.innerHTML = purchases.length ? purchases.map(item => {
-      const unit = item.unit_abbreviation || item.unit_name || '';
-      const isPerishableLot = Boolean(item.date_expiration);
-      const quantityOut = item.movement_type === 'OUT'
-        ? `${Number(item.total_quantity || 0).toLocaleString('fr-FR')} ${unit}`.trim()
-        : isPerishableLot ? `${Number(item.quantity_out || 0).toLocaleString('fr-FR')} ${unit}`.trim() : '—';
-      const remaining = isPerishableLot ? `${Number(item.remaining_quantity || 0).toLocaleString('fr-FR')} ${unit}`.trim() : '—';
-      const incoming = item.movement_type === 'IN' ? `${Number(item.total_quantity || 0).toLocaleString('fr-FR')} ${unit}`.trim() : '—';
-      const reason = item.movement_type === 'OUT' ? (item.motif_sortie || 'Sortie stock') : (item.supplier_name || 'Approvisionnement');
-      const canCancel = item.status === 'PENDING';
-      const canCancelValidated = item.status === 'RECEIVED' && item.validation_date && Date.now() - new Date(item.validation_date).getTime() < 172800000;
-      return `<tr data-report-date="${escapeHtml(String(item.validation_date || '').slice(0, 10))}" data-purchase-movement="${escapeHtml(item.movement_type)}" data-purchase-status="${escapeHtml(item.status)}" data-purchase-quantity="${Number(item.total_quantity || 0)}"><td>${escapeHtml(item.purchase_no)}</td><td>${escapeHtml(reason)}</td><td>${escapeHtml(item.validation_date ? dateLabel(item.validation_date) : '—')}</td><td>${Number(item.total_quantity || 0).toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(quantityOut)}</td><td>${escapeHtml(incoming)}</td><td>${escapeHtml(remaining)}</td><td>${moneyLabel(item.total_amount)} ${escapeHtml(item.monais || '')}</td><td>${escapeHtml(purchaseStatusLabel(item.status))}${item.status === 'PENDING' ? ` <button type="button" data-purchase-validate="${Number(item.achat_id)}">Valider</button><button type="button" data-purchase-cancel="${Number(item.achat_id)}">Annuler</button>` : canCancelValidated ? ` <button type="button" data-purchase-cancel="${Number(item.achat_id)}">Annuler</button>` : ''}</td><td><button type="button" class="document-action-button purchase-voucher-button" title="Imprimer le bon" aria-label="Imprimer le bon" data-purchase-voucher="${Number(item.achat_id)}"><span>Bon</span></button></td></tr>`;
-    }).join('') : '<tr><td colspan="10">Aucun approvisionnement enregistré.</td></tr>';
+    body.innerHTML = purchases.length ? purchases.map(renderPurchaseRow).join('') : '<tr><td colspan="10">Aucun approvisionnement enregistré.</td></tr>';
     filterCurrentReport();
-    showPagination(body, 'purchases', pageResult.pagination, loadPurchaseRows);
+    showPagination(body, 'purchases', pageResult.pagination, loadPurchaseRows, allPurchaseRows);
   } catch (error) { showLoadError('purchase-rows', error, 10); }
+}
+function renderSupplierRow(supplier) {
+  const branchScoped = Boolean(sessionUser?.succursale_id && !sessionUser?.is_company_admin);
+  const canManageThisSupplier = !branchScoped || Number(supplier.succursale_id) === Number(sessionUser.succursale_id);
+  const actions = canManageThisSupplier && (hasAccess('modifier_fournisseurs') || hasAccess('supprimer_fournisseurs')) ? `${hasAccess('modifier_fournisseurs') ? `<button class="text-button" data-supplier-edit="${Number(supplier.fournisseur_id)}">Modifier</button>` : ''} ${hasAccess('supprimer_fournisseurs') ? `<button class="text-button" data-supplier-delete="${Number(supplier.fournisseur_id)}">Supprimer</button>` : ''}` : '—';
+  return `<tr><td>${escapeHtml(supplier.name)}</td><td>${escapeHtml(supplier.contact_name || '—')}</td><td>${escapeHtml(supplier.email || '—')}</td><td>${escapeHtml(supplier.phone || '—')}</td><td>${actions}</td></tr>`;
 }
 async function loadSupplierRows(page = 1) {
   const body = document.getElementById('supplier-rows'); if (!body) return;
   try {
     const result = await apiGetPage('fournisseurs', page);
     const suppliers = result.rows;
-    body.innerHTML = suppliers.length ? suppliers.map(supplier => {
-      const branchScoped = Boolean(sessionUser?.succursale_id && !sessionUser?.is_company_admin);
-      const canManageThisSupplier = !branchScoped || Number(supplier.succursale_id) === Number(sessionUser.succursale_id);
-      const actions = canManageThisSupplier && (hasAccess('modifier_fournisseurs') || hasAccess('supprimer_fournisseurs')) ? `${hasAccess('modifier_fournisseurs') ? `<button class="text-button" data-supplier-edit="${Number(supplier.fournisseur_id)}">Modifier</button>` : ''} ${hasAccess('supprimer_fournisseurs') ? `<button class="text-button" data-supplier-delete="${Number(supplier.fournisseur_id)}">Supprimer</button>` : ''}` : '—';
-      return `<tr><td>${escapeHtml(supplier.name)}</td><td>${escapeHtml(supplier.contact_name || '—')}</td><td>${escapeHtml(supplier.email || '—')}</td><td>${escapeHtml(supplier.phone || '—')}</td><td>${actions}</td></tr>`;
-    }).join('') : '<tr><td colspan="5">Aucun fournisseur enregistré.</td></tr>';
-    showPagination(body, 'suppliers', result.pagination, loadSupplierRows);
+    body.innerHTML = suppliers.length ? suppliers.map(renderSupplierRow).join('') : '<tr><td colspan="5">Aucun fournisseur enregistré.</td></tr>';
+    showPagination(body, 'suppliers', result.pagination, loadSupplierRows, async () => {
+      const allSuppliers = await apiGet('fournisseurs');
+      return allSuppliers.length ? allSuppliers.map(renderSupplierRow).join('') : '<tr><td colspan="5">Aucun fournisseur enregistré.</td></tr>';
+    });
   } catch (error) { showLoadError('supplier-rows', error, 5); }
 }
 async function loadDashboardData() {
@@ -1289,6 +1433,15 @@ async function populateAccountingCurrencies() {
   }
 }
 let accountingAccountPage = 1;
+function renderAccountingAccountRow(account) {
+  return `<tr><td>${escapeHtml(account.code)}</td><td>${escapeHtml(account.intitule)}</td><td>${Number(account.classe)}</td><td>${escapeHtml(account.nature)}</td><td>${escapeHtml(account.parent_code ? `${account.parent_code} — ${account.parent_intitule}` : '—')}</td><td>${Number(account.is_active) ? 'Actif' : 'Inactif'}</td><td>${Number(account.is_system) ? 'Système' : hasAccess('modifier_comptabilite') ? `<div class="user-action-group"><button type="button" class="icon-action-button" title="Modifier le compte ${escapeHtml(account.code)}" aria-label="Modifier le compte ${escapeHtml(account.code)}" data-account-edit="${Number(account.compte_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4 4M4 20l4.5-1L19 8.5 15.5 5 5 15.5 4 20Z"/></svg></button><button type="button" class="icon-action-button icon-action-danger" title="Supprimer le compte ${escapeHtml(account.code)}" aria-label="Supprimer le compte ${escapeHtml(account.code)}" data-account-delete="${Number(account.compte_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button></div>` : '—'}</td></tr>`;
+}
+function renderAccountingEntryRow(entry) {
+  return `<tr><td>${escapeHtml(dateLabel(entry.date_ecriture))}</td><td>${escapeHtml(entry.journal_code)}</td><td>${escapeHtml(entry.reference)}</td><td>${escapeHtml(entry.libelle)}</td><td>${Number(entry.line_count)}</td><td>${moneyCurrencyLabel(entry.debit_total, entry.monnaie)}</td><td>${moneyCurrencyLabel(entry.credit_total, entry.monnaie)}</td><td>${entry.annulation_demande_id ? '<span class="status warning">En attente</span>' : `<button type="button" class="icon-action-button icon-action-danger" title="Demander l’annulation de l’écriture ${escapeHtml(entry.reference)}" aria-label="Demander l’annulation de l’écriture ${escapeHtml(entry.reference)}" data-entry-cancellation-request="${Number(entry.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`}</td></tr>`;
+}
+function renderAccountingDraftRow(draft) {
+  return `<tr><td>${escapeHtml(dateLabel(draft.date_ecriture))}</td><td>${escapeHtml(draft.journal_code)}</td><td>${escapeHtml(draft.reference)}</td><td>${escapeHtml(draft.libelle)}</td><td>${Number(draft.line_count)}</td><td>${escapeHtml(moneyCurrencyLabel(draft.debit_total, draft.monnaie))}</td><td>${escapeHtml(moneyCurrencyLabel(draft.credit_total, draft.monnaie))}</td><td>${hasAccess('creer_comptabilite') ? `<div class="user-action-group"><button type="button" class="icon-action-button" title="Modifier le brouillon" aria-label="Modifier le brouillon" data-accounting-draft-edit="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4 4M4 20l4.5-1L19 8.5 15.5 5 5 15.5 4 20Z"/></svg></button><button type="button" class="icon-action-button icon-action-success" title="Valider le brouillon" aria-label="Valider le brouillon" data-accounting-draft-validate="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button><button type="button" class="icon-action-button icon-action-danger" title="Supprimer le brouillon" aria-label="Supprimer le brouillon" data-accounting-draft-delete="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button></div>` : '—'}</td></tr>`;
+}
 async function loadAccountingAccounts(page = accountingAccountPage) {
   const accountSelect = document.getElementById('accounting-account');
   const accountRows = document.getElementById('accounting-account-rows');
@@ -1301,7 +1454,10 @@ async function loadAccountingAccounts(page = accountingAccountPage) {
     const visibleAccounts = accounts.slice((accountingAccountPage - 1) * PAGE_SIZE, accountingAccountPage * PAGE_SIZE);
     if (accountRows) {
       accountRows.innerHTML = visibleAccounts.length ? visibleAccounts.map(account => `<tr><td>${escapeHtml(account.code)}</td><td>${escapeHtml(account.intitule)}</td><td>${Number(account.classe)}</td><td>${escapeHtml(account.nature)}</td><td>${escapeHtml(account.parent_code ? `${account.parent_code} — ${account.parent_intitule}` : '—')}</td><td>${Number(account.is_active) ? 'Actif' : 'Inactif'}</td><td>${Number(account.is_system) ? 'Système' : hasAccess('modifier_comptabilite') ? `<div class="user-action-group"><button type="button" class="icon-action-button" title="Modifier le compte ${escapeHtml(account.code)}" aria-label="Modifier le compte ${escapeHtml(account.code)}" data-account-edit="${Number(account.compte_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4 4M4 20l4.5-1L19 8.5 15.5 5 5 15.5 4 20Z"/></svg></button><button type="button" class="icon-action-button icon-action-danger" title="Supprimer le compte ${escapeHtml(account.code)}" aria-label="Supprimer le compte ${escapeHtml(account.code)}" data-account-delete="${Number(account.compte_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button></div>` : '—'}</td></tr>`).join('') : '<tr><td colspan="7">Aucun compte comptable. Créez d’abord les comptes nécessaires aux écritures.</td></tr>';
-      showPagination(accountRows, 'accounting-accounts', {page: accountingAccountPage, per_page: PAGE_SIZE, total: accounts.length, pages: totalPages}, loadAccountingAccounts);
+      showPagination(accountRows, 'accounting-accounts', {page: accountingAccountPage, per_page: PAGE_SIZE, total: accounts.length, pages: totalPages}, loadAccountingAccounts, async () => {
+        const allAccounts = await fetchReportData('accounting-accounts');
+        return allAccounts.length ? allAccounts.map(renderAccountingAccountRow).join('') : '<tr><td colspan="7">Aucun compte comptable. Créez d’abord les comptes nécessaires aux écritures.</td></tr>';
+      });
     }
     const reportType = document.getElementById('accounting-report-type')?.value;
     const showAccountFilter = reportType === 'grand-livre';
@@ -1330,8 +1486,11 @@ async function loadAccountingEntryRows(page = 1) {
   try {
     const result = await fetchReportPage('accounting-entries', page, {date_debut: from, date_fin: to, monnaie: currency});
     const entries = result.rows;
-    rowsTarget.innerHTML = entries.length ? entries.map(entry => `<tr><td>${escapeHtml(dateLabel(entry.date_ecriture))}</td><td>${escapeHtml(entry.journal_code)}</td><td>${escapeHtml(entry.reference)}</td><td>${escapeHtml(entry.libelle)}</td><td>${Number(entry.line_count)}</td><td>${moneyCurrencyLabel(entry.debit_total, entry.monnaie)}</td><td>${moneyCurrencyLabel(entry.credit_total, entry.monnaie)}</td><td>${entry.annulation_demande_id ? '<span class="status warning">En attente</span>' : `<button type="button" class="icon-action-button icon-action-danger" title="Demander l’annulation de l’écriture ${escapeHtml(entry.reference)}" aria-label="Demander l’annulation de l’écriture ${escapeHtml(entry.reference)}" data-entry-cancellation-request="${Number(entry.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`}</td></tr>`).join('') : '<tr><td colspan="8">Aucune écriture validée pour cette période et cette monnaie.</td></tr>';
-    showPagination(rowsTarget, 'accounting-entries', result.pagination, loadAccountingEntryRows);
+    rowsTarget.innerHTML = entries.length ? entries.map(renderAccountingEntryRow).join('') : '<tr><td colspan="8">Aucune écriture validée pour cette période et cette monnaie.</td></tr>';
+    showPagination(rowsTarget, 'accounting-entries', result.pagination, loadAccountingEntryRows, async () => {
+      const allEntries = await fetchReportData('accounting-entries', {date_debut:from, date_fin:to, monnaie:currency});
+      return allEntries.length ? allEntries.map(renderAccountingEntryRow).join('') : '<tr><td colspan="8">Aucune écriture validée pour cette période et cette monnaie.</td></tr>';
+    });
   } catch (error) {
     rowsTarget.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
   }
@@ -1342,8 +1501,11 @@ async function loadAccountingDrafts(page = 1) {
   try {
     const result = await fetchReportPage('accounting-drafts', page);
     const drafts = result.rows;
-    target.innerHTML = drafts.length ? drafts.map(draft => `<tr><td>${escapeHtml(dateLabel(draft.date_ecriture))}</td><td>${escapeHtml(draft.journal_code)}</td><td>${escapeHtml(draft.reference)}</td><td>${escapeHtml(draft.libelle)}</td><td>${Number(draft.line_count)}</td><td>${escapeHtml(moneyCurrencyLabel(draft.debit_total, draft.monnaie))}</td><td>${escapeHtml(moneyCurrencyLabel(draft.credit_total, draft.monnaie))}</td><td>${hasAccess('creer_comptabilite') ? `<div class="user-action-group"><button type="button" class="icon-action-button" title="Modifier le brouillon" aria-label="Modifier le brouillon" data-accounting-draft-edit="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4 4M4 20l4.5-1L19 8.5 15.5 5 5 15.5 4 20Z"/></svg></button><button type="button" class="icon-action-button icon-action-success" title="Valider le brouillon" aria-label="Valider le brouillon" data-accounting-draft-validate="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button><button type="button" class="icon-action-button icon-action-danger" title="Supprimer le brouillon" aria-label="Supprimer le brouillon" data-accounting-draft-delete="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button></div>` : '—'}</td></tr>`).join('') : '<tr><td colspan="8">Aucun brouillon comptable enregistré.</td></tr>';
-    showPagination(target, 'accounting-drafts', result.pagination, loadAccountingDrafts);
+    target.innerHTML = drafts.length ? drafts.map(renderAccountingDraftRow).join('') : '<tr><td colspan="8">Aucun brouillon comptable enregistré.</td></tr>';
+    showPagination(target, 'accounting-drafts', result.pagination, loadAccountingDrafts, async () => {
+      const allDrafts = await fetchReportData('accounting-drafts');
+      return allDrafts.length ? allDrafts.map(renderAccountingDraftRow).join('') : '<tr><td colspan="8">Aucun brouillon comptable enregistré.</td></tr>';
+    });
   } catch (error) {
     target.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
   }
@@ -1816,8 +1978,8 @@ async function loadStock(page = 1) {
     document.getElementById('stock-search').oninput = renderStockRows;
     renderBranchStockSummary();
     renderStockRows();
-    showPagination(rows, 'stock-products', stockPage.pagination, loadStock);
-    showPagination(document.getElementById('category-rows'), 'stock-categories', categoryPage.pagination, loadCategoryRows);
+    showPagination(rows, 'stock-products', stockPage.pagination, loadStock, allStockProductRows);
+    showPagination(document.getElementById('category-rows'), 'stock-categories', categoryPage.pagination, loadCategoryRows, allStockCategoryRows);
   } catch (error) { rows.innerHTML = `<tr><td colspan="9">${escapeHtml(error.message)}</td></tr>`; }
 }
 function renderBranchStockSummary() {
@@ -1856,19 +2018,34 @@ function renderStockRows() {
   const products = stockData.products.filter(product => Number(product.is_active ?? 1) === 1 && `${product.name} ${product.sku}`.toLocaleLowerCase().includes(search));
   document.getElementById('stock-count').textContent = `${products.length} produit${products.length > 1 ? 's' : ''} référencé${products.length > 1 ? 's' : ''}`;
   if (!products.length) { rows.innerHTML = '<tr><td colspan="9">Aucun produit. Utilisez Â« Créer un produit Â» pour commencer.</td></tr>'; return; }
-  rows.innerHTML = products.map(product => {
-    const productStocks = stocks.filter(stock => Number(stock.produit_id) === Number(product.produit_id));
-    const quantity = productStocks.reduce((sum, stock) => sum + Number(stock.quantity || 0), 0);
-    const threshold = productStocks.reduce((sum, stock) => sum + Number(stock.min_stock_level || 0), 0);
-    const status = quantity === 0 ? ['Rupture','danger'] : quantity <= threshold ? ['Stock bas','warning'] : ['En stock','success'];
-    const cardButton = hasAccess('voir_stock') ? `<button class="text-button" data-stock-card="${Number(product.produit_id)}">Afficher fiche de stock</button>` : '';
-    const adjustButton = hasAccess('modifier_stock') ? `<button class="text-button" data-stock-edit="${Number(product.produit_id)}">Ajuster</button>` : '';
-    const editButton = hasAccess('modifier_produit') ? `<button class="text-button" data-product-edit="${Number(product.produit_id)}">Modifier</button>` : '';
-    const deleteButton = hasAccess('supprimer_produit') ? `<button class="text-button" data-product-delete="${Number(product.produit_id)}">Supprimer</button>` : '';
-    const unit = unitNames[product.unite_de_mesure] || product.unit_abbreviation || product.unit_name || '';
-    return `<tr><td>${escapeHtml(product.sku)}</td><td>${escapeHtml(product.name)}</td><td>${escapeHtml(product.category_name || '—')}</td><td>${Number(product.unit_price || 0).toFixed(2)} ${escapeHtml(product.monais || '')}</td><td>${escapeHtml(unit)}</td><td>${quantity.toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${threshold.toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td><span class="status ${status[1]}">${status[0]}</span></td><td>${cardButton} ${adjustButton} ${editButton} ${deleteButton}</td></tr>`;
-  }).join('');
+  rows.innerHTML = products.map(product => renderStockProductRow(product, stocks.filter(stock => Number(stock.produit_id) === Number(product.produit_id)), unitNames[product.unite_de_mesure])).join('');
   renderCategoryRows();
+}
+function renderStockProductRow(product, productStocks, unitOverride = '') {
+  const quantity = productStocks.reduce((sum, stock) => sum + Number(stock.quantity || 0), 0);
+  const threshold = productStocks.reduce((sum, stock) => sum + Number(stock.min_stock_level || 0), 0);
+  const status = quantity === 0 ? ['Rupture','danger'] : quantity <= threshold ? ['Stock bas','warning'] : ['En stock','success'];
+  const cardButton = hasAccess('voir_stock') ? `<button class="text-button" data-stock-card="${Number(product.produit_id)}">Afficher fiche de stock</button>` : '';
+  const adjustButton = hasAccess('modifier_stock') ? `<button class="text-button" data-stock-edit="${Number(product.produit_id)}">Ajuster</button>` : '';
+  const editButton = hasAccess('modifier_produit') ? `<button class="text-button" data-product-edit="${Number(product.produit_id)}">Modifier</button>` : '';
+  const deleteButton = hasAccess('supprimer_produit') ? `<button class="text-button" data-product-delete="${Number(product.produit_id)}">Supprimer</button>` : '';
+  const unit = unitOverride || product.unit_abbreviation || product.unit_name || '';
+  return `<tr><td>${escapeHtml(product.sku)}</td><td>${escapeHtml(product.name)}</td><td>${escapeHtml(product.category_name || '—')}</td><td>${Number(product.unit_price || 0).toFixed(2)} ${escapeHtml(product.monais || '')}</td><td>${escapeHtml(unit)}</td><td>${quantity.toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${threshold.toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td><span class="status ${status[1]}">${status[0]}</span></td><td>${cardButton} ${adjustButton} ${editButton} ${deleteButton}</td></tr>`;
+}
+async function allStockProductRows() {
+  const branchId = document.getElementById('stock-branch')?.value || '';
+  const allStocks = await apiGet('stocks', branchId);
+  const search = document.getElementById('stock-search')?.value.trim().toLocaleLowerCase() || '';
+  const products = [...new Map(allStocks.map(stock => [Number(stock.produit_id), stock])).values()]
+    .filter(product => `${product.name} ${product.sku}`.toLocaleLowerCase().includes(search));
+  return products.length ? products.map(product => renderStockProductRow(
+    product,
+    allStocks.filter(stock => Number(stock.produit_id) === Number(product.produit_id))
+  )).join('') : '<tr><td colspan="9">Aucun produit. Utilisez « Créer un produit » pour commencer.</td></tr>';
+}
+async function allStockCategoryRows() {
+  const categories = await apiGet('categories');
+  return categories.length ? categories.map(category => `<tr><td>${escapeHtml(category.name)}</td><td>${escapeHtml(category.description || '—')}</td><td>${hasAccess('modifier_stock') ? `<button class="text-button" data-category-edit="${Number(category.category_id)}">Modifier</button> <button class="text-button" data-category-delete="${Number(category.category_id)}">Supprimer</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="3">Aucune catégorie enregistrée.</td></tr>';
 }
 function renderCategoryRows() {
   const body = document.getElementById('category-rows');
@@ -1880,7 +2057,7 @@ async function loadCategoryRows(page = 1) {
     const result = await apiGetPage('categories', page);
     stockData.categories = result.rows;
     renderCategoryRows();
-    showPagination(document.getElementById('category-rows'), 'stock-categories', result.pagination, loadCategoryRows);
+    showPagination(document.getElementById('category-rows'), 'stock-categories', result.pagination, loadCategoryRows, allStockCategoryRows);
   } catch (error) { showLoadError('category-rows', error, 3); }
 }
 function openUnitManager() {
@@ -2301,13 +2478,23 @@ async function fetchReportData(actionName, params = {}) {
   if (!response.ok || !result.success) throw new Error(result.message || 'Chargement du rapport impossible.');
   return result.data;
 }
-async function fetchReportPage(actionName, page, params = {}) {
-  const query = new URLSearchParams({action:actionName, ...params, page:String(page), per_page:String(PAGE_SIZE)});
+async function fetchReportPage(actionName, page, params = {}, perPage = PAGE_SIZE) {
+  const query = new URLSearchParams({action:actionName, ...params, page:String(page), per_page:String(perPage)});
   if (activeBranchId) query.set('succursale_id', activeBranchId);
   const response = await fetch(`../backend/public/report-data.php?${query}`, {credentials:'include'});
   const result = await readJson(response);
   if (!response.ok || !result.success) throw new Error(result.message || 'Chargement impossible.');
-  return {rows:result.data || [], summary:result.summary || [], pagination:result.pagination || {page, per_page:PAGE_SIZE, total:(result.data || []).length, pages:1}};
+  return {rows:result.data || [], summary:result.summary || [], pagination:result.pagination || {page, per_page:perPage, total:(result.data || []).length, pages:1}};
+}
+async function fetchAllReportRows(actionName, params = {}) {
+  let page = 1;
+  let result = await fetchReportPage(actionName, page, params, 100);
+  const rows = [...result.rows];
+  while (page < result.pagination.pages) {
+    result = await fetchReportPage(actionName, ++page, params, 100);
+    rows.push(...result.rows);
+  }
+  return rows;
 }
 function movementReportMarkup(report, from, to) {
   const period = from || to ? `du ${formatReportDate(from) || 'début'} au ${formatReportDate(to) || 'fin'}` : 'toutes périodes';
@@ -2334,9 +2521,7 @@ function movementReportMarkup(report, from, to) {
       return `<tr>${cells.map(value => `<td>${escapeHtml(value)}</td>`).join('')}</tr>`;
     }).join('');
     const unit = product.unit_symbol || product.unit_name || '';
-    const combinedQuantity = totals.entries.quantity + totals.exits.quantity;
-    const combinedAmount = totals.entries.amount + totals.exits.amount;
-    const totalsMarkup = `<h2>Totaux — ${escapeHtml(product.name)}</h2><table class="report-table" data-skip-report-totals="true"><thead><tr><th>Type</th><th>Quantité totale</th><th>Valeur au coût d’achat</th></tr></thead><tbody><tr><td>Entrées</td><td>${totals.entries.quantity.toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(moneyCurrencyLabel(totals.entries.amount, product.monais))}</td></tr><tr><td>Sorties</td><td>${totals.exits.quantity.toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(moneyCurrencyLabel(totals.exits.amount, product.monais))}</td></tr><tr class="report-total-row"><td>Cumul des entrées + sorties</td><td>${combinedQuantity.toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(moneyCurrencyLabel(combinedAmount, product.monais))}</td></tr></tbody></table>`;
+    const totalsMarkup = `<h2>Totaux — ${escapeHtml(product.name)}</h2><table class="report-table" data-skip-report-totals="true"><thead><tr><th>Type</th><th>Quantité totale</th><th>Valeur au coût d’achat</th></tr></thead><tbody><tr><td>Entrées</td><td>${totals.entries.quantity.toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(moneyCurrencyLabel(totals.entries.amount, product.monais))}</td></tr><tr><td>Sorties</td><td>${totals.exits.quantity.toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(moneyCurrencyLabel(totals.exits.amount, product.monais))}</td></tr></tbody></table>`;
     return `<h2>${escapeHtml(product.name)} (${escapeHtml(product.sku)}) — ${escapeHtml(period)}</h2><div style="overflow:auto"><table class="report-table" data-skip-report-totals="true"><thead><tr>${headers.map(header => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody>${body || `<tr><td colspan="${headers.length}">Aucun mouvement pour cette période.</td></tr>`}</tbody></table></div>${totalsMarkup}`;
   }).join('');
   return {period, content: sections};
@@ -2422,6 +2607,7 @@ async function openStockMovementsReport() {
           if (Number(product.est_perisable) === 1) headers.push('Lot', 'Date expiration');
           headers.push('Quantité sortie', 'Solde', 'P.U', 'P.T', 'Observation');
           lines.push(headers);
+          const totals = {entries:{quantity:0, amounts:new Map()}, exits:{quantity:0, amounts:new Map()}};
           latestReport.movements.filter(row => Number(row.produit_id) === Number(product.produit_id)).forEach(row => {
             const unit = row.unit_symbol || row.unit_name || '';
             const quantity = Number(row.quantity_moved);
@@ -2429,11 +2615,32 @@ async function openStockMovementsReport() {
             const entry = row.movement_type === 'ENTREE' || (adjustment && Number(row.quantity_after) > Number(row.quantity_before));
             const exit = row.movement_type === 'SORTIE' || (adjustment && Number(row.quantity_after) < Number(row.quantity_before));
             const cost = Number(row.unit_cost || 0);
+            const currency = String(row.monais || product.monais || '');
+            if (entry) {
+              totals.entries.quantity += quantity;
+              totals.entries.amounts.set(currency, (totals.entries.amounts.get(currency) || 0) + cost * quantity);
+            }
+            if (exit) {
+              totals.exits.quantity += quantity;
+              totals.exits.amounts.set(currency, (totals.exits.amounts.get(currency) || 0) + cost * quantity);
+            }
             const values = [dateLabel(row.movement_date), row.reference_label || '—', row.origin_motif || '—', entry ? `${quantity} ${unit}`.trim() : '—'];
             if (Number(product.est_perisable) === 1) values.push(row.lot_label || '—', row.expiration_dates || '—');
             values.push(exit ? `${quantity} ${unit}`.trim() : '—', `${Number(row.quantity_after)} ${unit}`.trim(), moneyCurrencyLabel(cost, row.monais), moneyCurrencyLabel(cost * quantity, row.monais), row.observation || '—');
             lines.push(values);
           });
+          const unit = product.unit_symbol || product.unit_name || '';
+          const amountsLabel = amounts => [...amounts].map(([currency, amount]) => moneyCurrencyLabel(amount, currency)).join(' / ') || moneyCurrencyLabel(0, product.monais);
+          const entryTotal = Array(headers.length).fill('');
+          entryTotal[0] = 'TOTAL ENTRÉES';
+          entryTotal[3] = `${totals.entries.quantity.toLocaleString('fr-FR')} ${unit}`.trim();
+          entryTotal[headers.indexOf('P.T')] = amountsLabel(totals.entries.amounts);
+          lines.push(entryTotal);
+          const exitTotal = Array(headers.length).fill('');
+          exitTotal[0] = 'TOTAL SORTIES';
+          exitTotal[headers.indexOf('Quantité sortie')] = `${totals.exits.quantity.toLocaleString('fr-FR')} ${unit}`.trim();
+          exitTotal[headers.indexOf('P.T')] = amountsLabel(totals.exits.amounts);
+          lines.push(exitTotal);
           lines.push([]);
         });
         const csv = lines.map(line => line.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
@@ -2774,7 +2981,8 @@ document.addEventListener('click', async event => {
   const reportAction = event.target.closest('[data-report-action]');
   if (reportAction) {
     if (reportAction.dataset.reportAction === 'preview') openReportPreview();
-    if (reportAction.dataset.reportAction === 'print' || reportAction.dataset.reportAction === 'pdf') printCurrentReport();
+    if (reportAction.dataset.reportAction === 'print') printCurrentReport();
+    if (reportAction.dataset.reportAction === 'pdf') exportCurrentReportPdf();
     if (reportAction.dataset.reportAction === 'excel') exportReportExcel();
     return;
   }
