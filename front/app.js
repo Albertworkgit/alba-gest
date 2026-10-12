@@ -428,11 +428,13 @@ async function selectedReportNode(){
   const action=kind==='sales'?'sales-list':'cash-movements';
   const rows=await fetchAllReportRows(action);
   const isSales=kind==='sales';
-  const headers=isSales?['Facture','Client','Succursale','Caissier','Date','Articles','Total','Payé','Statut']:['Date','Caisse','Motif','Référence','Entrées','Sorties'];
+  const currencies=isSales?[]:[...new Set(rows.map(item=>String(item.monais||'').trim().toUpperCase()).filter(Boolean))].sort();
+  const headers=isSales?['Facture','Client','Succursale','Caissier','Date','Articles','Total','Payé','Statut']:['Date','Caisse','Motif','Référence',...currencies.flatMap(currency=>[`${currency} · Entrées`,`${currency} · Sorties`])];
   const node=document.createElement('section');node.className='panel';node.innerHTML=`<div class="panel-header"><h2>${currentReportTitle()}</h2></div><table class="data-table"><thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody></tbody></table>`;
   const body=node.querySelector('tbody');
   const {from,to,search}=reportFilterValues();
   const totalsByCurrency=new Map();
+  currencies.forEach(currency=>totalsByCurrency.set(currency,{entries:0,exits:0}));
   rows.forEach(item=>{
     const day=String(isSales?item.sale_date:item.movement_date).slice(0,10);
     const type=isSales?'':item.type==='ENTREE'?'Entrée':'Sortie';
@@ -442,31 +444,38 @@ async function selectedReportNode(){
       ?[item.invoice_no,item.client_name||'Client comptoir',item.branch_name||'—',item.cashier||'—',dateLabel(item.sale_date),Number(item.item_count||0),saleCurrencyAmounts(item,'total_amount'),saleCurrencyAmounts(item,'amount_paid'),item.status].join(' ')
       :[dateLabel(item.movement_date),item.cash_name,type,item.reason||'—',reference,amount].join(' ');
     if ((from&&day<from)||(to&&day>to)||(search&&!searchText.toLocaleLowerCase('fr').includes(search))) return;
+    const currency=String(item.monais||'').trim().toUpperCase();
     const values=isSales
       ?[item.invoice_no,item.client_name||'Client comptoir',item.branch_name||'—',item.cashier||'—',dateLabel(item.sale_date),Number(item.item_count||0),saleCurrencyAmounts(item,'total_amount'),saleCurrencyAmounts(item,'amount_paid'),item.status]
-      :[dateLabel(item.movement_date),item.cash_name,item.reason||'—',reference,item.type==='ENTREE'?amount:'—',item.type==='ENTREE'?'—':amount];
+      :[dateLabel(item.movement_date),item.cash_name,item.reason||'—',reference,...currencies.flatMap(reportCurrency=>[
+        currency===reportCurrency&&item.type==='ENTREE'?amount:'—',
+        currency===reportCurrency&&item.type==='SORTIE'?amount:'—'
+      ])];
     const row=body.insertRow();
     row.dataset.reportDate=day;
     row.innerHTML=values.map(value=>`<td>${escapeHtml(value)}</td>`).join('');
     if (!isSales) {
-      const currency=String(item.monais||'');
-      const totals=totalsByCurrency.get(currency)||{entries:0,exits:0};
-      const movementAmount=Number(item.amount||0);
-      if (item.type==='ENTREE') totals.entries+=movementAmount;
-      else totals.exits+=movementAmount;
-      totalsByCurrency.set(currency,totals);
+      const totals=totalsByCurrency.get(currency);
+      if (totals) {
+        const movementAmount=Number(item.amount||0);
+        if (item.type==='ENTREE') totals.entries+=movementAmount;
+        else if (item.type==='SORTIE') totals.exits+=movementAmount;
+      }
     }
   });
   if (!isSales) {
     if (!body.rows.length) {
       const emptyRow=body.insertRow();
-      emptyRow.innerHTML='<td colspan="6">Aucun mouvement pour cette période.</td>';
+      emptyRow.innerHTML=`<td colspan="${headers.length}">Aucun mouvement pour cette période.</td>`;
     }
-    for (const [currency,totals] of totalsByCurrency) {
+    if (totalsByCurrency.size) {
       const totalRow=body.insertRow();
       totalRow.className='report-total-row';
       totalRow.dataset.reportTotal='true';
-      totalRow.innerHTML=`<td colspan="4">Total (${escapeHtml(currency)})</td><td>${escapeHtml(moneyCurrencyLabel(totals.entries,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(totals.exits,currency))}</td>`;
+      totalRow.innerHTML=`<td colspan="4">Total</td>${[...totalsByCurrency].flatMap(([currency,totals])=>[
+        `<td>${escapeHtml(moneyCurrencyLabel(totals.entries,currency))}</td>`,
+        `<td>${escapeHtml(moneyCurrencyLabel(totals.exits,currency))}</td>`
+      ]).join('')}`;
     }
   }
   return node;
@@ -997,6 +1006,16 @@ function addSalePaymentReceiptActions(body, rows) {
     const tableRow = body.rows[index];
     if (!tableRow) return;
     const actionCell = tableRow.insertCell();
+    if (body.id === 'cash-movement-rows' && row.type === 'ENTREE' && row.reference_id === null) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'document-action-button';
+      button.dataset.cashEntryReceipt = String(Number(row.mouvement_id));
+      button.textContent = 'Reçu';
+      button.title = 'Imprimer le reçu de cette entrée';
+      button.setAttribute('aria-label', 'Imprimer le reçu de cette entrée');
+      tableRow.cells[2].append(' ', button);
+    }
     if (Number(row.vente_id || 0) < 1 || (row.operation && row.operation !== 'Vente')) return;
     const button = document.createElement('button');
     button.type = 'button';
@@ -1236,7 +1255,116 @@ async function openCashForm(reopenCash=null){
   const syncMode=()=>{const needsBank=modeSelect.selectedOptions[0]?.dataset.modeCode==='BANK';bankLabel.hidden=!needsBank;bankSelect.required=needsBank;bankSelect.disabled=!needsBank;modal.querySelector('[data-open-cash-no-banks]').hidden=banks.length>0;submit.disabled=needsBank&&!banks.length;};
   modeSelect.addEventListener('change',syncMode);syncMode();modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());
   form.addEventListener('submit',async event=>{event.preventDefault();const data=Object.fromEntries(new FormData(form));if(reopenCash)data.mode_paiement_id=Number(reopenCash.mode_paiement_id);data.banque_id=data.banque_id?Number(data.banque_id):null;try{const response=await fetch('../backend/public/auth.php?action=open-cash',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(data)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Ouverture impossible.');modal.remove();showToast('Caisse ouverte.');loadCashRows();}catch(error){showToast(error.message);}});
-}async function openCashMovementForm(type='ENTREE'){if(!hasAccess('modifier_caisse'))return;let boxes=[],banks=[];try{let page=1,pages=1;while(page<=pages){const result=await fetchReportPage('cashboxes-list',page);boxes.push(...result.rows);pages=result.pagination.pages;page++;}boxes=boxes.filter(c=>c.statut==='OUVERTE');const response=await fetch('../backend/public/auth.php?action=banks',{credentials:'include'}),result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Chargement des banques impossible.');banks=result.data||[];}catch(error){showToast(error.message);return;}if(!boxes.length){showToast('Ouvrez une caisse avant d’enregistrer un mouvement.');return;}const isEntry=type==='ENTREE';const modal=document.createElement('div');modal.className='entity-modal';modal.innerHTML=`<section class="entity-dialog"><h2>${isEntry?'Entrée manuelle en caisse':'Sortie manuelle de caisse'}</h2><form class="entity-form"><input type="hidden" name="type" value="${type}"><label class="full">Caisse<select name="caisse_id" required>${boxes.map(c=>`<option value="${Number(c.caisse_id)}" data-mode-code="${escapeHtml(c.payment_mode_code)}" data-bank-id="${Number(c.banque_id||0)}">${escapeHtml(c.name)} · ${escapeHtml(c.payment_mode)} · ${escapeHtml(c.monais)}</option>`).join('')}</select></label><label class="full" data-manual-bank-label>Banque<select name="banque_id">${banks.map(bank=>`<option value="${Number(bank.banque_id)}">${escapeHtml(bank.name)}${bank.account_number?` · ${escapeHtml(bank.account_number)}`:''}</option>`).join('')}</select><small data-manual-no-banks ${banks.length?'hidden':''}>Créez d’abord une banque dans le module Caisse.</small></label><label class="full">Montant<input name="amount" type="number" min="0.01" step="0.01" required></label><label class="full">Motif<input name="reason" maxlength="150" required placeholder="${isEntry?'Ex. Dépôt, autre revenu…':'Ex. Dépense, retrait…'}"></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit ${isEntry?'cash-submit-in':'cash-submit-out'}">${isEntry?'＋ Enregistrer l’entrée':'－ Enregistrer la sortie'}</button></div></form></section>`;document.body.appendChild(modal);const form=modal.querySelector('form'),cashSelect=form.elements.namedItem('caisse_id'),bankLabel=modal.querySelector('[data-manual-bank-label]'),bankSelect=form.elements.namedItem('banque_id'),submit=form.querySelector('.modal-submit'),bankReferenceLabel=document.createElement('label');bankReferenceLabel.className='full';bankReferenceLabel.innerHTML='<span>Référence de l’opération bancaire</span><input name="bank_reference" maxlength="120" placeholder="N° de virement ou reçu">';bankLabel.after(bankReferenceLabel);const bankReference=bankReferenceLabel.querySelector('input');const syncCash=()=>{const selected=cashSelect.selectedOptions[0],isBank=selected?.dataset.modeCode==='BANK',linkedBank=selected?.dataset.bankId||'';if(linkedBank)bankSelect.value=linkedBank;bankLabel.hidden=!isBank;bankSelect.required=isBank;bankSelect.disabled=!isBank||Boolean(linkedBank);bankReferenceLabel.hidden=!isBank;bankReference.required=isBank;bankReference.disabled=!isBank;submit.disabled=isBank&&!banks.length;};cashSelect.addEventListener('change',syncCash);syncCash();modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());form.addEventListener('submit',async e=>{e.preventDefault();const data=Object.fromEntries(new FormData(form));data.banque_id=Number(cashSelect.selectedOptions[0]?.dataset.bankId||data.banque_id||0)||null;try{const response=await fetch('../backend/public/auth.php?action=create-cash-movement',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(data)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Enregistrement impossible.');modal.remove();showToast(isEntry?'Entrée manuelle enregistrée.':'Sortie manuelle enregistrée.');loadCashRows();}catch(error){showToast(error.message);}});}
+}
+async function openCashMovementForm(type = 'ENTREE') {
+  if (!hasAccess('modifier_caisse')) return;
+  let boxes = [];
+  let banks = [];
+  try {
+    let page = 1;
+    let pages = 1;
+    while (page <= pages) {
+      const result = await fetchReportPage('cashboxes-list', page);
+      boxes.push(...result.rows);
+      pages = result.pagination.pages;
+      page++;
+    }
+    boxes = boxes.filter(cashbox => cashbox.statut === 'OUVERTE');
+    const response = await fetch('../backend/public/auth.php?action=banks', {credentials: 'include'});
+    const result = await readJson(response);
+    if (!response.ok || !result.success) throw new Error(result.message || 'Chargement des banques impossible.');
+    banks = result.data || [];
+  } catch (error) {
+    showToast(error.message);
+    return;
+  }
+  if (!boxes.length) {
+    showToast('Ouvrez une caisse avant d’enregistrer un mouvement.');
+    return;
+  }
+
+  const isEntry = type === 'ENTREE';
+  const modal = document.createElement('div');
+  modal.className = 'entity-modal';
+  modal.innerHTML = `<section class="entity-dialog"><h2>${isEntry ? 'Entrée manuelle en caisse' : 'Sortie manuelle de caisse'}</h2><form class="entity-form"><input type="hidden" name="type" value="${type}"><label class="full">Caisse<select name="caisse_id" required>${boxes.map(cashbox => `<option value="${Number(cashbox.caisse_id)}" data-mode-code="${escapeHtml(cashbox.payment_mode_code)}" data-bank-id="${Number(cashbox.banque_id || 0)}">${escapeHtml(cashbox.name)} · ${escapeHtml(cashbox.payment_mode)} · ${escapeHtml(cashbox.monais)}</option>`).join('')}</select></label><label class="full" data-manual-bank-label>Banque<select name="banque_id">${banks.map(bank => `<option value="${Number(bank.banque_id)}">${escapeHtml(bank.name)}${bank.account_number ? ` · ${escapeHtml(bank.account_number)}` : ''}</option>`).join('')}</select><small data-manual-no-banks ${banks.length ? 'hidden' : ''}>Créez d’abord une banque dans le module Caisse.</small></label><label class="full">Montant<input name="amount" type="number" min="0.01" step="0.01" required></label><label class="full">Motif<input name="reason" maxlength="150" required placeholder="${isEntry ? 'Ex. Dépôt, autre revenu…' : 'Ex. Dépense, retrait…'}"></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit ${isEntry ? 'cash-submit-in' : 'cash-submit-out'}">${isEntry ? '＋ Enregistrer l’entrée' : '－ Enregistrer la sortie'}</button></div></form></section>`;
+  document.body.appendChild(modal);
+
+  const form = modal.querySelector('form');
+  const cashSelect = form.elements.namedItem('caisse_id');
+  const bankLabel = modal.querySelector('[data-manual-bank-label]');
+  const bankSelect = form.elements.namedItem('banque_id');
+  const submit = form.querySelector('.modal-submit');
+  const bankReferenceLabel = document.createElement('label');
+  bankReferenceLabel.className = 'full';
+  bankReferenceLabel.innerHTML = '<span>Référence de l’opération bancaire</span><input name="bank_reference" maxlength="120" placeholder="N° de virement ou reçu">';
+  bankLabel.after(bankReferenceLabel);
+  const bankReference = bankReferenceLabel.querySelector('input');
+  const syncCash = () => {
+    const selected = cashSelect.selectedOptions[0];
+    const isBank = selected?.dataset.modeCode === 'BANK';
+    const linkedBank = selected?.dataset.bankId || '';
+    if (linkedBank) bankSelect.value = linkedBank;
+    bankLabel.hidden = !isBank;
+    bankSelect.required = isBank;
+    bankSelect.disabled = !isBank || Boolean(linkedBank);
+    bankReferenceLabel.hidden = !isBank;
+    bankReference.required = isBank;
+    bankReference.disabled = !isBank;
+    submit.disabled = isBank && !banks.length;
+  };
+  cashSelect.addEventListener('change', syncCash);
+  syncCash();
+  modal.querySelector('.modal-cancel').addEventListener('click', () => modal.remove());
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(form));
+    data.banque_id = Number(cashSelect.selectedOptions[0]?.dataset.bankId || data.banque_id || 0) || null;
+    const printWindow = isEntry ? window.open('', '_blank') : null;
+    try {
+      const response = await fetch('../backend/public/auth.php?action=create-cash-movement', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'include',
+        body: JSON.stringify(data)
+      });
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Enregistrement impossible.');
+      modal.remove();
+      let successMessage = isEntry ? 'Entrée manuelle enregistrée.' : 'Sortie manuelle enregistrée.';
+      if (isEntry && !printWindow) {
+        successMessage = 'Entrée enregistrée, mais l’impression a été bloquée. Autorisez les fenêtres contextuelles ou imprimez le reçu depuis le journal de caisse.';
+      } else if (isEntry) {
+        try {
+          await printCashEntryReceipt(Number(result.data.mouvement_id), printWindow);
+        } catch (error) {
+          successMessage = `Entrée enregistrée, mais l’impression du reçu a échoué : ${error.message}`;
+        }
+      }
+      showToast(successMessage);
+      loadCashRows();
+    } catch (error) {
+      if (printWindow && !printWindow.closed) printWindow.close();
+      showToast(error.message);
+    }
+  });
+}
+async function printCashEntryReceipt(movementId, printWindow) {
+  if (movementId < 1) throw new Error('Identifiant du mouvement invalide.');
+  if (!printWindow || printWindow.closed) throw new Error('La fenêtre d’impression est indisponible.');
+  const movement = await fetchReportData('cash-movement-receipt', {mouvement_id: movementId});
+  const companyDetails = [
+    movement.enterprise_email,
+    movement.enterprise_phone,
+    movement.enterprise_address,
+    movement.rccm ? `RCCM : ${movement.rccm}` : '',
+    movement.boite_postale ? `BP : ${movement.boite_postale}` : ''
+  ].filter(Boolean).map(escapeHtml).join(' · ');
+  const bankDetails = movement.bank_name
+    ? `<p><strong>Banque :</strong> ${escapeHtml(movement.bank_name)}${movement.bank_reference ? ` · <strong>Référence bancaire :</strong> ${escapeHtml(movement.bank_reference)}` : ''}</p>`
+    : '';
+  const content = `<section><h2>REÇU D’ENTRÉE EN CAISSE</h2><p><strong>Reçu n° :</strong> ${Number(movement.mouvement_id)}</p><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason)}</p><h2>Montant reçu : ${moneyCurrencyLabel(movement.amount, movement.monais)}</h2><p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p><div class="signature-row"><div>Signature du déposant</div><div>Signature et cachet du caissier</div></div></section>`;
+  printReportInWindow(printWindow, `Reçu d’entrée en caisse n° ${Number(movement.mouvement_id)}`, content, companyDetails, 'portrait', true);
+}
 function renderPurchaseRow(item) {
   const unit = item.unit_abbreviation || item.unit_name || '';
   const movementAmounts = Array.isArray(item.movement_amounts) ? item.movement_amounts : [{currency:item.monais || '', amount:Number(item.total_amount || 0)}];
@@ -2105,7 +2233,7 @@ function openEntityForm(type, entity = null) {
     user: {title: 'Créer un utilisateur', endpoint: '../backend/public/auth.php?action=create-user', fields: '<label>Nom complet<input name="full_name" required></label><label>Nom d’utilisateur<input name="username" required></label><label>Adresse électronique<input name="email" type="email" required></label><label>Mot de passe<input name="password" type="password" minlength="4" required></label><label>Rôle d’accès<select name="role_id" id="user-role" required><option value="">Chargement des rôles…</option></select></label><label>Succursale (facultatif)<select name="succursale_id" id="user-branch"><option value="">Entreprise mère (sans succursale)</option></select></label><label class="full"><span>Compte actif</span><input name="is_active" type="checkbox" value="1" checked></label>'},
     role: {title: 'Créer un rôle', endpoint: '../backend/public/auth.php?action=create-role', fields: '<label>Nom du rôle<input name="role_name" placeholder="Ex. Responsable stock" required></label><label class="full">Description<textarea name="description"></textarea></label><fieldset class="full" style="border:1px solid #e6ebe7;border-radius:7px;padding:12px"><legend>Droits d’accès</legend><label><input type="checkbox" name="permissions" value="vente"> Accès aux ventes</label><label><input type="checkbox" name="permissions" value="caisse"> Accès à la caisse</label><label><input type="checkbox" name="permissions" value="stock"> Accès au stock et aux produits</label><label><input type="checkbox" name="permissions" value="approvisionnement"> Accès aux approvisionnements</label><label><input type="checkbox" name="permissions" value="clients"> Gestion des clients</label><label><input type="checkbox" name="permissions" value="comptabilite"> Accès à la comptabilité</label></fieldset>'},
     category: {title: 'Créer une catégorie', endpoint: '../backend/public/api.php?resource=categories', fields: '<label>Nom de la catégorie<input name="name" required maxlength="100"></label><label class="full">Description<textarea name="description"></textarea></label>'},
-    purchase: {title: 'Créer un approvisionnement', endpoint: '../backend/public/auth.php?action=create-purchase', fields: '<label>Référence<input name="purchase_no" required></label><label>Opération<select name="movement_type" id="purchase-operation"><option value="IN">Entrée — augmenter le stock</option><option value="OUT">Sortie — diminuer le stock</option></select></label><div id="purchase-supplier-fields" class="full"><label>Rechercher un fournisseur<input type="search" id="purchase-supplier-search" placeholder="Nom ou contact"></label><label>Fournisseur<select name="fournisseur_id" id="purchase-supplier" required><option value="">Chargement…</option></select></label><button type="button" class="text-button full" id="purchase-add-supplier">+ Créer un fournisseur</button><div class="full" id="purchase-new-supplier" hidden><label>Nom du fournisseur<input id="new-supplier-name" maxlength="100"></label><label>Personne de contact<input id="new-supplier-contact" maxlength="100"></label><label>Adresse électronique<input id="new-supplier-email" type="email" maxlength="100"></label><label>Téléphone<input id="new-supplier-phone" maxlength="20"></label><label class="full">Adresse<textarea id="new-supplier-address"></textarea></label><button type="button" class="modal-submit" id="purchase-save-supplier">Enregistrer le fournisseur</button></div></div><label id="purchase-reason-field" hidden class="full">Motif de sortie<input name="motif_sortie" maxlength="255" placeholder="Ex. Vente, casse, transfert..."></label><label>Rechercher un produit<input type="search" id="purchase-product-search" placeholder="Nom ou référence du produit"></label><label>Produit<select name="produit_id" id="purchase-product" required><option value="">Chargement…</option></select></label><label>Quantité<input name="quantity" type="number" min="1" step="1" required></label><label id="purchase-cost-choice" class="full"><input type="checkbox" id="purchase-use-product-cost" name="use_product_cost" checked> Utiliser le cout enregistre dans la fiche du produit</label><label id="purchase-custom-cost-field" hidden>Autre cout unitaire<input name="unit_cost" type="number" min="0" step="0.01" value="0"></label><label>Traitement<select name="status"><option value="PENDING" selected>En attente — aucun mouvement de stock</option><option value="RECEIVED">Valider et appliquer au stock</option><option value="CANCELLED">Annuler sans mouvement</option></select></label>'}
+    purchase: {title: 'Créer un approvisionnement', endpoint: '../backend/public/auth.php?action=create-purchase', fields: '<label id="purchase-reference-label">Référence<input name="purchase_no" required maxlength="50"></label><label>Opération<select name="movement_type" id="purchase-operation"><option value="IN">Entrée — augmenter le stock</option><option value="OUT">Sortie — diminuer le stock</option></select></label><div id="purchase-supplier-fields" class="full"><label>Rechercher un fournisseur<input type="search" id="purchase-supplier-search" placeholder="Nom ou contact"></label><label>Fournisseur<select name="fournisseur_id" id="purchase-supplier" required><option value="">Chargement…</option></select></label><button type="button" class="text-button full" id="purchase-add-supplier">+ Créer un fournisseur</button><div class="full" id="purchase-new-supplier" hidden><label>Nom du fournisseur<input id="new-supplier-name" maxlength="100"></label><label>Personne de contact<input id="new-supplier-contact" maxlength="100"></label><label>Adresse électronique<input id="new-supplier-email" type="email" maxlength="100"></label><label>Téléphone<input id="new-supplier-phone" maxlength="20"></label><label class="full">Adresse<textarea id="new-supplier-address"></textarea></label><button type="button" class="modal-submit" id="purchase-save-supplier">Enregistrer le fournisseur</button></div></div><label id="purchase-reason-field" hidden class="full">Motif de sortie<input name="motif_sortie" maxlength="255" placeholder="Ex. Vente, casse, transfert..."></label><label>Rechercher un produit<input type="search" id="purchase-product-search" placeholder="Nom ou référence du produit"></label><label>Produit<select name="produit_id" id="purchase-product" required><option value="">Chargement…</option></select></label><label>Quantité<input name="quantity" type="number" min="1" step="1" required></label><label id="purchase-cost-choice" class="full"><input type="checkbox" id="purchase-use-product-cost" name="use_product_cost" checked> Utiliser le cout enregistre dans la fiche du produit</label><label id="purchase-custom-cost-field" hidden>Autre cout unitaire<input name="unit_cost" type="number" min="0" step="0.01" value="0"></label><label>Traitement<select name="status"><option value="PENDING" selected>En attente — aucun mouvement de stock</option><option value="RECEIVED">Valider et appliquer au stock</option><option value="CANCELLED">Annuler sans mouvement</option></select></label>'}
   };
   const definition = definitions[type];
   if (!definition) return;
@@ -2177,6 +2305,8 @@ function openEntityForm(type, entity = null) {
     const quantityLabel = form.querySelector('[name="quantity"]').closest('label');
     quantityLabel.before(expirationLabel, lotLabel);
     const operation = modal.querySelector('#purchase-operation');
+    const purchaseReference = form.elements.namedItem('purchase_no');
+    const purchaseReferenceLabel = modal.querySelector('#purchase-reference-label');
     const supplierFields = modal.querySelector('#purchase-supplier-fields');
     const reasonField = modal.querySelector('#purchase-reason-field');
     const reasonInput = reasonField.querySelector('input');
@@ -2225,6 +2355,8 @@ function openEntityForm(type, entity = null) {
     };
     const syncPurchaseFields = () => {
       const outgoing = operation.value === 'OUT';
+      purchaseReference.required = !outgoing;
+      purchaseReferenceLabel.firstChild.textContent = outgoing ? 'Référence (facultative)' : 'Référence';
       supplierFields.hidden = outgoing;
       supplierFields.style.display = outgoing ? 'none' : '';
       reasonField.hidden = !outgoing;
@@ -2997,6 +3129,21 @@ document.addEventListener('click', async event => {
   if(saleInvoiceButton){await printSaleInvoice(saleInvoiceButton);return;}
   const salePaymentReceiptButton=event.target.closest('[data-sale-payment-receipt]');
   if(salePaymentReceiptButton){await printSalePaymentReceipt(salePaymentReceiptButton);return;}
+  const cashEntryReceiptButton = event.target.closest('[data-cash-entry-receipt]');
+  if (cashEntryReceiptButton) {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      showToast('Autorisez les fenêtres contextuelles pour imprimer le reçu.');
+      return;
+    }
+    try {
+      await printCashEntryReceipt(Number(cashEntryReceiptButton.dataset.cashEntryReceipt), printWindow);
+    } catch (error) {
+      if (!printWindow.closed) printWindow.close();
+      showToast(`Impression du reçu impossible : ${error.message}`);
+    }
+    return;
+  }
   const cashMovementButton=event.target.closest('[data-cash-movement-open]');if(cashMovementButton){openCashMovementForm(cashMovementButton.dataset.cashMovementOpen);return;}
   const cashCancellationRequestButton = event.target.closest('[data-cash-cancellation-request]');
   if (cashCancellationRequestButton) { openCashMovementCancellationRequest(Number(cashCancellationRequestButton.dataset.cashCancellationRequest)); return; }

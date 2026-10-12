@@ -41,18 +41,24 @@ final class ProcurementService
 
         // Vérifie les valeurs indispensables avant d'ouvrir la transaction.
         if ($branchId < 1) throw new RuntimeException('Créez une succursale avant de créer un approvisionnement pour l’entreprise mère.');
-        if ($productId < 1 || $purchaseNo === '' || $quantity < 1 || $unitCost < 0) {
-            throw new RuntimeException('Produit, référence et quantité sont obligatoires.');
-        }
         if (!in_array($status, ['PENDING', 'RECEIVED', 'CANCELLED'], true)) {
             throw new RuntimeException('Statut d’approvisionnement invalide.');
         }
         if (!in_array($movementType, ['IN', 'OUT'], true)) {
             throw new RuntimeException('Choisissez une entrée ou une sortie de stock valide.');
         }
+        if ($productId < 1 || $quantity < 1 || $unitCost < 0 || ($movementType === 'IN' && $purchaseNo === '')) {
+            throw new RuntimeException('Produit et quantité sont obligatoires; une référence est aussi requise pour une entrée.');
+        }
+        if (mb_strlen($purchaseNo, 'UTF-8') > 50) {
+            throw new RuntimeException('La référence ne peut pas dépasser 50 caractères.');
+        }
         if ($movementType !== 'OUT') $exitReason = '';
         if ($movementType === 'OUT') {
             if ($exitReason === '') throw new RuntimeException('Indiquez le motif de la sortie de stock.');
+            if ($purchaseNo === '') {
+                $purchaseNo = 'SORTIE-' . date('YmdHis') . '-' . bin2hex(random_bytes(4));
+            }
             $supplierId = null;
             $unitCost = 0;
         } elseif (!in_array($unitCostMode, ['PRODUCT', 'CUSTOM'], true)) {
@@ -226,5 +232,4 @@ final class ProcurementService
         } catch (\Throwable $e) { $this->db->rollback(); throw $e; }
     }
 }
-
 

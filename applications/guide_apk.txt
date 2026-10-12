@@ -1,0 +1,5 @@
+pour l'apk oneline : il utilise le du domanaine qui est https://wistock.store
+et pour apk offline : il utilise l'adresse ip de 192.168.1.110/westock 
+: donc le serveur doit etre configure sous cette adress et 
+les équipement qui doivent intaller cet apk offline 
+doit etre dans le meme réseau que la ma chine serveur

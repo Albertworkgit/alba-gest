@@ -256,6 +256,27 @@ try {
         JsonResponse::send(['success'=>true,'data'=>$q->get_result()->fetch_all(MYSQLI_ASSOC),'summary'=>$summaryRows,'pagination'=>['page'=>$page,'per_page'=>$perPage,'total'=>$total,'pages'=>max(1,(int)ceil($total/$perPage))]]);
     }
 
+    if ($action === 'cash-movement-receipt') {
+        Authorization::requireAnyPermission($user, ['voir_caisse', 'modifier_caisse']);
+        $movementId = (int) ($_GET['mouvement_id'] ?? 0);
+        if ($movementId < 1) JsonResponse::error('Identifiant de mouvement invalide.', 422);
+
+        $sql = 'SELECT m.mouvement_id,m.type,m.amount,m.reason,m.bank_reference,m.movement_date,pm.name AS payment_mode,b.name AS bank_name,c.name AS cash_name,t.code AS monais,t.symbole AS currency_symbol,s.name AS branch_name,u.full_name AS cashier,e.name AS enterprise_name,e.email AS enterprise_email,e.phone AS enterprise_phone,e.address AS enterprise_address,e.rccm,e.boite_postale FROM mouvements_caisse m JOIN caisses c ON c.caisse_id=m.caisse_id AND c.entreprise_id=m.entreprise_id JOIN types_caisses t ON t.type_caisse_id=c.type_caisse_id AND t.entreprise_id=c.entreprise_id JOIN succursales s ON s.succursale_id=c.succursale_id AND s.entreprise_id=c.entreprise_id LEFT JOIN modes_paiement pm ON pm.mode_paiement_id=m.mode_paiement_id LEFT JOIN banques b ON b.banque_id=m.banque_id AND b.entreprise_id=m.entreprise_id LEFT JOIN users u ON u.user_id=m.user_id AND u.entreprise_id=m.entreprise_id JOIN entreprises e ON e.entreprise_id=m.entreprise_id WHERE m.mouvement_id=? AND m.entreprise_id=?';
+        if ($branchId !== null) {
+            $sql .= ' AND c.succursale_id=?';
+        }
+        $query = $db->prepare($sql . ' LIMIT 1');
+        if ($branchId === null) {
+            $query->bind_param('ii', $movementId, $enterpriseId);
+        } else {
+            $query->bind_param('iii', $movementId, $enterpriseId, $branchId);
+        }
+        $query->execute();
+        $movement = $query->get_result()->fetch_assoc();
+        if (!$movement) JsonResponse::error('Mouvement de caisse introuvable.', 404);
+        JsonResponse::send(['success' => true, 'data' => $movement]);
+    }
+
     if ($action === 'cash-cancellation-request' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         Authorization::requirePermission($user, 'modifier_caisse');
         $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
