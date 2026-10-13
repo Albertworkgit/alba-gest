@@ -2,7 +2,7 @@ const views = {
   dashboard: {label:"Vue d'ensemble", kicker:"TABLEAU DE BORD", title:"Bonjour, <em>voici votre activité.</em>", description:"Indicateurs calculés depuis les données de votre entreprise.", action:"", html:`<div class="dashboard-grid"><article class="stat-card"><span class="stat-label">Produits actifs</span><div class="stat-value" id="dash-products">—</div></article><article class="stat-card"><span class="stat-label">Stock disponible par unité</span><div class="stat-value" id="dash-quantity">—</div></article><article class="stat-card"><span class="stat-label">Alertes de stock</span><div class="stat-value" id="dash-alerts">—</div></article><article class="stat-card"><span class="stat-label">Ventes enregistrées</span><div class="stat-value" id="dash-sales">—</div></article></div><section class="panel release-notes-panel"><div class="release-notes-heading"><div><p class="kicker">NOUVEAUTÉS</p><h2>Les dernières améliorations</h2><p class="panel-subtitle">Des outils conçus pour rendre votre gestion plus claire et plus fiable.</p></div><span class="release-notes-mark" aria-hidden="true">✦</span></div><div class="release-notes-grid"><article class="release-note"><span class="release-note-icon" aria-hidden="true">▤</span><div><h3>Rapports complets</h3><p>Les impressions et exports reprennent toutes les données filtrées, indépendamment du nombre de lignes affiché à l’écran.</p></div></article><article class="release-note"><span class="release-note-icon" aria-hidden="true">⇅</span><div><h3>Totaux mieux séparés</h3><p>Les entrées et sorties de stock disposent de totaux distincts en quantité et en valeur.</p></div></article><article class="release-note"><span class="release-note-icon" aria-hidden="true">▧</span><div><h3>Impression optimisée</h3><p>Les rapports s’adaptent à leur largeur et utilisent le format paysage lorsqu’ils contiennent davantage de colonnes.</p></div></article></div></section><section class="panel table-panel"><div class="panel-header"><div><h2>Stock sous le seuil minimum</h2></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Produit</th><th>Succursale</th><th>Quantité</th><th>Seuil</th></tr></thead><tbody id="dash-low-stock"><tr><td colspan="4">Chargement…</td></tr></tbody></table></div></section>`},
   stock: {label:"Stock", kicker:"GESTION DES ARTICLES", title:"Votre stock, <em>toujours maîtrisé.</em>", description:"Suivez les niveaux et les alertes de vos produits.", action:"+ Créer un produit", html:`<section class="panel"><div class="filter-bar"><input class="search-field" id="stock-search" placeholder="Rechercher un article ou une référence"><select class="select-field" id="stock-branch"><option value="">Toutes les succursales</option></select><button class="text-button" data-create-category>+ Créer une catégorie</button><button type="button" class="unit-admin-button" data-create-unit hidden aria-label="G&eacute;rer les unit&eacute;s de mesure"><span class="unit-admin-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5 7.5 4l12.5 12.5-3.5 3.5L4 7.5Z"/><path d="m8 8 2-2m1 5 2-2m1 5 2-2m1 5 2-2"/></svg></span><span class="unit-admin-copy"><strong>G&eacute;rer les unit&eacute;s</strong><small>Unit&eacute;s et symboles</small></span><span class="unit-admin-arrow" aria-hidden="true">&#8250;</span></button><button class="text-button" data-toggle-categories>Gérer les catégories</button></div><div class="panel-header"><div><h2>Catalogue produits</h2><p class="panel-subtitle" id="stock-count">Chargement…</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Référence</th><th>Produit</th><th>Catégorie</th><th>Prix vente</th><th>Unité</th><th>Stock</th><th>Seuil</th><th>État</th><th>Actions</th></tr></thead><tbody id="stock-rows"><tr><td colspan="9">Chargement…</td></tr></tbody></table></div></section><section class="panel" id="category-admin-panel" hidden><div class="panel-header"><div><h2>Catégories de produits</h2><p class="panel-subtitle">Modifiez ou supprimez les catégories de votre entreprise.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Catégorie</th><th>Description</th><th>Actions</th></tr></thead><tbody id="category-rows"></tbody></table></div></section>`},
   sales: {label:"Ventes", kicker:"ACTIVITÉ COMMERCIALE", title:"Vos <em>ventes.</em>", description:"Créez des factures multi-produits avec remise et suivi des lots.", action:"+ Nouvelle vente", html:`<section class="panel"><p class="panel-subtitle" id="sales-count">Chargement…</p><div style="overflow:auto"><table class="data-table"><thead><tr><th>Facture</th><th>Client</th><th>Succursale</th><th>Caissier</th><th>Date</th><th>Articles</th><th>Total</th><th>Payé</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="sales-rows"><tr><td colspan="10">Chargement…</td></tr></tbody></table></div></section>`},
-  cash: {label:"Caisse", kicker:"TRÉSORERIE", title:"Vos <em>caisses.</em>", description:"Ouvrez, suivez et clôturez les caisses de vos succursales.", action:"＋ Ouvrir une caisse", html:`<section class="panel"><div class="panel-header"><div><h2>Caisses</h2></div><div class="cash-manual-actions"><button type="button" class="cash-action-button cash-action-in" data-cash-movement-open="ENTREE"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-7-7h14"/></svg><span>Entrée manuelle</span></button><button type="button" class="cash-action-button cash-action-out" data-cash-movement-open="SORTIE"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg><span>Sortie manuelle</span></button></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Caisse</th><th>Succursale</th><th>Monnaie / mode</th><th>Ouverture</th><th>Solde initial</th><th>Solde courant</th><th>Solde clôturé</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="cash-rows"><tr><td colspan="9">Chargement…</td></tr></tbody></table></div></section><section class="panel table-panel"><div class="panel-header"><div><h2>Journal de caisse</h2><p class="panel-subtitle">Encaissements de vente, entrées et sorties</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Caisse</th><th>Type</th><th>Mode</th><th>Motif</th><th>Référence</th><th>Montant</th></tr></thead><tbody id="cash-movement-rows"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div></section><section class="panel"><div class="panel-header"><div><h2>Paiements Mobile Money et Banque</h2><p class="panel-subtitle">Règlements Mobile Money et banque enregistrés dans leurs caisses ouvertes.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Opération</th><th>Document</th><th>Succursale</th><th>Mode</th><th>Réf. transaction</th><th>Montant</th></tr></thead><tbody id="external-payment-rows"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div></section>`},
+  cash: {label:"Caisse", kicker:"TRÉSORERIE", title:"Vos <em>caisses.</em>", description:"Ouvrez, suivez et clôturez les caisses de vos succursales.", action:"＋ Ouvrir une caisse", html:`<section class="panel"><div class="panel-header"><div><h2>Caisses</h2></div><div class="cash-manual-actions"><button type="button" class="cash-action-button cash-action-in" data-cash-transfer-open>⇄ Convertir entre caisses</button><button type="button" class="cash-action-button cash-action-in" data-cash-movement-open="ENTREE"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-7-7h14"/></svg><span>Entrée manuelle</span></button><button type="button" class="cash-action-button cash-action-out" data-cash-movement-open="SORTIE"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg><span>Sortie manuelle</span></button></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Caisse</th><th>Succursale</th><th>Monnaie / mode</th><th>Ouverture</th><th>Solde initial</th><th>Solde courant</th><th>Solde clôturé</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="cash-rows"><tr><td colspan="9">Chargement…</td></tr></tbody></table></div></section><section class="panel table-panel"><div class="panel-header"><div><h2>Journal de caisse</h2><p class="panel-subtitle">Encaissements de vente, entrées et sorties</p></div><button type="button" class="text-button" data-print-selected-cash hidden>Imprimer les pièces sélectionnées</button></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Sélection</th><th>Date</th><th>Caisse</th><th>Type</th><th>Mode</th><th>Motif</th><th>Référence</th><th>Montant</th></tr></thead><tbody id="cash-movement-rows"><tr><td colspan="8">Chargement…</td></tr></tbody></table></div></section><section class="panel"><div class="panel-header"><div><h2>Paiements Mobile Money et Banque</h2><p class="panel-subtitle">Règlements Mobile Money et banque enregistrés dans leurs caisses ouvertes.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Opération</th><th>Document</th><th>Client / fournisseur</th><th>Succursale</th><th>Mode</th><th>Réf. transaction</th><th>Montant</th></tr></thead><tbody id="external-payment-rows"><tr><td colspan="8">Chargement…</td></tr></tbody></table></div></section>`},
   accounting: {label:"Comptabilité", kicker:"COMPTABILITÉ SYSCOHADA", title:"Vos <em>états financiers.</em>", description:"Consultez les états à partir des écritures comptables validées.", action:"", html:`<section class="panel"><div class="panel-header"><div><h2>Générer un état</h2><p class="panel-subtitle">Les montants sont toujours présentés par monnaie.</p></div><div><button type="button" class="primary-button" data-account-entry-open>Nouvelle écriture</button> <button type="button" class="text-button" data-account-create-open>Créer un compte</button></div></div><div class="filter-bar"><label>État<select id="accounting-report-type"><option value="bilan">Bilan</option><option value="resultat">Compte de résultat</option><option value="flux-tresorerie">Tableau de flux de trésorerie</option><option value="balance">Balance générale</option><option value="journal">Journal</option><option value="grand-livre">Grand livre</option><option value="annexes">États annexes</option></select></label><label>Du<input id="accounting-from" type="date" required></label><label>Au<input id="accounting-to" type="date" required></label><label>Monnaie<select id="accounting-currency" required></select></label><label id="accounting-account-filter" hidden>Compte<select id="accounting-account"><option value="">Sélectionner un compte</option></select></label><button type="button" class="primary-button" data-account-report-load>Générer</button><button type="button" class="text-button" data-account-report-print disabled>Imprimer le rapport choisi</button></div></section><section class="panel" id="accounting-report-panel"><div class="panel-header"><div><h2 id="accounting-report-title">État financier</h2><p class="panel-subtitle" id="accounting-report-meta">Sélectionnez une période, une monnaie et un état.</p></div></div><div id="accounting-report-result"><p class="empty-note">Aucun état généré.</p></div></section><section class="panel"><div class="panel-header"><div><h2>Journal comptable</h2><p class="panel-subtitle">Écritures validées sur la période et dans la monnaie choisies.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Date</th><th>Journal</th><th>Référence</th><th>Libellé</th><th>Lignes</th><th>Total débit</th><th>Total crédit</th></tr></thead><tbody id="accounting-entry-rows"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div></section><section class="panel"><div class="panel-header"><div><h2>Plan comptable</h2><p class="panel-subtitle">Comptes de l’entreprise; les comptes système ne peuvent pas être désactivés.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Compte</th><th>Intitulé</th><th>Classe</th><th>Nature</th><th>Compte parent</th><th>Statut</th><th>Action</th></tr></thead><tbody id="accounting-account-rows"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div></section>`},
   users: {label:"Utilisateurs et rôles", kicker:"GESTION DES ACCÈS", title:"Les bonnes personnes, <em>les bons accès.</em>", description:"Gérez les comptes utilisateurs et leurs droits d’accès.", action:"+ Ajouter un utilisateur", html:`<div class="view-layout"><section class="panel"><div class="panel-header"><div><h2>Utilisateurs</h2><p class="panel-subtitle">Comptes enregistrés dans votre entreprise</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Nom complet</th><th>Nom d’utilisateur</th><th>Adresse électronique</th><th>Rôle</th><th>Succursale</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="user-rows"><tr><td colspan="7">Chargement des utilisateurs…</td></tr></tbody></table></div></section><aside class="panel"><h2>Rôles et autorisations</h2><div id="role-list"><p class="empty-note">Chargement des rôles…</p></div><button class="primary-button role-create-action" data-create-role style="width:100%;margin-top:17px"><span aria-hidden="true">+</span> Créer un rôle</button></aside></div>`},
   branches: {label:"Succursales", kicker:"ADMINISTRATION", title:"Vos <em>succursales.</em>", description:"Succursales enregistrées dans la base de données.", action:"+ Créer une succursale", html:`<section class="panel"><div style="overflow:auto"><table class="data-table"><thead><tr><th>Nom</th><th>Code</th><th>Succursale mère</th><th>Adresse</th><th>Téléphone</th><th>Actions</th></tr></thead><tbody id="branch-rows"><tr><td colspan="6">Chargement…</td></tr></tbody></table></div></section>`},
@@ -18,6 +18,8 @@ let branchOptions = [];
 const branchScopedResources = new Set(['stocks', 'achats', 'caisses', 'ventes', 'fournisseurs']);
 let procurementSummaryTimer = null;
 let procurementSummaryRequest = 0;
+let cashSearchTimer = null;
+const selectedCashMovementReceipts = new Set();
 function canSelectCompanyBranches(user = sessionUser) {
   if (!user) return false;
   if (!user.succursale_id || user.is_company_admin) return true;
@@ -236,7 +238,7 @@ function configureReportToolbar(viewName) {
   const toolbar = document.createElement('div');
   toolbar.className = 'report-toolbar';
   toolbar.dataset.reportToolbar = '';
-  toolbar.innerHTML = '<strong>Rapports</strong><label>Du <input type="date" data-report-from></label><label>Au <input type="date" data-report-to></label><input type="search" data-report-search placeholder="Produit, client, statut…" aria-label="Filtrer le rapport"><span data-report-filter-hint>Filtres appliqués à l’aperçu, à l’impression et à l’export.</span><div class="report-toolbar-actions"><button type="button" data-report-action="preview">Afficher</button><button type="button" data-report-action="print">Imprimer</button><button type="button" data-report-action="pdf">Exporter en PDF</button><button type="button" data-report-action="excel">Exporter vers Excel</button></div>';
+  toolbar.innerHTML = `<strong>Rapports</strong><label>Du <input type="date" data-report-from></label><label>Au <input type="date" data-report-to></label><input type="search" data-report-search placeholder="${viewName === 'cash' ? 'Client, facture, caisse, paiement…' : 'Produit, client, statut…'}" aria-label="Filtrer le rapport"><span data-report-filter-hint>Filtres appliqués à l’aperçu, à l’impression et à l’export.</span><div class="report-toolbar-actions"><button type="button" data-report-action="preview">Afficher</button><button type="button" data-report-action="print">Imprimer</button><button type="button" data-report-action="pdf">Exporter en PDF</button><button type="button" data-report-action="excel">Exporter vers Excel</button></div>`;
   if (viewName === 'cash') {
     const label=document.createElement('label');label.textContent='Rapport ';const select=document.createElement('select');select.dataset.reportKind='';
     if(hasAccess('voir_ventes'))select.add(new Option('Ventes','sales'));
@@ -276,7 +278,8 @@ function filterCurrentReport() {
     if (row.dataset.reportTotal === 'true') { row.hidden = false; return; }
     const dateText = reportDateColumn(row) >= 0 ? (row.dataset.reportDate || '') : '';
     const dateMatch = !dateText || ((!from || dateText >= from) && (!to || dateText <= to));
-    row.hidden = !(dateMatch && (!search || row.textContent.toLocaleLowerCase('fr').includes(search)));
+    const searchableText = `${row.textContent} ${row.dataset.searchText || ''}`.toLocaleLowerCase('fr');
+    row.hidden = !(dateMatch && (!search || searchableText.includes(search)));
   });
   const hint = container.querySelector('[data-report-filter-hint]');
   if (hint) hint.textContent = [from && `Du ${from}`, to && `au ${to}`, search && `Recherche : ${search}`].filter(Boolean).join(' · ') || 'Aucun filtre actif';
@@ -442,7 +445,7 @@ async function selectedReportNode(){
     const amount=isSales?'':moneyCurrencyLabel(item.amount,item.monais);
     const searchText=isSales
       ?[item.invoice_no,item.client_name||'Client comptoir',item.branch_name||'—',item.cashier||'—',dateLabel(item.sale_date),Number(item.item_count||0),saleCurrencyAmounts(item,'total_amount'),saleCurrencyAmounts(item,'amount_paid'),item.status].join(' ')
-      :[dateLabel(item.movement_date),item.cash_name,type,item.reason||'—',reference,amount].join(' ');
+      :[dateLabel(item.movement_date),item.cash_name,item.branch_name||'—',item.cashier||'—',item.invoice_no||'',item.client_name||'',item.payment_mode||'',item.bank_reference||'',type,item.reason||'—',reference,amount].join(' ');
     if ((from&&day<from)||(to&&day>to)||(search&&!searchText.toLocaleLowerCase('fr').includes(search))) return;
     const currency=String(item.monais||'').trim().toUpperCase();
     const values=isSales
@@ -1006,15 +1009,16 @@ function addSalePaymentReceiptActions(body, rows) {
     const tableRow = body.rows[index];
     if (!tableRow) return;
     const actionCell = tableRow.insertCell();
-    if (body.id === 'cash-movement-rows' && row.type === 'ENTREE' && row.reference_id === null) {
+    if (body.id === 'cash-movement-rows') {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'document-action-button';
-      button.dataset.cashEntryReceipt = String(Number(row.mouvement_id));
-      button.textContent = 'Reçu';
-      button.title = 'Imprimer le reçu de cette entrée';
-      button.setAttribute('aria-label', 'Imprimer le reçu de cette entrée');
-      tableRow.cells[2].append(' ', button);
+      button.dataset.cashMovementReceipt = String(Number(row.mouvement_id));
+      button.textContent = row.type === 'SORTIE' ? 'Bon de sortie' : 'Reçu';
+      button.title = row.type === 'SORTIE' ? 'Imprimer le bon de sortie de caisse' : 'Imprimer le reçu de cette entrée';
+      button.setAttribute('aria-label', button.title);
+      actionCell.append(button);
+      return;
     }
     if (Number(row.vente_id || 0) < 1 || (row.operation && row.operation !== 'Vente')) return;
     const button = document.createElement('button');
@@ -1035,6 +1039,7 @@ function addSalePaymentReceiptActions(body, rows) {
     actionCell.append(button);
   });
   body.querySelectorAll('tr[data-report-total]').forEach(row => row.insertCell());
+  if (body.id === 'cash-movement-rows') syncSelectedCashPrintButton();
 }
 function updateExchangeRateLabel(panel) {
   const reference = panel.querySelector('#exchange-reference-form [name="monais"]').value || '…';
@@ -1165,15 +1170,18 @@ async function loadExchangeRates() {
     panel.querySelector('[data-exchange-rates]').innerHTML = `<tr><td colspan="4">${escapeHtml(error.message)}</td></tr>`;
   }
 }
-async function loadCashRows(page = 1, movementPage = 1) {
+async function loadCashRows(page = 1, movementPage = 1, externalPage = 1) {
   const body = document.getElementById('cash-rows'); if (!body) return;
   try {
-    const [result,movementResult,externalPayments] = await Promise.all([fetchReportPage('cashboxes-list', page),fetchReportPage('cash-movements',movementPage),fetchReportData('payment-journal')]);
+    const search = reportFilterValues().search;
+    const searchParams = search ? {recherche:search} : {};
+    const [result,movementResult,paymentResult] = await Promise.all([fetchReportPage('cashboxes-list', page, searchParams),fetchReportPage('cash-movements',movementPage,searchParams),fetchReportPage('payment-journal',externalPage,searchParams)]);
+    const externalPayments = paymentResult.rows;
     const cashboxes = result.rows;
-    body.innerHTML = cashboxes.length ? cashboxes.map(item => `<tr data-report-date="${escapeHtml(String(item.date_ouverture||'').slice(0,10))}"><td>${escapeHtml(item.name)}</td><td>${escapeHtml(branchOptions.find(branch => Number(branch.succursale_id) === Number(item.succursale_id))?.name || `ID ${Number(item.succursale_id)}`)}</td><td>${escapeHtml(item.currency_name)} (${escapeHtml(item.monais)}) · ${escapeHtml(item.payment_mode)}${item.bank_name?` · ${escapeHtml(item.bank_name)}`:``}</td><td>${escapeHtml(dateLabel(item.date_ouverture))}</td><td>${moneyCurrencyLabel(item.solde_ouverture,item.monais)}</td><td>${moneyCurrencyLabel(item.solde_courant,item.monais)}</td><td>${item.statut === 'FERMEE' ? moneyCurrencyLabel(item.solde_fermeture,item.monais) : '—'}</td><td>${escapeHtml(item.statut)}</td><td>${item.statut === 'OUVERTE' && hasAccess('modifier_caisse') ? `<button type="button" data-cash-close="${Number(item.caisse_id)}">Clôturer</button>` : item.statut === 'FERMEE' && hasAccess('creer_caisse') ? `<button type="button" data-cash-reopen="${Number(item.caisse_id)}" data-cash-name="${escapeHtml(item.name)}" data-cash-branch="${Number(item.succursale_id)}" data-cash-currency="${escapeHtml(item.monais)}" data-cash-mode="${Number(item.mode_paiement_id)}">Ouvrir</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="8">Aucune caisse enregistrée.</td></tr>';
+    body.innerHTML = cashboxes.length ? cashboxes.map(item => `<tr data-report-date="${escapeHtml(String(item.date_ouverture||'').slice(0,10))}" data-search-text="${escapeHtml([item.name,branchOptions.find(branch => Number(branch.succursale_id) === Number(item.succursale_id))?.name||'',item.currency_name,item.monais,item.payment_mode,item.bank_name||'',item.statut].join(' '))}"><td>${escapeHtml(item.name)}</td><td>${escapeHtml(branchOptions.find(branch => Number(branch.succursale_id) === Number(item.succursale_id))?.name || `ID ${Number(item.succursale_id)}`)}</td><td>${escapeHtml(item.currency_name)} (${escapeHtml(item.monais)}) · ${escapeHtml(item.payment_mode)}${item.bank_name?` · ${escapeHtml(item.bank_name)}`:``}</td><td>${escapeHtml(dateLabel(item.date_ouverture))}</td><td>${moneyCurrencyLabel(item.solde_ouverture,item.monais)}</td><td>${moneyCurrencyLabel(item.solde_courant,item.monais)}</td><td>${item.statut === 'FERMEE' ? moneyCurrencyLabel(item.solde_fermeture,item.monais) : '—'}</td><td>${escapeHtml(item.statut)}</td><td>${item.statut === 'OUVERTE' && hasAccess('modifier_caisse') ? `<button type="button" data-cash-close="${Number(item.caisse_id)}">Clôturer</button>` : item.statut === 'FERMEE' && hasAccess('creer_caisse') ? `<button type="button" data-cash-reopen="${Number(item.caisse_id)}" data-cash-name="${escapeHtml(item.name)}" data-cash-branch="${Number(item.succursale_id)}" data-cash-currency="${escapeHtml(item.monais)}" data-cash-mode="${Number(item.mode_paiement_id)}">Ouvrir</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="9">Aucune caisse enregistrée.</td></tr>';
     cashboxes.forEach((item,index)=>{const row=body.rows[index];if(!row)return;const reopen=row.querySelector('[data-cash-reopen]');if(reopen)reopen.dataset.cashBank=String(item.banque_id||'');if(item.statut==='FERMEE'&&hasAccess('supprimer_caisse'))row.cells[row.cells.length-1].insertAdjacentHTML('beforeend',` <button type="button" class="icon-action-button" title="Supprimer la caisse" aria-label="Supprimer la caisse" data-cash-delete="${Number(item.caisse_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`);});
-    showPagination(body, 'cash', result.pagination, next=>loadCashRows(next,movementPage));
-    const movementBody=document.getElementById('cash-movement-rows');if(movementBody){movementBody.innerHTML=movementResult.rows.length?movementResult.rows.map(row=>`<tr data-report-date="${escapeHtml(String(row.movement_date).slice(0,10))}"><td>${escapeHtml(dateLabel(row.movement_date))}</td><td>${escapeHtml(row.cash_name)}</td><td>${escapeHtml(row.type==='ENTREE'?'Entrée':'Sortie')}</td><td>${escapeHtml(row.payment_mode||'Caisse')}</td><td>${escapeHtml(row.reason||'—')}</td><td>${row.reference_id?`#${Number(row.reference_id)}`:'—'}</td><td>${moneyCurrencyLabel(row.amount,row.monais)}</td></tr>`).join(''):'<tr><td colspan="7">Aucun mouvement de caisse enregistré.</td></tr>';const currencySummary=new Map((movementResult.summary||[]).map(item=>[item.monais,{entrees:Number(item.entrees),sorties:Number(item.sorties),operations:Number(item.operations)}]));let summaryBox=movementBody.closest('.panel').querySelector('#cash-currency-summary');if(!summaryBox){summaryBox=document.createElement('div');summaryBox.id='cash-currency-summary';summaryBox.style.overflow='auto';movementBody.closest('.panel').querySelector('.panel-header').after(summaryBox);}summaryBox.innerHTML=currencySummary.size?`<table class="data-table"><thead><tr><th>Monnaie</th><th>Total entrées</th><th>Total sorties</th><th>Solde net</th><th>Opérations</th></tr></thead><tbody>${[...currencySummary].map(([currency,item])=>`<tr><td>${escapeHtml(currency)}</td><td>${moneyCurrencyLabel(item.entrees,currency)}</td><td>${moneyCurrencyLabel(item.sorties,currency)}</td><td><strong>${moneyCurrencyLabel(item.entrees-item.sorties,currency)}</strong></td><td>${item.operations}</td></tr>`).join('')}</tbody></table>`:'<p class="panel-subtitle">Aucun mouvement enregistré.</p>';showPagination(movementBody,'cash-movements',movementResult.pagination,next=>loadCashRows(page,next));}const externalBody=document.getElementById('external-payment-rows');if(externalBody){externalBody.innerHTML=externalPayments.length?externalPayments.map(payment=>`<tr><td>${escapeHtml(dateLabel(payment.payment_date))}</td><td>${escapeHtml(payment.operation)}</td><td>${escapeHtml(payment.document_no)}</td><td>${escapeHtml(payment.branch_name)}</td><td>${escapeHtml(payment.payment_mode)}</td><td>${escapeHtml(payment.reference||'—')}</td><td>${moneyCurrencyLabel(payment.amount,payment.monais)}</td></tr>`).join(''):'<tr><td colspan="7">Aucun paiement externe enregistré.</td></tr>'; }
+    showPagination(body, 'cash', result.pagination, next=>loadCashRows(next,movementPage,externalPage));
+    const movementBody=document.getElementById('cash-movement-rows');if(movementBody){movementBody.innerHTML=movementResult.rows.length?movementResult.rows.map(row=>`<tr data-report-date="${escapeHtml(String(row.movement_date).slice(0,10))}" data-search-text="${escapeHtml([row.cashier||'',row.branch_name||'',row.invoice_no||'',row.client_name||'',row.bank_reference||'',row.monais||''].join(' '))}"><td><input type="checkbox" data-cash-print-select="${Number(row.mouvement_id)}" aria-label="Sélectionner la pièce du mouvement ${Number(row.mouvement_id)}"${selectedCashMovementReceipts.has(Number(row.mouvement_id))?' checked':''}></td><td>${escapeHtml(dateLabel(row.movement_date))}</td><td>${escapeHtml(row.cash_name)}</td><td>${escapeHtml(row.type==='ENTREE'?'Entrée':'Sortie')}</td><td>${escapeHtml(row.payment_mode||'Caisse')}</td><td>${escapeHtml([row.reason||'—',row.client_name?`Client : ${row.client_name}`:''].filter(Boolean).join(' · '))}</td><td>${row.invoice_no?escapeHtml(row.invoice_no):row.reference_id?`#${Number(row.reference_id)}`:'—'}</td><td>${moneyCurrencyLabel(row.amount,row.monais)}</td></tr>`).join(''):'<tr><td colspan="8">Aucun mouvement de caisse enregistré.</td></tr>';const currencySummary=new Map((movementResult.summary||[]).map(item=>[item.monais,{entrees:Number(item.entrees),sorties:Number(item.sorties),operations:Number(item.operations)}]));let summaryBox=movementBody.closest('.panel').querySelector('#cash-currency-summary');if(!summaryBox){summaryBox=document.createElement('div');summaryBox.id='cash-currency-summary';summaryBox.style.overflow='auto';movementBody.closest('.panel').querySelector('.panel-header').after(summaryBox);}summaryBox.innerHTML=currencySummary.size?`<table class="data-table"><thead><tr><th>Monnaie</th><th>Total entrées</th><th>Total sorties</th><th>Solde net</th><th>Opérations</th></tr></thead><tbody>${[...currencySummary].map(([currency,item])=>`<tr><td>${escapeHtml(currency)}</td><td>${moneyCurrencyLabel(item.entrees,currency)}</td><td>${moneyCurrencyLabel(item.sorties,currency)}</td><td><strong>${moneyCurrencyLabel(item.entrees-item.sorties,currency)}</strong></td><td>${item.operations}</td></tr>`).join('')}</tbody></table>`:'<p class="panel-subtitle">Aucun mouvement enregistré.</p>';showPagination(movementBody,'cash-movements',movementResult.pagination,next=>loadCashRows(page,next,externalPage));}const externalBody=document.getElementById('external-payment-rows');if(externalBody){externalBody.innerHTML=externalPayments.length?externalPayments.map(payment=>`<tr data-report-date="${escapeHtml(String(payment.payment_date).slice(0,10))}" data-search-text="${escapeHtml([payment.counterparty||'',payment.reference||'',payment.document_no||'',payment.payment_mode||'',payment.monais||''].join(' '))}"><td>${escapeHtml(dateLabel(payment.payment_date))}</td><td>${escapeHtml(payment.operation)}</td><td>${escapeHtml(payment.document_no)}</td><td>${escapeHtml(payment.counterparty||'—')}</td><td>${escapeHtml(payment.branch_name)}</td><td>${escapeHtml(payment.payment_mode)}</td><td>${escapeHtml(payment.reference||'—')}</td><td>${moneyCurrencyLabel(payment.amount,payment.monais)}</td></tr>`).join(''):'<tr><td colspan="8">Aucun paiement externe enregistré.</td></tr>';showPagination(externalBody,'external-payments',paymentResult.pagination,next=>loadCashRows(page,movementPage,next)); }
     const cashSummaryBox=document.getElementById('cash-currency-summary');
     if(cashSummaryBox){
       const balanceByCurrency=new Map((movementResult.summary||[]).map(item=>[item.monais,Number(item.solde)]));
@@ -1188,21 +1196,22 @@ async function loadCashRows(page = 1, movementPage = 1) {
       const actionCell = row?.cells[row.cells.length - 1];
       if (!actionCell || !hasAccess('modifier_caisse') || movement.reference_id !== null || movement.caisse_statut !== 'OUVERTE') return;
       if (movement.annulation_demande_id || movement.annulation_statut === 'EN_ATTENTE') {
-        actionCell.innerHTML = '<span class="status warning">En attente</span>';
+        actionCell.insertAdjacentHTML('beforeend', ' <span class="status warning">En attente</span>');
         return;
       }
       if (movement.annulation_statut === 'APPROUVEE') {
-        actionCell.innerHTML = '<span class="status danger">Annulée</span>';
+        actionCell.insertAdjacentHTML('beforeend', ' <span class="status danger">Annulée</span>');
         return;
       }
-      actionCell.innerHTML = `<button type="button" class="icon-action-button icon-action-danger" title="Demander l’annulation de cette opération" aria-label="Demander l’annulation de l’opération ${Number(movement.mouvement_id)}" data-cash-cancellation-request="${Number(movement.mouvement_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`;
+      actionCell.insertAdjacentHTML('beforeend', ` <button type="button" class="icon-action-button icon-action-danger" title="Demander l’annulation de cette opération" aria-label="Demander l’annulation de l’opération ${Number(movement.mouvement_id)}" data-cash-cancellation-request="${Number(movement.mouvement_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`);
     });
     addSalePaymentReceiptActions(document.getElementById('external-payment-rows'), externalPayments);
     ensureBankPanels();await loadBanks();ensureExchangeRatePanel();await loadExchangeRates();renderModuleNavigation();
-    if(hasAccess('modifier_caisse'))loadPendingSales();
+    if(hasAccess('modifier_caisse'))loadPendingSales(1, searchParams);
+    filterCurrentReport();
   } catch (error) { showLoadError('cash-rows', error, 9); }
 }
-async function loadPendingSales(page = 1) {
+async function loadPendingSales(page = 1, params = {}) {
   let panel = document.getElementById('pending-sales-panel');
   if (!panel) {
     const journal = document.getElementById('cash-movement-rows')?.closest('.panel');
@@ -1216,7 +1225,7 @@ async function loadPendingSales(page = 1) {
 
   const body = panel.querySelector('#pending-sale-rows');
   try {
-    const result = await fetchReportPage('pending-sales', page);
+    const result = await fetchReportPage('pending-sales', page, params);
     panel.querySelector('h2').textContent = `Ventes à encaisser (${result.pagination.total})`;
     body.innerHTML = result.rows.length ? result.rows.map(sale => {
       const balances = Array.isArray(sale.currency_totals) && sale.currency_totals.length ? sale.currency_totals : [{monais:sale.monais,total_amount:sale.total_amount,amount_paid:sale.amount_paid}];
@@ -1226,6 +1235,7 @@ async function loadPendingSales(page = 1) {
       return `<tr><td>${escapeHtml(sale.invoice_no)}</td><td>${escapeHtml(sale.client_name || 'Client comptoir')}</td><td>${escapeHtml(sale.seller || '—')}</td><td>${escapeHtml(dateLabel(sale.sale_date))}</td><td>${saleCurrencyAmounts(sale,'total_amount')}</td><td>${saleCurrencyAmounts(sale,'amount_paid')}</td><td><strong>${dueBalances.map(balance => moneyCurrencyLabel(balance.due,balance.monais)).join(' · ')}</strong></td><td><button type="button" data-sale-view="${Number(sale.vente_id)}">Voir</button> ${paymentButton}</td></tr>`;
     }).join('') : '<tr><td colspan="8">Aucune vente en attente de paiement.</td></tr>';
     showPagination(body, 'pending-sales', result.pagination, loadPendingSales);
+    filterCurrentReport();
   } catch (error) {
     body.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
   }
@@ -1255,6 +1265,94 @@ async function openCashForm(reopenCash=null){
   const syncMode=()=>{const needsBank=modeSelect.selectedOptions[0]?.dataset.modeCode==='BANK';bankLabel.hidden=!needsBank;bankSelect.required=needsBank;bankSelect.disabled=!needsBank;modal.querySelector('[data-open-cash-no-banks]').hidden=banks.length>0;submit.disabled=needsBank&&!banks.length;};
   modeSelect.addEventListener('change',syncMode);syncMode();modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());
   form.addEventListener('submit',async event=>{event.preventDefault();const data=Object.fromEntries(new FormData(form));if(reopenCash)data.mode_paiement_id=Number(reopenCash.mode_paiement_id);data.banque_id=data.banque_id?Number(data.banque_id):null;try{const response=await fetch('../backend/public/auth.php?action=open-cash',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(data)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Ouverture impossible.');modal.remove();showToast('Caisse ouverte.');loadCashRows();}catch(error){showToast(error.message);}});
+}
+async function openCashTransferForm() {
+  if (!hasAccess('modifier_caisse')) return;
+  let boxes = [];
+  try {
+    let page = 1;
+    let pages = 1;
+    while (page <= pages) {
+      const result = await fetchReportPage('cashboxes-list', page, {}, 100);
+      boxes.push(...result.rows);
+      pages = result.pagination.pages;
+      page++;
+    }
+  } catch (error) {
+    showToast(error.message);
+    return;
+  }
+  boxes = boxes.filter(box => box.statut === 'OUVERTE');
+  if (boxes.length < 2) {
+    showToast('Ouvrez au moins deux caisses avant de convertir un montant.');
+    return;
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'entity-modal';
+  modal.innerHTML = `<section class="entity-dialog"><h2>Convertir entre deux caisses</h2><p class="panel-subtitle">Le taux configuré de l’entreprise sera utilisé. Les soldes des deux caisses seront ajustés ensemble.</p><form class="entity-form"><label class="full">Caisse source<select name="source_caisse_id" required>${boxes.map(box => `<option value="${Number(box.caisse_id)}" data-currency="${escapeHtml(box.monais)}">${escapeHtml(box.name)} · ${escapeHtml(branchOptions.find(branch => Number(branch.succursale_id) === Number(box.succursale_id))?.name || '')} · ${moneyCurrencyLabel(box.solde_courant, box.monais)}</option>`).join('')}</select></label><label class="full">Caisse destinataire<select name="target_caisse_id" required></select></label><label class="full">Montant à convertir<input name="amount" type="number" min="0.01" step="0.01" required></label><p class="panel-subtitle full" data-cash-transfer-preview aria-live="polite">Choisissez les caisses et saisissez un montant pour afficher le calcul.</p><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit" disabled>Confirmer la conversion</button></div></form></section>`;
+  document.body.appendChild(modal);
+  const form = modal.querySelector('form');
+  const source = form.elements.namedItem('source_caisse_id');
+  const target = form.elements.namedItem('target_caisse_id');
+  const amount = form.elements.namedItem('amount');
+  const preview = modal.querySelector('[data-cash-transfer-preview]');
+  const submit = form.querySelector('.modal-submit');
+  let quoteRequest = 0;
+  const updateTargets = () => {
+    const selectedBox = boxes.find(box => Number(box.caisse_id) === Number(source.value));
+    const previousTarget = target.value;
+    const availableTargets = boxes.filter(box => Number(box.caisse_id) !== Number(source.value) && box.monais !== selectedBox?.monais);
+    target.innerHTML = availableTargets.map(box => `<option value="${Number(box.caisse_id)}">${escapeHtml(box.name)} · ${escapeHtml(branchOptions.find(branch => Number(branch.succursale_id) === Number(box.succursale_id))?.name || '')} · ${moneyCurrencyLabel(box.solde_courant, box.monais)}</option>`).join('');
+    if (availableTargets.some(box => String(box.caisse_id) === previousTarget)) target.value = previousTarget;
+    refreshQuote();
+  };
+  const refreshQuote = async () => {
+    const requestId = ++quoteRequest;
+    const enteredAmount = Number(amount.value);
+    submit.disabled = true;
+    if (!target.value || !Number.isFinite(enteredAmount) || enteredAmount <= 0) {
+      preview.textContent = 'Saisissez un montant positif et choisissez deux monnaies différentes.';
+      return;
+    }
+    preview.textContent = 'Calcul du taux…';
+    try {
+      const query = new URLSearchParams({action:'cash-transfer-preview',source_caisse_id:source.value,target_caisse_id:target.value,amount:String(enteredAmount)});
+      const response = await fetch(`../backend/public/auth.php?${query}`, {credentials:'include'});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Aperçu de conversion impossible.');
+      if (requestId !== quoteRequest) return;
+      const quote = result.data;
+      preview.textContent = `${moneyCurrencyLabel(enteredAmount, quote.source_currency)} seront retirés de la caisse source. ${moneyCurrencyLabel(quote.converted_amount, quote.target_currency)} seront ajoutés à la caisse destinataire. Taux appliqué : 1 ${quote.source_currency} = ${Number(quote.rate).toLocaleString('fr-FR',{maximumFractionDigits:10})} ${quote.target_currency}.`;
+      submit.disabled = false;
+    } catch (error) {
+      if (requestId !== quoteRequest) return;
+      preview.textContent = error.message;
+    }
+  };
+  source.addEventListener('change', updateTargets);
+  target.addEventListener('change', refreshQuote);
+  amount.addEventListener('input', refreshQuote);
+  modal.querySelector('.modal-cancel').addEventListener('click', () => modal.remove());
+  updateTargets();
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (submit.disabled) return;
+    const enteredAmount = Number(amount.value);
+    if (!window.confirm(`Confirmer le transfert de ${moneyCurrencyLabel(enteredAmount, source.selectedOptions[0]?.dataset.currency)} vers la caisse destinataire au taux affiché ?`)) return;
+    submit.disabled = true;
+    try {
+      const response = await fetch('../backend/public/auth.php?action=cash-transfer', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({source_caisse_id:Number(source.value),target_caisse_id:Number(target.value),amount:enteredAmount})});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Conversion impossible.');
+      modal.remove();
+      showToast(`Conversion enregistrée : ${moneyCurrencyLabel(result.data.source_amount, result.data.source_currency)} → ${moneyCurrencyLabel(result.data.converted_amount, result.data.target_currency)}.`);
+      loadCashRows();
+    } catch (error) {
+      preview.textContent = error.message;
+      submit.disabled = false;
+    }
+  });
 }
 async function openCashMovementForm(type = 'ENTREE') {
   if (!hasAccess('modifier_caisse')) return;
@@ -1319,7 +1417,7 @@ async function openCashMovementForm(type = 'ENTREE') {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form));
     data.banque_id = Number(cashSelect.selectedOptions[0]?.dataset.bankId || data.banque_id || 0) || null;
-    const printWindow = isEntry ? window.open('', '_blank') : null;
+    const printWindow = window.open('', '_blank');
     try {
       const response = await fetch('../backend/public/auth.php?action=create-cash-movement', {
         method: 'POST',
@@ -1331,13 +1429,13 @@ async function openCashMovementForm(type = 'ENTREE') {
       if (!response.ok || !result.success) throw new Error(result.message || 'Enregistrement impossible.');
       modal.remove();
       let successMessage = isEntry ? 'Entrée manuelle enregistrée.' : 'Sortie manuelle enregistrée.';
-      if (isEntry && !printWindow) {
-        successMessage = 'Entrée enregistrée, mais l’impression a été bloquée. Autorisez les fenêtres contextuelles ou imprimez le reçu depuis le journal de caisse.';
-      } else if (isEntry) {
+      if (!printWindow) {
+        successMessage = `${isEntry ? 'Entrée' : 'Sortie'} enregistrée, mais l’impression a été bloquée. Autorisez les fenêtres contextuelles ou imprimez la pièce depuis le journal de caisse.`;
+      } else {
         try {
-          await printCashEntryReceipt(Number(result.data.mouvement_id), printWindow);
+          await printCashMovementReceipt(Number(result.data.mouvement_id), printWindow);
         } catch (error) {
-          successMessage = `Entrée enregistrée, mais l’impression du reçu a échoué : ${error.message}`;
+          successMessage = `${isEntry ? 'Entrée' : 'Sortie'} enregistrée, mais l’impression de la pièce a échoué : ${error.message}`;
         }
       }
       showToast(successMessage);
@@ -1348,7 +1446,17 @@ async function openCashMovementForm(type = 'ENTREE') {
     }
   });
 }
-async function printCashEntryReceipt(movementId, printWindow) {
+function cashMovementReceiptMarkup(movement, compact = false) {
+  const isOut = movement.type === 'SORTIE';
+  const bankDetails = movement.bank_name
+    ? `<p><strong>Banque :</strong> ${escapeHtml(movement.bank_name)}${movement.bank_reference ? ` · <strong>Référence bancaire :</strong> ${escapeHtml(movement.bank_reference)}` : ''}</p>`
+    : '';
+  const signatures = isOut
+    ? '<div class="signature-row"><div>Signature du bénéficiaire</div><div>Signature et cachet du caissier</div></div>'
+    : '<div class="signature-row"><div>Signature du déposant</div><div>Signature et cachet du caissier</div></div>';
+  return `<section class="${compact ? 'cash-receipt-card' : ''}"><h2>${isOut ? 'BON DE SORTIE DE CAISSE' : 'REÇU D’ENTRÉE EN CAISSE'}</h2><p><strong>Pièce n° :</strong> ${Number(movement.mouvement_id)}</p><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason || '—')}</p><h2>Montant ${isOut ? 'sorti' : 'reçu'} : ${moneyCurrencyLabel(movement.amount, movement.monais)}</h2><p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p>${signatures}</section>`;
+}
+async function printCashMovementReceipt(movementId, printWindow) {
   if (movementId < 1) throw new Error('Identifiant du mouvement invalide.');
   if (!printWindow || printWindow.closed) throw new Error('La fenêtre d’impression est indisponible.');
   const movement = await fetchReportData('cash-movement-receipt', {mouvement_id: movementId});
@@ -1359,11 +1467,54 @@ async function printCashEntryReceipt(movementId, printWindow) {
     movement.rccm ? `RCCM : ${movement.rccm}` : '',
     movement.boite_postale ? `BP : ${movement.boite_postale}` : ''
   ].filter(Boolean).map(escapeHtml).join(' · ');
-  const bankDetails = movement.bank_name
-    ? `<p><strong>Banque :</strong> ${escapeHtml(movement.bank_name)}${movement.bank_reference ? ` · <strong>Référence bancaire :</strong> ${escapeHtml(movement.bank_reference)}` : ''}</p>`
-    : '';
-  const content = `<section><h2>REÇU D’ENTRÉE EN CAISSE</h2><p><strong>Reçu n° :</strong> ${Number(movement.mouvement_id)}</p><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason)}</p><h2>Montant reçu : ${moneyCurrencyLabel(movement.amount, movement.monais)}</h2><p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p><div class="signature-row"><div>Signature du déposant</div><div>Signature et cachet du caissier</div></div></section>`;
-  printReportInWindow(printWindow, `Reçu d’entrée en caisse n° ${Number(movement.mouvement_id)}`, content, companyDetails, 'portrait', true);
+  const title = movement.type === 'SORTIE' ? 'Bon de sortie de caisse' : 'Reçu d’entrée en caisse';
+  printReportInWindow(printWindow, `${title} n° ${Number(movement.mouvement_id)}`, cashMovementReceiptMarkup(movement), companyDetails, 'portrait', true);
+}
+function syncSelectedCashPrintButton() {
+  const journal = document.getElementById('cash-movement-rows')?.closest('.panel');
+  const header = journal?.querySelector('.panel-header');
+  if (!journal || !header) return;
+  let toolbar = journal.querySelector('[data-cash-print-toolbar]');
+  if (!toolbar) {
+    toolbar = document.createElement('div');
+    toolbar.className = 'cash-print-toolbar';
+    toolbar.dataset.cashPrintToolbar = '';
+    header.after(toolbar);
+  }
+  let button = journal.querySelector('[data-print-selected-cash]');
+  if (!button) {
+    button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.printSelectedCash = '';
+  }
+  button.className = 'cash-action-button cash-action-in';
+  if (button.parentElement !== toolbar) toolbar.append(button);
+  const selectedCount = selectedCashMovementReceipts.size;
+  button.hidden = selectedCount === 0;
+  button.style.display = selectedCount ? 'inline-flex' : 'none';
+  button.textContent = `Imprimer les pièces sélectionnées (${selectedCount})`;
+  toolbar.hidden = selectedCount === 0;
+}
+async function printSelectedCashMovementReceipts() {
+  const movementIds = [...selectedCashMovementReceipts];
+  if (!movementIds.length) return;
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    showToast('Autorisez les fenêtres contextuelles pour imprimer les pièces sélectionnées.');
+    return;
+  }
+  try {
+    const movements = await Promise.all(movementIds.map(mouvement_id => fetchReportData('cash-movement-receipt', {mouvement_id})));
+    const companyDetails = [movements[0].enterprise_email, movements[0].enterprise_phone, movements[0].enterprise_address, movements[0].rccm ? `RCCM : ${movements[0].rccm}` : '', movements[0].boite_postale ? `BP : ${movements[0].boite_postale}` : ''].filter(Boolean).map(escapeHtml).join(' · ');
+    const content = `<div class="cash-receipt-sheet"><div class="cash-receipt-sheet-heading"><h2>Pièces de caisse (${movements.length})</h2><p>${companyDetails || escapeHtml(movements[0].enterprise_name)}</p></div><div class="cash-receipt-grid-viewport"><div class="cash-receipt-grid">${movements.map(movement => cashMovementReceiptMarkup(movement, true)).join('')}</div></div></div>`;
+    printReportInWindow(printWindow, `Pièces de caisse (${movements.length})`, content, '', 'landscape');
+    movementIds.forEach(id => selectedCashMovementReceipts.delete(id));
+    document.querySelectorAll('[data-cash-print-select]').forEach(input => { input.checked = false; });
+    syncSelectedCashPrintButton();
+  } catch (error) {
+    if (!printWindow.closed) printWindow.close();
+    showToast(`Impression groupée impossible : ${error.message}`);
+  }
 }
 function renderPurchaseRow(item) {
   const unit = item.unit_abbreviation || item.unit_name || '';
@@ -2805,6 +2956,15 @@ function printReportInWindow(printWindow, title, content, note = '', orientation
       window.setTimeout(resolve, 3000);
     })));
     if (printWindow.closed) return;
+    const receiptViewport = printWindow.document.querySelector('.cash-receipt-grid-viewport');
+    const receiptGrid = printWindow.document.querySelector('.cash-receipt-grid');
+    if (receiptViewport && receiptGrid) {
+      const availableHeight = receiptViewport.clientHeight;
+      const contentHeight = receiptGrid.scrollHeight;
+      if (availableHeight > 0 && contentHeight > availableHeight) {
+        receiptGrid.style.transform = `scale(${availableHeight / contentHeight})`;
+      }
+    }
     printWindow.focus();
     window.setTimeout(() => {
       if (!printWindow.closed) printWindow.print();
@@ -2814,7 +2974,11 @@ function printReportInWindow(printWindow, title, content, note = '', orientation
   printWindow.addEventListener('load', startPrinting, {once:true});
   printWindow.document.open();
   let documentHtml = reportDocument(title, content, note, orientation);
+  if (content.includes('cash-receipt-sheet')) {
+    documentHtml = documentHtml.replace('<body>', '<body class="cash-receipt-print">');
+  }
   if (centerContent) documentHtml = documentHtml.replace('</style>', 'header{flex-direction:column;align-items:center;text-align:center}header>div,.report-meta{width:100%;text-align:center}main{text-align:center}main h2{margin-left:auto;margin-right:auto}</style>');
+  if (content.includes('cash-receipt-sheet')) documentHtml = documentHtml.replace('</style>', '@page{size:A4 landscape;margin:5mm}body.cash-receipt-print>header,body.cash-receipt-print>.report-company-footer{display:none}body.cash-receipt-print>main{margin:0;padding:0}.cash-receipt-sheet{height:198mm;width:100%;display:flex;flex-direction:column;overflow:hidden}.cash-receipt-sheet-heading{flex:0 0 auto;text-align:center;margin:0 0 2mm}.cash-receipt-sheet-heading h2{font-size:12px;margin:0 0 2px}.cash-receipt-sheet-heading p{font-size:8px;margin:0}.cash-receipt-grid-viewport{flex:1 1 auto;min-height:0;overflow:hidden;position:relative}.cash-receipt-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:2mm;transform-origin:top left}.cash-receipt-card{border:1px solid #9aa9a1;padding:2mm;break-inside:avoid;page-break-inside:avoid}.cash-receipt-card h2{font-size:10px;margin:1mm 0}.cash-receipt-card p{font-size:8px;margin:1mm 0}.cash-receipt-card .signature-row{margin-top:4mm;gap:2mm}.cash-receipt-card .signature-row div{font-size:7px;padding-top:1mm}</style>');
   if (orientation === 'landscape') documentHtml = documentHtml.replace('</style>', '@media print{.stock-card-report .dashboard-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.stock-card-report .stat-card{margin:0}.stock-card-report .report-table th,.stock-card-report .report-table td{padding:4px;font-size:9px}.stock-card-report .report-table{table-layout:fixed}.stock-card-report .report-table th,.stock-card-report .report-table td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.stock-card-page{display:flex;flex-direction:column;break-after:page;page-break-after:always;min-height:184mm;break-inside:avoid}.stock-card-page--first{min-height:126mm}.stock-card-page:last-child{break-after:auto;page-break-after:auto}.stock-page-footer{margin-top:auto;break-inside:avoid}.stock-page-footer p{margin:3px 0;padding:4px;background:#eaf3ee}.stock-carryover{padding:5px;background:#fff6dc}}</style>');
   const logo = companyLogoMarkup();
   if (logo) documentHtml = documentHtml.replace('<header>', `<header>${logo}`);
@@ -3124,20 +3288,22 @@ document.addEventListener('click', async event => {
     return;
   }
   if (event.target.closest('[data-report-close]')) { event.target.closest('.report-modal')?.remove(); return; }
+  if (event.target.closest('[data-print-selected-cash]')) { await printSelectedCashMovementReceipts(); return; }
+  if (event.target.closest('[data-cash-transfer-open]')) { await openCashTransferForm(); return; }
   const cashSalePayButton=event.target.closest('[data-sale-pay-cash]');if(cashSalePayButton){await confirmSalePayment(cashSalePayButton);return;}
   const saleInvoiceButton=event.target.closest('[data-sale-invoice],[data-sale-receipt]');
   if(saleInvoiceButton){await printSaleInvoice(saleInvoiceButton);return;}
   const salePaymentReceiptButton=event.target.closest('[data-sale-payment-receipt]');
   if(salePaymentReceiptButton){await printSalePaymentReceipt(salePaymentReceiptButton);return;}
-  const cashEntryReceiptButton = event.target.closest('[data-cash-entry-receipt]');
-  if (cashEntryReceiptButton) {
+  const cashMovementReceiptButton = event.target.closest('[data-cash-movement-receipt]');
+  if (cashMovementReceiptButton) {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       showToast('Autorisez les fenêtres contextuelles pour imprimer le reçu.');
       return;
     }
     try {
-      await printCashEntryReceipt(Number(cashEntryReceiptButton.dataset.cashEntryReceipt), printWindow);
+      await printCashMovementReceipt(Number(cashMovementReceiptButton.dataset.cashMovementReceipt), printWindow);
     } catch (error) {
       if (!printWindow.closed) printWindow.close();
       showToast(`Impression du reçu impossible : ${error.message}`);
@@ -3266,9 +3432,21 @@ document.addEventListener('click', async event => {
   }
 });
 document.addEventListener('input', event => {
-  if (event.target.matches('[data-report-from],[data-report-to],[data-report-search]')) filterCurrentReport();
+  if (event.target.matches('[data-report-from],[data-report-to],[data-report-search]')) {
+    filterCurrentReport();
+    if (currentViewName === 'cash' && event.target.matches('[data-report-search]')) {
+      clearTimeout(cashSearchTimer);
+      cashSearchTimer = setTimeout(() => loadCashRows(1, 1, 1), 250);
+    }
+  }
 });
 document.addEventListener('change', event => {
+  if (event.target.matches('[data-cash-print-select]')) {
+    const movementId = Number(event.target.dataset.cashPrintSelect);
+    if (event.target.checked) selectedCashMovementReceipts.add(movementId);
+    else selectedCashMovementReceipts.delete(movementId);
+    syncSelectedCashPrintButton();
+  }
   if (event.target.matches('#accounting-report-type, #accounting-from, #accounting-to, #accounting-currency, #accounting-account')) {
     const printButton = document.querySelector('[data-account-report-print]');
     if (printButton) printButton.disabled = true;

@@ -30,7 +30,7 @@ final class CashMovementService
             $movement->execute();
             $row = $movement->get_result()->fetch_assoc();
             if (!$row) throw new RuntimeException('Opération de caisse introuvable dans votre périmètre.');
-            if ($row['reference_id'] !== null) throw new RuntimeException('Les paiements liés à une vente ou à un fournisseur doivent être annulés depuis leur document.');
+            if ($row['reference_id'] !== null) throw new RuntimeException('Cette opération est liée à une vente, un fournisseur ou à un transfert et ne peut pas être annulée séparément.');
             if ($row['statut'] !== 'OUVERTE') throw new RuntimeException('Seules les opérations d’une caisse ouverte peuvent faire l’objet d’une demande.');
 
             $previous = $this->db->prepare('SELECT statut FROM demandes_annulation_mouvements_caisse WHERE entreprise_id=? AND mouvement_id=? AND statut IN (\'EN_ATTENTE\',\'APPROUVEE\') ORDER BY demande_id DESC LIMIT 1');

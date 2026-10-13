@@ -109,6 +109,8 @@
 .cash-action-in:hover,.cash-submit-in:hover{background:#d5ecdf;border-color:#83c1a7}
 .cash-action-out,.cash-submit-out{background:#fff0eb;color:#b8533c;border-color:#f2c5b6}
 .cash-action-out:hover,.cash-submit-out:hover{background:#ffe4da;border-color:#e7a18b}
+.cash-print-toolbar{display:flex;justify-content:flex-end;margin:-8px 0 14px}
+.cash-print-toolbar[hidden]{display:none!important}
 .data-table td button[data-cash-reopen]{display:inline-flex;align-items:center;gap:6px;padding:7px 11px;border:1px solid #b9dfd1;border-radius:7px;background:#e2f2eb;color:#176b56;font-size:11px;font-weight:700;white-space:nowrap}
 .data-table td button[data-cash-reopen]:hover{background:#d5ecdf;border-color:#83c1a7}
 .data-table td button.icon-action-button{display:inline-grid;place-items:center;width:32px;height:32px;padding:6px;border:1px solid #b9dfd1;border-radius:8px;background:#e2f2eb;color:#176b56}

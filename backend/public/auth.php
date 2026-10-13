@@ -11,6 +11,7 @@ require_once __DIR__ . '/../Services/ProcurementService.php';
 require_once __DIR__ . '/../Services/SalesService.php';
 require_once __DIR__ . '/../Services/CompanyProfileService.php';
 require_once __DIR__ . '/../Services/ExchangeRateService.php';
+require_once __DIR__ . '/../Services/CashTransferService.php';
 
 use AlbaStock\Core\JsonResponse;
 use AlbaStock\Core\Session;
@@ -21,6 +22,7 @@ use AlbaStock\Services\ProcurementService;
 use AlbaStock\Services\SalesService;
 use AlbaStock\Services\CompanyProfileService;
 use AlbaStock\Services\ExchangeRateService;
+use AlbaStock\Services\CashTransferService;
 use AlbaStock\Core\Database;
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -337,6 +339,43 @@ try {
             JsonResponse::error('Opération de taux de change invalide.', 422);
         }
         JsonResponse::send(['success' => true, 'data' => $rateService->list($enterpriseId)]);
+    }
+
+    if ($action === 'cash-transfer-preview' && $method === 'GET') {
+        $actor = AuthGuard::requireAuthenticated();
+        if (!$actor || $actor['type'] !== 'user') JsonResponse::error('Action réservée à un utilisateur d’entreprise.', 403);
+        Authorization::requirePermission($actor, 'modifier_caisse');
+        $amount = $_GET['amount'] ?? null;
+        if (!is_numeric($amount)) JsonResponse::error('Saisissez un montant positif valide.', 422);
+        $transferService = new CashTransferService(Database::connection(), new ExchangeRateService(Database::connection()));
+        $branchId = Authorization::branchId($actor, isset($_GET['succursale_id']) ? (int) $_GET['succursale_id'] : null);
+        $quote = $transferService->quote(
+            (int) $actor['entreprise_id'],
+            (int) ($_GET['source_caisse_id'] ?? 0),
+            (int) ($_GET['target_caisse_id'] ?? 0),
+            (float) $amount,
+            $branchId
+        );
+        JsonResponse::send(['success' => true, 'data' => $quote]);
+    }
+
+    if ($action === 'cash-transfer' && $method === 'POST') {
+        $actor = AuthGuard::requireAuthenticated();
+        if (!$actor || $actor['type'] !== 'user') JsonResponse::error('Action réservée à un utilisateur d’entreprise.', 403);
+        Authorization::requirePermission($actor, 'modifier_caisse');
+        $body = json_decode((string) file_get_contents('php://input'), true);
+        if (!is_array($body) || !is_numeric($body['amount'] ?? null)) JsonResponse::error('Montant de conversion invalide.', 422);
+        $transferService = new CashTransferService(Database::connection(), new ExchangeRateService(Database::connection()));
+        $branchId = Authorization::branchId($actor, isset($body['succursale_id']) ? (int) $body['succursale_id'] : null);
+        $result = $transferService->transfer(
+            (int) $actor['entreprise_id'],
+            (int) $actor['id'],
+            (int) ($body['source_caisse_id'] ?? 0),
+            (int) ($body['target_caisse_id'] ?? 0),
+            (float) $body['amount'],
+            $branchId
+        );
+        JsonResponse::send(['success' => true, 'data' => $result], 201);
     }
 
     if ($action === 'currencies' && $method === 'GET') {
