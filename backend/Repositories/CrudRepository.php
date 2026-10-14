@@ -3,7 +3,10 @@ declare(strict_types=1);
 
 namespace AlbaStock\Repositories;
 
+require_once __DIR__ . '/../Core/PhoneNumberNormalizer.php';
+
 use AlbaStock\Core\Database;
+use AlbaStock\Core\PhoneNumberNormalizer;
 use InvalidArgumentException;
 use mysqli;
 use mysqli_stmt;
@@ -129,7 +132,13 @@ final class CrudRepository
     /** Ignore les champs arbitraires envoyés par le navigateur. */
     private function filter(array $data): array
     {
-        return array_filter($data, fn (string $key): bool => in_array($key, $this->allowedColumns, true), ARRAY_FILTER_USE_KEY);
+        $data = array_filter($data, fn (string $key): bool => in_array($key, $this->allowedColumns, true), ARRAY_FILTER_USE_KEY);
+        foreach (['phone', 'telephone', 'tel'] as $phoneField) {
+            if (array_key_exists($phoneField, $data) && $data[$phoneField] !== null) {
+                $data[$phoneField] = PhoneNumberNormalizer::normalize((string) $data[$phoneField]);
+            }
+        }
+        return $data;
     }
 
     /** Empêche qu'un nom SQL dynamique contienne du code SQL. */

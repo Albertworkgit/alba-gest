@@ -3,7 +3,10 @@ declare(strict_types=1);
 
 namespace AlbaStock\Services;
 
+require_once __DIR__ . '/../Core/PhoneNumberNormalizer.php';
+
 use AlbaStock\Core\Database;
+use AlbaStock\Core\PhoneNumberNormalizer;
 use AlbaStock\Core\Session;
 use mysqli;
 use RuntimeException;
@@ -649,7 +652,7 @@ final class AuthService
     {
         $name = trim((string) ($data['enterprise_name'] ?? ''));
         $email = trim((string) ($data['email'] ?? ''));
-        $phone = trim((string) ($data['phone'] ?? ''));
+        $phone = PhoneNumberNormalizer::normalize((string) ($data['phone'] ?? ''));
         $address = trim((string) ($data['address'] ?? ''));
         $fullName = trim((string) ($data['full_name'] ?? ''));
         $username = trim((string) ($data['username'] ?? ''));

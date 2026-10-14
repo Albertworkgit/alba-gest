@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 namespace AlbaStock\Services;
 
+require_once __DIR__ . '/../Core/PhoneNumberNormalizer.php';
+
+use AlbaStock\Core\PhoneNumberNormalizer;
 use mysqli;
 use RuntimeException;
 
@@ -30,7 +33,7 @@ final class CompanyProfileService
     {
         $name = trim((string) ($data['name'] ?? ''));
         $email = trim((string) ($data['email'] ?? ''));
-        $phone = trim((string) ($data['phone'] ?? ''));
+        $phone = PhoneNumberNormalizer::normalize((string) ($data['phone'] ?? ''));
         $address = trim((string) ($data['address'] ?? ''));
         $rccm = trim((string) ($data['rccm'] ?? ''));
         $boitePostale = trim((string) ($data['boite_postale'] ?? ''));
@@ -40,7 +43,7 @@ final class CompanyProfileService
         if ($email !== '' && (!filter_var($email, FILTER_VALIDATE_EMAIL) || mb_strlen($email, 'UTF-8') > 100)) {
             throw new RuntimeException('L’adresse électronique de l’entreprise est invalide.');
         }
-        if (mb_strlen($phone, 'UTF-8') > 20) throw new RuntimeException('Le numéro de téléphone est trop long.');
+        if (mb_strlen($phone, 'UTF-8') > 23) throw new RuntimeException('Le numéro de téléphone est trop long.');
 
         if (mb_strlen($rccm, 'UTF-8') > 100 || mb_strlen($boitePostale, 'UTF-8') > 100) throw new RuntimeException('Le RCCM et la BP sont limités à 100 caractères.');
         $lookup = $this->db->prepare('SELECT logo, cachet FROM entreprises WHERE entreprise_id = ? LIMIT 1');

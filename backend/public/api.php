@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../Core/Database.php';
+require_once __DIR__ . '/../Core/PhoneNumberNormalizer.php';
 require_once __DIR__ . '/../Core/JsonResponse.php';
 require_once __DIR__ . '/../Core/Session.php';
 require_once __DIR__ . '/../Core/AuthGuard.php';

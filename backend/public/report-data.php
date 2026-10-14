@@ -269,24 +269,81 @@ try {
         JsonResponse::send(['success'=>true,'data'=>$query->get_result()->fetch_all(MYSQLI_ASSOC)]);
     }
 
+    if ($action === 'cash-debts') {
+        Authorization::requirePermission($user, 'voir_caisse');
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $perPage = min(100, max(1, (int) ($_GET['per_page'] ?? 10)));
+        $offset = ($page - 1) * $perPage;
+        $search = trim((string) ($_GET['recherche'] ?? ''));
+        $from = trim((string) ($_GET['date_debut'] ?? ''));
+        $to = trim((string) ($_GET['date_fin'] ?? ''));
+        if (mb_strlen($search, 'UTF-8') > 120) JsonResponse::error('La recherche est limitée à 120 caractères.', 422);
+        foreach ([$from, $to] as $date) {
+            if ($date !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) JsonResponse::error('Date de rapport invalide.', 422);
+        }
+        $joins = ' FROM dettes_caisse d JOIN succursales s ON s.succursale_id=d.succursale_id AND s.entreprise_id=d.entreprise_id LEFT JOIN (SELECT entreprise_id,dette_id,SUM(montant) AS paye FROM paiements_dettes_caisse GROUP BY entreprise_id,dette_id) p ON p.entreprise_id=d.entreprise_id AND p.dette_id=d.dette_id';
+        $where = ' WHERE d.entreprise_id=?';
+        $params = [$enterpriseId];
+        if ($branchId !== null) {
+            $where .= ' AND d.succursale_id=?';
+            $params[] = $branchId;
+        }
+        if ($from !== '') {
+            $where .= ' AND DATE(d.date_dette)>=?';
+            $params[] = $from;
+        }
+        if ($to !== '') {
+            $where .= ' AND DATE(d.date_dette)<=?';
+            $params[] = $to;
+        }
+        $searchFields = ['d.beneficiaire', 'd.telephone', 'd.description', 'd.monais', 's.name', 'CAST(d.montant AS CHAR)', 'CAST(COALESCE(p.paye,0) AS CHAR)', 'CAST(d.date_dette AS CHAR)', 'CAST(d.dette_id AS CHAR)'];
+        if ($search !== '') {
+            $where .= ' AND (' . implode(' LIKE ? OR ', $searchFields) . ' LIKE ?)';
+            foreach ($searchFields as $_) $params[] = '%' . $search . '%';
+        }
+        $count = $db->prepare('SELECT COUNT(*) AS total' . $joins . $where);
+        $bindParams($count, $params);
+        $count->execute();
+        $total = (int) ($count->get_result()->fetch_assoc()['total'] ?? 0);
+
+        $summary = $db->prepare('SELECT d.monais,COUNT(*) AS dettes,COALESCE(SUM(d.montant),0) AS montant_total,COALESCE(SUM(COALESCE(p.paye,0)),0) AS montant_rembourse,COALESCE(SUM(GREATEST(d.montant-COALESCE(p.paye,0),0)),0) AS solde_restant' . $joins . $where . ' GROUP BY d.monais ORDER BY d.monais');
+        $bindParams($summary, $params);
+        $summary->execute();
+        $summaryRows = $summary->get_result()->fetch_all(MYSQLI_ASSOC);
+
+        $query = $db->prepare('SELECT d.dette_id,d.succursale_id,d.beneficiaire,d.telephone,d.description,d.monais,d.montant,d.date_dette,s.name AS branch_name,COALESCE(p.paye,0) AS montant_rembourse,GREATEST(d.montant-COALESCE(p.paye,0),0) AS solde_restant,CASE WHEN COALESCE(p.paye,0)>=d.montant THEN \'REMBOURSEE\' ELSE \'EN_COURS\' END AS statut' . $joins . $where . ' ORDER BY d.date_dette DESC,d.dette_id DESC LIMIT ? OFFSET ?');
+        $bindParams($query, [...$params, $perPage, $offset]);
+        $query->execute();
+        JsonResponse::send(['success' => true, 'data' => $query->get_result()->fetch_all(MYSQLI_ASSOC), 'summary' => $summaryRows, 'pagination' => ['page' => $page, 'per_page' => $perPage, 'total' => $total, 'pages' => max(1, (int) ceil($total / $perPage))]]);
+    }
+
     if ($action === 'cash-movements') {
         Authorization::requirePermission($user,'voir_caisse');
         $page=max(1,(int)($_GET['page']??1));$perPage=min(100,max(1,(int)($_GET['per_page']??10)));$offset=($page-1)*$perPage;
         $search = trim((string) ($_GET['recherche'] ?? ''));
         if (mb_strlen($search, 'UTF-8') > 120) JsonResponse::error('La recherche est limitée à 120 caractères.', 422);
         $where='m.entreprise_id=?'.($branchId!==null?' AND c.succursale_id=?':'');
-        $cashMovementJoins = "JOIN caisses c ON c.caisse_id=m.caisse_id AND c.entreprise_id=m.entreprise_id JOIN succursales s ON s.succursale_id=c.succursale_id AND s.entreprise_id=c.entreprise_id JOIN types_caisses t ON t.type_caisse_id=c.type_caisse_id AND t.entreprise_id=c.entreprise_id LEFT JOIN modes_paiement pm ON pm.mode_paiement_id=m.mode_paiement_id LEFT JOIN banques b ON b.banque_id=m.banque_id AND b.entreprise_id=m.entreprise_id LEFT JOIN users u ON u.user_id=m.user_id AND u.entreprise_id=m.entreprise_id LEFT JOIN ventes sv ON sv.vente_id=m.reference_id AND sv.entreprise_id=m.entreprise_id AND m.reason LIKE 'Paiement vente %' LEFT JOIN clients cl ON cl.client_id=sv.client_id AND cl.entreprise_id=sv.entreprise_id";
-        $movementSearchFields = ['m.reason', 'm.bank_reference', 'c.name', 's.name', 'pm.name', 'b.name', 't.code', 'u.full_name', 'sv.invoice_no', "COALESCE(NULLIF(sv.client_comptoir_name,''),cl.name)", 'm.type', 'CAST(m.amount AS CHAR)', 'CAST(m.movement_date AS CHAR)', 'CAST(m.mouvement_id AS CHAR)', 'CAST(m.reference_id AS CHAR)'];
+        $from = trim((string) ($_GET['date_debut'] ?? ''));
+        $to = trim((string) ($_GET['date_fin'] ?? ''));
+        foreach ([$from, $to] as $date) {
+            if ($date !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) JsonResponse::error('Date de rapport invalide.', 422);
+        }
+        if ($from !== '') $where .= ' AND DATE(m.movement_date)>=?';
+        if ($to !== '') $where .= ' AND DATE(m.movement_date)<=?';
+        $cashMovementJoins = "JOIN caisses c ON c.caisse_id=m.caisse_id AND c.entreprise_id=m.entreprise_id JOIN succursales s ON s.succursale_id=c.succursale_id AND s.entreprise_id=c.entreprise_id JOIN types_caisses t ON t.type_caisse_id=c.type_caisse_id AND t.entreprise_id=c.entreprise_id LEFT JOIN modes_paiement pm ON pm.mode_paiement_id=m.mode_paiement_id LEFT JOIN banques b ON b.banque_id=m.banque_id AND b.entreprise_id=m.entreprise_id LEFT JOIN users u ON u.user_id=m.user_id AND u.entreprise_id=m.entreprise_id LEFT JOIN ventes sv ON sv.vente_id=m.reference_id AND sv.entreprise_id=m.entreprise_id AND m.reason LIKE 'Paiement vente %' LEFT JOIN clients cl ON cl.client_id=sv.client_id AND cl.entreprise_id=sv.entreprise_id LEFT JOIN dettes_caisse d ON d.dette_id=m.dette_id AND d.entreprise_id=m.entreprise_id LEFT JOIN paiements_dettes_caisse dp ON dp.mouvement_id=m.mouvement_id AND dp.entreprise_id=m.entreprise_id";
+        $movementSearchFields = ['m.reason', 'm.bank_reference', 'c.name', 's.name', 'pm.name', 'b.name', 't.code', 'u.full_name', 'sv.invoice_no', "COALESCE(NULLIF(sv.client_comptoir_name,''),cl.name)", 'd.beneficiaire', 'd.telephone', 'd.description', 'm.type', 'CAST(m.amount AS CHAR)', 'CAST(m.movement_date AS CHAR)', 'CAST(m.mouvement_id AS CHAR)', 'CAST(m.reference_id AS CHAR)'];
         if ($search !== '') $where .= ' AND (' . implode(' LIKE ? OR ', $movementSearchFields) . ' LIKE ?)';
         $movementParams = [$enterpriseId];
         if ($branchId !== null) $movementParams[] = $branchId;
+        if ($from !== '') $movementParams[] = $from;
+        if ($to !== '') $movementParams[] = $to;
         if ($search !== '') foreach ($movementSearchFields as $_) $movementParams[] = '%' . $search . '%';
         $count=$db->prepare('SELECT COUNT(*) AS total FROM mouvements_caisse m '.$cashMovementJoins.' WHERE '.$where);
         $bindParams($count, $movementParams);$count->execute();$total=(int)($count->get_result()->fetch_assoc()['total']??0);
         $summaryBranchFilter=$branchId!==null?' AND c.succursale_id=?':'';
         $summarySql='SELECT t.code AS monais,COALESCE(SUM(mov.entrees),0) AS entrees,COALESCE(SUM(mov.sorties),0) AS sorties,COALESCE(SUM(CASE WHEN c.statut="OUVERTE" THEN c.montant ELSE 0 END),0) AS solde,COALESCE(SUM(mov.operations),0) AS operations FROM caisses c JOIN types_caisses t ON t.type_caisse_id=c.type_caisse_id AND t.entreprise_id=c.entreprise_id LEFT JOIN (SELECT entreprise_id,caisse_id,SUM(CASE WHEN type="ENTREE" THEN amount ELSE 0 END) AS entrees,SUM(CASE WHEN type="SORTIE" THEN amount ELSE 0 END) AS sorties,COUNT(*) AS operations FROM mouvements_caisse WHERE entreprise_id=? GROUP BY entreprise_id,caisse_id) mov ON mov.caisse_id=c.caisse_id AND mov.entreprise_id=c.entreprise_id WHERE c.entreprise_id=?'.$summaryBranchFilter.' GROUP BY t.code ORDER BY t.code';
         $summary=$db->prepare($summarySql);if($branchId===null)$summary->bind_param('ii',$enterpriseId,$enterpriseId);else$summary->bind_param('iii',$enterpriseId,$enterpriseId,$branchId);$summary->execute();$summaryRows=$summary->get_result()->fetch_all(MYSQLI_ASSOC);
-        $sql='SELECT m.mouvement_id,m.type,m.amount,m.reason,m.reference_id,m.bank_reference,m.movement_date,pm.name AS payment_mode,b.name AS bank_name,c.name AS cash_name,s.name AS branch_name,c.statut AS caisse_statut,t.code AS monais,t.symbole AS currency_symbol,u.full_name AS cashier,sv.vente_id AS vente_id,sv.invoice_no AS invoice_no,COALESCE(NULLIF(sv.client_comptoir_name,\'\'),cl.name) AS client_name,(SELECT r.statut FROM demandes_annulation_mouvements_caisse r WHERE r.entreprise_id=m.entreprise_id AND r.mouvement_id=m.mouvement_id ORDER BY r.demande_id DESC LIMIT 1) AS annulation_statut,(SELECT r.demande_id FROM demandes_annulation_mouvements_caisse r WHERE r.entreprise_id=m.entreprise_id AND r.mouvement_id=m.mouvement_id AND r.statut=\'EN_ATTENTE\' LIMIT 1) AS annulation_demande_id FROM mouvements_caisse m '.$cashMovementJoins.' WHERE '.$where.' ORDER BY m.movement_date DESC,m.mouvement_id DESC LIMIT ? OFFSET ?';
+        $sql='SELECT m.mouvement_id,m.type,m.amount,m.reason,m.reference_id,m.dette_id,m.dette_operation,m.bank_reference,m.movement_date,pm.name AS payment_mode,b.name AS bank_name,c.name AS cash_name,s.name AS branch_name,c.statut AS caisse_statut,t.code AS monais,t.symbole AS currency_symbol,u.full_name AS cashier,sv.vente_id AS vente_id,sv.invoice_no AS invoice_no,COALESCE(NULLIF(sv.client_comptoir_name,\'\'),cl.name) AS client_name,d.beneficiaire AS dette_beneficiaire,d.telephone AS dette_telephone,d.description AS dette_description,d.monais AS dette_monais,dp.montant AS dette_montant_impute,dp.monais_recue AS dette_monais_recue,dp.taux_change AS dette_taux_change,(SELECT r.statut FROM demandes_annulation_mouvements_caisse r WHERE r.entreprise_id=m.entreprise_id AND r.mouvement_id=m.mouvement_id ORDER BY r.demande_id DESC LIMIT 1) AS annulation_statut,(SELECT r.demande_id FROM demandes_annulation_mouvements_caisse r WHERE r.entreprise_id=m.entreprise_id AND r.mouvement_id=m.mouvement_id AND r.statut=\'EN_ATTENTE\' LIMIT 1) AS annulation_demande_id FROM mouvements_caisse m '.$cashMovementJoins.' WHERE '.$where.' ORDER BY m.movement_date DESC,m.mouvement_id DESC LIMIT ? OFFSET ?';
         $q=$db->prepare($sql);$bindParams($q, [...$movementParams, $perPage, $offset]);$q->execute();
         JsonResponse::send(['success'=>true,'data'=>$q->get_result()->fetch_all(MYSQLI_ASSOC),'summary'=>$summaryRows,'pagination'=>['page'=>$page,'per_page'=>$perPage,'total'=>$total,'pages'=>max(1,(int)ceil($total/$perPage))]]);
     }
@@ -296,7 +353,7 @@ try {
         $movementId = (int) ($_GET['mouvement_id'] ?? 0);
         if ($movementId < 1) JsonResponse::error('Identifiant de mouvement invalide.', 422);
 
-        $sql = 'SELECT m.mouvement_id,m.type,m.amount,m.reason,m.bank_reference,m.movement_date,pm.name AS payment_mode,b.name AS bank_name,c.name AS cash_name,t.code AS monais,t.symbole AS currency_symbol,s.name AS branch_name,u.full_name AS cashier,e.name AS enterprise_name,e.email AS enterprise_email,e.phone AS enterprise_phone,e.address AS enterprise_address,e.rccm,e.boite_postale FROM mouvements_caisse m JOIN caisses c ON c.caisse_id=m.caisse_id AND c.entreprise_id=m.entreprise_id JOIN types_caisses t ON t.type_caisse_id=c.type_caisse_id AND t.entreprise_id=c.entreprise_id JOIN succursales s ON s.succursale_id=c.succursale_id AND s.entreprise_id=c.entreprise_id LEFT JOIN modes_paiement pm ON pm.mode_paiement_id=m.mode_paiement_id LEFT JOIN banques b ON b.banque_id=m.banque_id AND b.entreprise_id=m.entreprise_id LEFT JOIN users u ON u.user_id=m.user_id AND u.entreprise_id=m.entreprise_id JOIN entreprises e ON e.entreprise_id=m.entreprise_id WHERE m.mouvement_id=? AND m.entreprise_id=?';
+        $sql = 'SELECT m.mouvement_id,m.type,m.amount,m.reason,m.bank_reference,m.movement_date,pm.name AS payment_mode,b.name AS bank_name,c.name AS cash_name,t.code AS monais,t.symbole AS currency_symbol,s.name AS branch_name,u.full_name AS cashier,e.name AS enterprise_name,e.email AS enterprise_email,e.phone AS enterprise_phone,e.address AS enterprise_address,e.rccm,e.boite_postale,dp.montant AS dette_montant_impute,d.monais AS dette_monais,dp.taux_change AS dette_taux_change FROM mouvements_caisse m JOIN caisses c ON c.caisse_id=m.caisse_id AND c.entreprise_id=m.entreprise_id JOIN types_caisses t ON t.type_caisse_id=c.type_caisse_id AND t.entreprise_id=c.entreprise_id JOIN succursales s ON s.succursale_id=c.succursale_id AND s.entreprise_id=c.entreprise_id LEFT JOIN modes_paiement pm ON pm.mode_paiement_id=m.mode_paiement_id LEFT JOIN banques b ON b.banque_id=m.banque_id AND b.entreprise_id=m.entreprise_id LEFT JOIN users u ON u.user_id=m.user_id AND u.entreprise_id=m.entreprise_id LEFT JOIN paiements_dettes_caisse dp ON dp.mouvement_id=m.mouvement_id AND dp.entreprise_id=m.entreprise_id LEFT JOIN dettes_caisse d ON d.dette_id=dp.dette_id AND d.entreprise_id=dp.entreprise_id JOIN entreprises e ON e.entreprise_id=m.entreprise_id WHERE m.mouvement_id=? AND m.entreprise_id=?';
         if ($branchId !== null) {
             $sql .= ' AND c.succursale_id=?';
         }

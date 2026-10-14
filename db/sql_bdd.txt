@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS entreprises (
     entreprise_id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL COMMENT 'Nom de l entreprise',
     email VARCHAR(100),
-    phone VARCHAR(20),
+    phone VARCHAR(23),
     address TEXT,
     logo VARCHAR(255) NULL,
     cachet VARCHAR(255) NULL,
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS succursales (
     code VARCHAR(20) NOT NULL COMMENT 'Ex: GOMA-01, BUKA-01',
     est_sucursal_mere TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1=succursale principale de l entreprise',
     address TEXT,
-    phone VARCHAR(20),
+    phone VARCHAR(23),
     UNIQUE KEY uq_succursale_code (entreprise_id, code),
     CONSTRAINT fk_succursale_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB;
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS fournisseurs (
     name VARCHAR(100) NOT NULL,
     contact_name VARCHAR(100),
     email VARCHAR(100),
-    phone VARCHAR(20),
+    phone VARCHAR(23),
     address TEXT,
     CONSTRAINT fk_fournisseur_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT fk_fournisseur_succursale FOREIGN KEY (succursale_id) REFERENCES succursales(succursale_id) ON DELETE SET NULL ON UPDATE CASCADE
@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS clients (
     entreprise_id INT NOT NULL,
     name VARCHAR(100) NOT NULL,
     email VARCHAR(100),
-    phone VARCHAR(20),
+    phone VARCHAR(23),
     address TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_client_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE
@@ -333,3 +333,40 @@ CREATE TABLE IF NOT EXISTS tb_monais (
     type_monais VARCHAR(20) PRIMARY KEY,
     description VARCHAR(10) NULL
 ) ENGINE=InnoDB;
+
+-- 036. SUIVI DES DETTES ACCORDEES PAR L'ENTREPRISE
+ALTER TABLE mouvements_caisse
+    ADD COLUMN dette_id BIGINT NULL AFTER reference_id,
+    ADD COLUMN dette_operation ENUM('PRET', 'REMBOURSEMENT') NULL AFTER dette_id,
+    ADD INDEX idx_mouvements_caisse_dette (entreprise_id, dette_id, movement_date, mouvement_id);
+
+CREATE TABLE IF NOT EXISTS dettes_caisse (
+    dette_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    succursale_id INT NOT NULL,
+    caisse_id INT NOT NULL,
+    user_id INT NOT NULL,
+    beneficiaire VARCHAR(120) NOT NULL,
+    telephone VARCHAR(43) NULL,
+    description VARCHAR(500) NULL,
+    monais VARCHAR(10) NOT NULL,
+    montant DECIMAL(15,2) NOT NULL,
+    mouvement_id INT NULL,
+    date_dette DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_dettes_caisse_mouvement (entreprise_id, mouvement_id),
+    INDEX idx_dettes_caisse_page (entreprise_id, succursale_id, date_dette, dette_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS paiements_dettes_caisse (
+    paiement_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    entreprise_id INT NOT NULL,
+    dette_id BIGINT NOT NULL,
+    mouvement_id INT NOT NULL,
+    montant DECIMAL(15,2) NOT NULL,
+    montant_recu DECIMAL(15,2) NOT NULL,
+    monais_recue VARCHAR(10) NOT NULL,
+    taux_change DECIMAL(20,10) NOT NULL,
+    date_paiement DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_paiements_dettes_mouvement (entreprise_id, mouvement_id),
+    INDEX idx_paiements_dettes_dette (entreprise_id, dette_id, date_paiement, paiement_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

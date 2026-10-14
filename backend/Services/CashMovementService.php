@@ -21,7 +21,7 @@ final class CashMovementService
 
         $this->db->begin_transaction();
         try {
-            $sql = 'SELECT m.type,m.amount,m.reference_id,c.statut FROM mouvements_caisse m JOIN caisses c ON c.caisse_id=m.caisse_id AND c.entreprise_id=m.entreprise_id WHERE m.entreprise_id=? AND m.mouvement_id=?';
+            $sql = 'SELECT m.type,m.amount,m.reference_id,m.dette_id,c.statut FROM mouvements_caisse m JOIN caisses c ON c.caisse_id=m.caisse_id AND c.entreprise_id=m.entreprise_id WHERE m.entreprise_id=? AND m.mouvement_id=?';
             if ($branchId !== null) $sql .= ' AND c.succursale_id=?';
             $sql .= ' LIMIT 1 FOR UPDATE';
             $movement = $this->db->prepare($sql);
@@ -30,7 +30,7 @@ final class CashMovementService
             $movement->execute();
             $row = $movement->get_result()->fetch_assoc();
             if (!$row) throw new RuntimeException('Opération de caisse introuvable dans votre périmètre.');
-            if ($row['reference_id'] !== null) throw new RuntimeException('Cette opération est liée à une vente, un fournisseur ou à un transfert et ne peut pas être annulée séparément.');
+            if ($row['reference_id'] !== null || $row['dette_id'] !== null) throw new RuntimeException('Cette opération est liée à une vente, une dette, un fournisseur ou à un transfert et ne peut pas être annulée séparément.');
             if ($row['statut'] !== 'OUVERTE') throw new RuntimeException('Seules les opérations d’une caisse ouverte peuvent faire l’objet d’une demande.');
 
             $previous = $this->db->prepare('SELECT statut FROM demandes_annulation_mouvements_caisse WHERE entreprise_id=? AND mouvement_id=? AND statut IN (\'EN_ATTENTE\',\'APPROUVEE\') ORDER BY demande_id DESC LIMIT 1');
@@ -77,11 +77,11 @@ final class CashMovementService
             if (!$requestRow) throw new RuntimeException('Cette demande est introuvable ou a déjà été traitée.');
 
             $movementId = (int) $requestRow['mouvement_id'];
-            $movement = $this->db->prepare('SELECT m.caisse_id,m.mode_paiement_id,m.banque_id,m.type,m.amount,m.reference_id,c.montant,c.statut AS caisse_statut FROM mouvements_caisse m JOIN caisses c ON c.caisse_id=m.caisse_id AND c.entreprise_id=m.entreprise_id WHERE m.entreprise_id=? AND m.mouvement_id=? LIMIT 1 FOR UPDATE');
+            $movement = $this->db->prepare('SELECT m.caisse_id,m.mode_paiement_id,m.banque_id,m.type,m.amount,m.reference_id,m.dette_id,c.montant,c.statut AS caisse_statut FROM mouvements_caisse m JOIN caisses c ON c.caisse_id=m.caisse_id AND c.entreprise_id=m.entreprise_id WHERE m.entreprise_id=? AND m.mouvement_id=? LIMIT 1 FOR UPDATE');
             $movement->bind_param('ii', $enterpriseId, $movementId);
             $movement->execute();
             $original = $movement->get_result()->fetch_assoc();
-            if (!$original || $original['reference_id'] !== null) throw new RuntimeException('Cette opération n’est plus annulable individuellement.');
+            if (!$original || $original['reference_id'] !== null || $original['dette_id'] !== null) throw new RuntimeException('Cette opération n’est plus annulable individuellement.');
             if ($approve && $original['caisse_statut'] !== 'OUVERTE') throw new RuntimeException('La caisse est fermée; ouvrez-la avant d’approuver l’annulation.');
 
             $compensationId = null;

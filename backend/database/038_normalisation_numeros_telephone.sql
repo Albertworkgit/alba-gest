@@ -1,0 +1,14 @@
+ALTER TABLE entreprises
+    MODIFY COLUMN phone VARCHAR(23) NULL;
+
+ALTER TABLE succursales
+    MODIFY COLUMN phone VARCHAR(23) NULL;
+
+ALTER TABLE fournisseurs
+    MODIFY COLUMN phone VARCHAR(23) NULL;
+
+ALTER TABLE clients
+    MODIFY COLUMN phone VARCHAR(23) NULL;
+
+ALTER TABLE dettes_caisse
+    MODIFY COLUMN telephone VARCHAR(43) NULL;

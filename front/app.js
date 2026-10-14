@@ -144,6 +144,13 @@ function renderView(viewName) {
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === viewName));
   kicker.textContent = view.kicker; title.innerHTML = view.title; description.textContent = view.description; breadcrumb.textContent = view.label; action.innerHTML = view.action; action.hidden = !view.action || (viewName === 'stock' && !hasAccess('creer_produit')) || (viewName === 'procurement' && !hasAccess('creer_approvisionnements')) || (viewName === 'sales' && !hasAccess('creer_ventes')) || (viewName === 'cash' && !hasAccess('creer_caisse')) || (viewName === 'users' && !hasAccess('gerer_utilisateurs')) || (viewName === 'branches' && !hasAccess('*')); action.classList.toggle('user-create-action', viewName === 'users');
   container.innerHTML = view.html;
+  if (viewName === 'cash') {
+    const debtPanel = document.createElement('section');
+    debtPanel.className = 'panel table-panel';
+    debtPanel.innerHTML = `<div class="panel-header"><div><h2>Suivi des dettes accordées</h2><p class="panel-subtitle">Prêts accordés par l’entreprise à des personnes extérieures et remboursements reçus.</p></div><button type="button" class="cash-action-button cash-action-out" data-cash-debt-open ${hasAccess('modifier_caisse') ? '' : 'hidden'}>＋ Enregistrer une dette</button></div><div id="cash-debt-summary"></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Bénéficiaire</th><th>Contact</th><th>Succursale</th><th>Date</th><th>Description</th><th>Montant prêté</th><th>Remboursé</th><th>Solde restant</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="cash-debt-rows"><tr><td colspan="10">Chargement…</td></tr></tbody></table></div></section>`;
+    const journal = container.querySelector('#cash-movement-rows')?.closest('.panel');
+    if (journal) journal.before(debtPanel);
+  }
   if (viewName === 'accounting') renderAccountingDraftPanel(container);
   if (viewName === 'stock') configureStockWorkspace();
   configureReportToolbar(viewName);
@@ -190,6 +197,7 @@ function renderView(viewName) {
     const companyPanel = container.querySelector('#company-profile-panel');
     if (companyPanel) {
       companyPanel.hidden = !sessionUser.is_company_admin;
+      addPhoneNormalizationHints(companyPanel);
       companyPanel.querySelector('[data-company-name]').value = sessionUser.enterprise_name || '';
       companyPanel.querySelector('[data-company-email]').value = sessionUser.enterprise_email || '';
       companyPanel.querySelector('[data-company-phone]').value = sessionUser.enterprise_phone || '';
@@ -242,7 +250,10 @@ function configureReportToolbar(viewName) {
   if (viewName === 'cash') {
     const label=document.createElement('label');label.textContent='Rapport ';const select=document.createElement('select');select.dataset.reportKind='';
     if(hasAccess('voir_ventes'))select.add(new Option('Ventes','sales'));
-    if(hasAccess('voir_caisse'))select.add(new Option('Journal de caisse','cash'));
+    if(hasAccess('voir_caisse')) {
+      select.add(new Option('Journal de caisse','cash'));
+      select.add(new Option('Dettes accordées','debts'));
+    }
     select.value=viewName==='cash'?'cash':'sales';if(!select.value&&select.options.length)select.selectedIndex=0;label.append(select);toolbar.insertBefore(label,toolbar.querySelector('[data-report-from]').closest('label'));
   }
   container.prepend(toolbar);
@@ -317,7 +328,7 @@ function currentReportSource() {
 }
 function selectedReportKind(){return container.querySelector('[data-report-kind]')?.value||(currentViewName==='cash'?'cash':'sales');}
 function currentReportTitle() {
-  if (currentViewName === 'sales' || currentViewName === 'cash') return selectedReportKind()==='cash'?'Journal de caisse':'Rapport des ventes';
+  if (currentViewName === 'sales' || currentViewName === 'cash') return selectedReportKind()==='debts'?'Rapport des dettes accordées':selectedReportKind()==='cash'?'Journal de caisse':'Rapport des ventes';
   if (currentViewName === 'stock') {
     const activeSection = container.querySelector('[data-stock-section].active');
     if (activeSection) return `Stock · ${activeSection.textContent.trim()}`;
@@ -428,14 +439,30 @@ function addReportTableTotals(root) {
 }
 async function selectedReportNode(){
   const kind=selectedReportKind();
+  const {from,to,search}=reportFilterValues();
+  const params={};
+  if(from)params.date_debut=from;
+  if(to)params.date_fin=to;
+  if(search)params.recherche=search;
+  if(kind==='debts'){
+    const rows=await fetchAllReportRows('cash-debts',params);
+    const node=document.createElement('section');node.className='panel';
+    node.innerHTML=`<div class="panel-header"><h2>${escapeHtml(currentReportTitle())}</h2></div><table class="data-table"><thead><tr>${['Bénéficiaire','Téléphone','Succursale','Date','Description','Montant prêté','Remboursé','Solde restant','Statut'].map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody></tbody></table>`;
+    const body=node.querySelector('tbody');
+    rows.forEach(item=>{
+      const row=body.insertRow();
+      row.dataset.reportDate=String(item.date_dette||'').slice(0,10);
+      row.innerHTML=[item.beneficiaire,item.telephone||'—',item.branch_name,dateLabel(item.date_dette),item.description||'—',moneyCurrencyLabel(item.montant,item.monais),moneyCurrencyLabel(item.montant_rembourse,item.monais),moneyCurrencyLabel(item.solde_restant,item.monais),item.statut].map(value=>`<td>${escapeHtml(value)}</td>`).join('');
+    });
+    return node;
+  }
   const action=kind==='sales'?'sales-list':'cash-movements';
-  const rows=await fetchAllReportRows(action);
+  const rows=await fetchAllReportRows(action,params);
   const isSales=kind==='sales';
   const currencies=isSales?[]:[...new Set(rows.map(item=>String(item.monais||'').trim().toUpperCase()).filter(Boolean))].sort();
   const headers=isSales?['Facture','Client','Succursale','Caissier','Date','Articles','Total','Payé','Statut']:['Date','Caisse','Motif','Référence',...currencies.flatMap(currency=>[`${currency} · Entrées`,`${currency} · Sorties`])];
   const node=document.createElement('section');node.className='panel';node.innerHTML=`<div class="panel-header"><h2>${currentReportTitle()}</h2></div><table class="data-table"><thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody></tbody></table>`;
   const body=node.querySelector('tbody');
-  const {from,to,search}=reportFilterValues();
   const totalsByCurrency=new Map();
   currencies.forEach(currency=>totalsByCurrency.set(currency,{entries:0,exits:0}));
   rows.forEach(item=>{
@@ -445,12 +472,12 @@ async function selectedReportNode(){
     const amount=isSales?'':moneyCurrencyLabel(item.amount,item.monais);
     const searchText=isSales
       ?[item.invoice_no,item.client_name||'Client comptoir',item.branch_name||'—',item.cashier||'—',dateLabel(item.sale_date),Number(item.item_count||0),saleCurrencyAmounts(item,'total_amount'),saleCurrencyAmounts(item,'amount_paid'),item.status].join(' ')
-      :[dateLabel(item.movement_date),item.cash_name,item.branch_name||'—',item.cashier||'—',item.invoice_no||'',item.client_name||'',item.payment_mode||'',item.bank_reference||'',type,item.reason||'—',reference,amount].join(' ');
+      :[dateLabel(item.movement_date),item.cash_name,item.branch_name||'—',item.cashier||'—',item.invoice_no||'',item.client_name||'',item.dette_beneficiaire||'',item.dette_telephone||'',item.dette_description||'',item.payment_mode||'',item.bank_reference||'',type,item.reason||'—',reference,amount].join(' ');
     if ((from&&day<from)||(to&&day>to)||(search&&!searchText.toLocaleLowerCase('fr').includes(search))) return;
     const currency=String(item.monais||'').trim().toUpperCase();
     const values=isSales
       ?[item.invoice_no,item.client_name||'Client comptoir',item.branch_name||'—',item.cashier||'—',dateLabel(item.sale_date),Number(item.item_count||0),saleCurrencyAmounts(item,'total_amount'),saleCurrencyAmounts(item,'amount_paid'),item.status]
-      :[dateLabel(item.movement_date),item.cash_name,item.reason||'—',reference,...currencies.flatMap(reportCurrency=>[
+      :[dateLabel(item.movement_date),item.cash_name,[item.reason,item.dette_telephone?`Téléphone : ${item.dette_telephone}`:'',item.dette_description].filter(Boolean).join(' · ')||'—',reference,...currencies.flatMap(reportCurrency=>[
         currency===reportCurrency&&item.type==='ENTREE'?amount:'—',
         currency===reportCurrency&&item.type==='SORTIE'?amount:'—'
       ])];
@@ -715,6 +742,15 @@ async function fetchStockSummary(branchId) {
   return result.data;
 }
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+function addPhoneNormalizationHints(container) {
+  container.querySelectorAll('input[name="phone"], input[name="telephone"], #new-supplier-phone').forEach(input => {
+    const label = input.closest('label');
+    if (!label || label.querySelector('small')) return;
+    const hint = document.createElement('small');
+    hint.textContent = 'Si le numéro commence par 0, il sera enregistré avec +243 à la place du premier 0.';
+    input.after(hint);
+  });
+}
 function companyImageUrl(path) {
   return path ? new URL(`../${String(path).replace(/^\/+/, '')}`, window.location.href).href : '';
 }
@@ -885,7 +921,7 @@ async function loadSimpleRows(resource, bodyId, columns, renderRow, emptyLabel, 
   } catch (error) { showLoadError(bodyId, error, columns); }
 }
 async function openSaleClientForm(branchId,onSaved){
-  const modal=document.createElement('div');modal.className='entity-modal';modal.innerHTML='<section class="entity-dialog sale-client-dialog"><h2>Ajouter un client</h2><form class="entity-form"><label class="full">Nom du client<input name="name" maxlength="100" required autofocus></label><label>Adresse électronique<input name="email" type="email" maxlength="100"></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"></label><label class="full">Adresse<textarea name="address"></textarea></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Enregistrer le client</button></div></form></section>';document.body.appendChild(modal);modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());modal.querySelector('form').addEventListener('submit',async event=>{event.preventDefault();const body=Object.fromEntries(new FormData(event.currentTarget));body.succursale_id=Number(branchId);try{const response=await fetch('../backend/public/auth.php?action=create-sale-client',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Création du client impossible.');modal.remove();onSaved(result.data);showToast('Client ajouté à la vente.');}catch(error){showToast(error.message);}});
+  const modal=document.createElement('div');modal.className='entity-modal';modal.innerHTML='<section class="entity-dialog sale-client-dialog"><h2>Ajouter un client</h2><form class="entity-form"><label class="full">Nom du client<input name="name" maxlength="100" required autofocus></label><label>Adresse électronique<input name="email" type="email" maxlength="100"></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"></label><label class="full">Adresse<textarea name="address"></textarea></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Enregistrer le client</button></div></form></section>';document.body.appendChild(modal);addPhoneNormalizationHints(modal);modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());modal.querySelector('form').addEventListener('submit',async event=>{event.preventDefault();const body=Object.fromEntries(new FormData(event.currentTarget));body.succursale_id=Number(branchId);try{const response=await fetch('../backend/public/auth.php?action=create-sale-client',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Création du client impossible.');modal.remove();onSaved(result.data);showToast('Client ajouté à la vente.');}catch(error){showToast(error.message);}});
 }
 async function openSaleForm() {
   if (!hasAccess('creer_ventes')) return;
@@ -1170,18 +1206,25 @@ async function loadExchangeRates() {
     panel.querySelector('[data-exchange-rates]').innerHTML = `<tr><td colspan="4">${escapeHtml(error.message)}</td></tr>`;
   }
 }
-async function loadCashRows(page = 1, movementPage = 1, externalPage = 1) {
+async function loadCashRows(page = 1, movementPage = 1, externalPage = 1, debtPage = 1) {
   const body = document.getElementById('cash-rows'); if (!body) return;
   try {
-    const search = reportFilterValues().search;
-    const searchParams = search ? {recherche:search} : {};
-    const [result,movementResult,paymentResult] = await Promise.all([fetchReportPage('cashboxes-list', page, searchParams),fetchReportPage('cash-movements',movementPage,searchParams),fetchReportPage('payment-journal',externalPage,searchParams)]);
+    const {from,to,search}=reportFilterValues();
+    const searchParams = {...(search ? {recherche:search} : {}),...(from ? {date_debut:from} : {}),...(to ? {date_fin:to} : {})};
+    const [result,movementResult,paymentResult,debtResult] = await Promise.all([fetchReportPage('cashboxes-list', page, searchParams),fetchReportPage('cash-movements',movementPage,searchParams),fetchReportPage('payment-journal',externalPage,searchParams),fetchReportPage('cash-debts',debtPage,searchParams)]);
     const externalPayments = paymentResult.rows;
     const cashboxes = result.rows;
     body.innerHTML = cashboxes.length ? cashboxes.map(item => `<tr data-report-date="${escapeHtml(String(item.date_ouverture||'').slice(0,10))}" data-search-text="${escapeHtml([item.name,branchOptions.find(branch => Number(branch.succursale_id) === Number(item.succursale_id))?.name||'',item.currency_name,item.monais,item.payment_mode,item.bank_name||'',item.statut].join(' '))}"><td>${escapeHtml(item.name)}</td><td>${escapeHtml(branchOptions.find(branch => Number(branch.succursale_id) === Number(item.succursale_id))?.name || `ID ${Number(item.succursale_id)}`)}</td><td>${escapeHtml(item.currency_name)} (${escapeHtml(item.monais)}) · ${escapeHtml(item.payment_mode)}${item.bank_name?` · ${escapeHtml(item.bank_name)}`:``}</td><td>${escapeHtml(dateLabel(item.date_ouverture))}</td><td>${moneyCurrencyLabel(item.solde_ouverture,item.monais)}</td><td>${moneyCurrencyLabel(item.solde_courant,item.monais)}</td><td>${item.statut === 'FERMEE' ? moneyCurrencyLabel(item.solde_fermeture,item.monais) : '—'}</td><td>${escapeHtml(item.statut)}</td><td>${item.statut === 'OUVERTE' && hasAccess('modifier_caisse') ? `<button type="button" data-cash-close="${Number(item.caisse_id)}">Clôturer</button>` : item.statut === 'FERMEE' && hasAccess('creer_caisse') ? `<button type="button" data-cash-reopen="${Number(item.caisse_id)}" data-cash-name="${escapeHtml(item.name)}" data-cash-branch="${Number(item.succursale_id)}" data-cash-currency="${escapeHtml(item.monais)}" data-cash-mode="${Number(item.mode_paiement_id)}">Ouvrir</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="9">Aucune caisse enregistrée.</td></tr>';
     cashboxes.forEach((item,index)=>{const row=body.rows[index];if(!row)return;const reopen=row.querySelector('[data-cash-reopen]');if(reopen)reopen.dataset.cashBank=String(item.banque_id||'');if(item.statut==='FERMEE'&&hasAccess('supprimer_caisse'))row.cells[row.cells.length-1].insertAdjacentHTML('beforeend',` <button type="button" class="icon-action-button" title="Supprimer la caisse" aria-label="Supprimer la caisse" data-cash-delete="${Number(item.caisse_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`);});
-    showPagination(body, 'cash', result.pagination, next=>loadCashRows(next,movementPage,externalPage));
-    const movementBody=document.getElementById('cash-movement-rows');if(movementBody){movementBody.innerHTML=movementResult.rows.length?movementResult.rows.map(row=>`<tr data-report-date="${escapeHtml(String(row.movement_date).slice(0,10))}" data-search-text="${escapeHtml([row.cashier||'',row.branch_name||'',row.invoice_no||'',row.client_name||'',row.bank_reference||'',row.monais||''].join(' '))}"><td><input type="checkbox" data-cash-print-select="${Number(row.mouvement_id)}" aria-label="Sélectionner la pièce du mouvement ${Number(row.mouvement_id)}"${selectedCashMovementReceipts.has(Number(row.mouvement_id))?' checked':''}></td><td>${escapeHtml(dateLabel(row.movement_date))}</td><td>${escapeHtml(row.cash_name)}</td><td>${escapeHtml(row.type==='ENTREE'?'Entrée':'Sortie')}</td><td>${escapeHtml(row.payment_mode||'Caisse')}</td><td>${escapeHtml([row.reason||'—',row.client_name?`Client : ${row.client_name}`:''].filter(Boolean).join(' · '))}</td><td>${row.invoice_no?escapeHtml(row.invoice_no):row.reference_id?`#${Number(row.reference_id)}`:'—'}</td><td>${moneyCurrencyLabel(row.amount,row.monais)}</td></tr>`).join(''):'<tr><td colspan="8">Aucun mouvement de caisse enregistré.</td></tr>';const currencySummary=new Map((movementResult.summary||[]).map(item=>[item.monais,{entrees:Number(item.entrees),sorties:Number(item.sorties),operations:Number(item.operations)}]));let summaryBox=movementBody.closest('.panel').querySelector('#cash-currency-summary');if(!summaryBox){summaryBox=document.createElement('div');summaryBox.id='cash-currency-summary';summaryBox.style.overflow='auto';movementBody.closest('.panel').querySelector('.panel-header').after(summaryBox);}summaryBox.innerHTML=currencySummary.size?`<table class="data-table"><thead><tr><th>Monnaie</th><th>Total entrées</th><th>Total sorties</th><th>Solde net</th><th>Opérations</th></tr></thead><tbody>${[...currencySummary].map(([currency,item])=>`<tr><td>${escapeHtml(currency)}</td><td>${moneyCurrencyLabel(item.entrees,currency)}</td><td>${moneyCurrencyLabel(item.sorties,currency)}</td><td><strong>${moneyCurrencyLabel(item.entrees-item.sorties,currency)}</strong></td><td>${item.operations}</td></tr>`).join('')}</tbody></table>`:'<p class="panel-subtitle">Aucun mouvement enregistré.</p>';showPagination(movementBody,'cash-movements',movementResult.pagination,next=>loadCashRows(page,next,externalPage));}const externalBody=document.getElementById('external-payment-rows');if(externalBody){externalBody.innerHTML=externalPayments.length?externalPayments.map(payment=>`<tr data-report-date="${escapeHtml(String(payment.payment_date).slice(0,10))}" data-search-text="${escapeHtml([payment.counterparty||'',payment.reference||'',payment.document_no||'',payment.payment_mode||'',payment.monais||''].join(' '))}"><td>${escapeHtml(dateLabel(payment.payment_date))}</td><td>${escapeHtml(payment.operation)}</td><td>${escapeHtml(payment.document_no)}</td><td>${escapeHtml(payment.counterparty||'—')}</td><td>${escapeHtml(payment.branch_name)}</td><td>${escapeHtml(payment.payment_mode)}</td><td>${escapeHtml(payment.reference||'—')}</td><td>${moneyCurrencyLabel(payment.amount,payment.monais)}</td></tr>`).join(''):'<tr><td colspan="8">Aucun paiement externe enregistré.</td></tr>';showPagination(externalBody,'external-payments',paymentResult.pagination,next=>loadCashRows(page,movementPage,next)); }
+    showPagination(body, 'cash', result.pagination, next=>loadCashRows(next,movementPage,externalPage,debtPage));
+    const movementBody=document.getElementById('cash-movement-rows');if(movementBody){    movementBody.innerHTML=movementResult.rows.length?movementResult.rows.map(row=>`<tr data-report-date="${escapeHtml(String(row.movement_date).slice(0,10))}" data-search-text="${escapeHtml([row.cashier||'',row.branch_name||'',row.invoice_no||'',row.client_name||'',row.dette_beneficiaire||'',row.dette_telephone||'',row.dette_description||'',row.bank_reference||'',row.monais||''].join(' '))}"><td><input type="checkbox" data-cash-print-select="${Number(row.mouvement_id)}" aria-label="Sélectionner la pièce du mouvement ${Number(row.mouvement_id)}"${selectedCashMovementReceipts.has(Number(row.mouvement_id))?' checked':''}></td><td>${escapeHtml(dateLabel(row.movement_date))}</td><td>${escapeHtml(row.cash_name)}</td><td>${escapeHtml(row.type==='ENTREE'?'Entrée':'Sortie')}</td><td>${escapeHtml(row.payment_mode||'Caisse')}</td><td>${escapeHtml([row.reason||'—',row.client_name?`Client : ${row.client_name}`:'',row.dette_telephone?`Téléphone : ${row.dette_telephone}`:'',row.dette_description||'',row.dette_montant_impute?`Imputé sur la dette : ${moneyCurrencyLabel(row.dette_montant_impute,row.dette_monais)}`:''].filter(Boolean).join(' · '))}</td><td>${row.invoice_no?escapeHtml(row.invoice_no):row.reference_id?`#${Number(row.reference_id)}`:'—'}</td><td>${moneyCurrencyLabel(row.amount,row.monais)}</td></tr>`).join(''):'<tr><td colspan="8">Aucun mouvement de caisse enregistré.</td></tr>';const currencySummary=new Map((movementResult.summary||[]).map(item=>[item.monais,{entrees:Number(item.entrees),sorties:Number(item.sorties),operations:Number(item.operations)}]));let summaryBox=movementBody.closest('.panel').querySelector('#cash-currency-summary');if(!summaryBox){summaryBox=document.createElement('div');summaryBox.id='cash-currency-summary';summaryBox.style.overflow='auto';movementBody.closest('.panel').querySelector('.panel-header').after(summaryBox);}summaryBox.innerHTML=currencySummary.size?`<table class="data-table"><thead><tr><th>Monnaie</th><th>Total entrées</th><th>Total sorties</th><th>Solde net</th><th>Opérations</th></tr></thead><tbody>${[...currencySummary].map(([currency,item])=>`<tr><td>${escapeHtml(currency)}</td><td>${moneyCurrencyLabel(item.entrees,currency)}</td><td>${moneyCurrencyLabel(item.sorties,currency)}</td><td><strong>${moneyCurrencyLabel(item.entrees-item.sorties,currency)}</strong></td><td>${item.operations}</td></tr>`).join('')}</tbody></table>`:'<p class="panel-subtitle">Aucun mouvement enregistré.</p>';showPagination(movementBody,'cash-movements',movementResult.pagination,next=>loadCashRows(page,next,externalPage,debtPage));}const externalBody=document.getElementById('external-payment-rows');if(externalBody){externalBody.innerHTML=externalPayments.length?externalPayments.map(payment=>`<tr data-report-date="${escapeHtml(String(payment.payment_date).slice(0,10))}" data-search-text="${escapeHtml([payment.counterparty||'',payment.reference||'',payment.document_no||'',payment.payment_mode||'',payment.monais||''].join(' '))}"><td>${escapeHtml(dateLabel(payment.payment_date))}</td><td>${escapeHtml(payment.operation)}</td><td>${escapeHtml(payment.document_no)}</td><td>${escapeHtml(payment.counterparty||'—')}</td><td>${escapeHtml(payment.branch_name)}</td><td>${escapeHtml(payment.payment_mode)}</td><td>${escapeHtml(payment.reference||'—')}</td><td>${moneyCurrencyLabel(payment.amount,payment.monais)}</td></tr>`).join(''):'<tr><td colspan="8">Aucun paiement externe enregistré.</td></tr>';showPagination(externalBody,'external-payments',paymentResult.pagination,next=>loadCashRows(page,movementPage,next,debtPage)); }
+    const debtBody=document.getElementById('cash-debt-rows');
+    if(debtBody){
+      debtBody.innerHTML=debtResult.rows.length?debtResult.rows.map(debt=>`<tr data-report-date="${escapeHtml(String(debt.date_dette).slice(0,10))}" data-search-text="${escapeHtml([debt.beneficiaire,debt.telephone||'',debt.description||'',debt.branch_name,debt.monais,debt.statut].join(' '))}"><td>${escapeHtml(debt.beneficiaire)}</td><td>${escapeHtml(debt.telephone||'—')} ${whatsAppContactMarkup(debt.telephone, `Contacter ${debt.beneficiaire} sur WhatsApp`, cashDebtReminderMessage(debt))}</td><td>${escapeHtml(debt.branch_name)}</td><td>${escapeHtml(dateLabel(debt.date_dette))}</td><td>${escapeHtml(debt.description||'—')}</td><td>${moneyCurrencyLabel(debt.montant,debt.monais)}</td><td>${moneyCurrencyLabel(debt.montant_rembourse,debt.monais)}</td><td><strong>${moneyCurrencyLabel(debt.solde_restant,debt.monais)}</strong></td><td>${debt.statut==='REMBOURSEE'?'<span class="status success">Remboursée</span>':'<span class="status warning">En cours</span>'}</td><td>${debt.statut!=='REMBOURSEE'&&hasAccess('modifier_caisse')?`<button type="button" data-cash-debt-pay="${Number(debt.dette_id)}" data-debt-name="${escapeHtml(debt.beneficiaire)}" data-debt-branch="${Number(debt.succursale_id)}" data-debt-currency="${escapeHtml(debt.monais)}" data-debt-balance="${Number(debt.solde_restant)}">Remboursement</button>`:'—'}</td></tr>`).join(''):'<tr><td colspan="10">Aucune dette accordée.</td></tr>';
+      const debtSummary=document.getElementById('cash-debt-summary');
+      debtSummary.innerHTML=debtResult.summary.length?`<div style="overflow:auto"><table class="data-table"><thead><tr><th>Monnaie</th><th>Dettes</th><th>Total prêté</th><th>Total remboursé</th><th>Solde restant</th></tr></thead><tbody>${debtResult.summary.map(summary=>`<tr><td>${escapeHtml(summary.monais)}</td><td>${Number(summary.dettes)}</td><td>${moneyCurrencyLabel(summary.montant_total,summary.monais)}</td><td>${moneyCurrencyLabel(summary.montant_rembourse,summary.monais)}</td><td><strong>${moneyCurrencyLabel(summary.solde_restant,summary.monais)}</strong></td></tr>`).join('')}</tbody></table></div>`:'<p class="panel-subtitle">Aucune dette sur cette période.</p>';
+      showPagination(debtBody,'cash-debts',debtResult.pagination,next=>loadCashRows(page,movementPage,externalPage,next));
+    }
     const cashSummaryBox=document.getElementById('cash-currency-summary');
     if(cashSummaryBox){
       const balanceByCurrency=new Map((movementResult.summary||[]).map(item=>[item.monais,Number(item.solde)]));
@@ -1194,7 +1237,7 @@ async function loadCashRows(page = 1, movementPage = 1, externalPage = 1) {
     movementResult.rows.forEach((movement, index) => {
       const row = cashMovementRowsBody?.rows[index];
       const actionCell = row?.cells[row.cells.length - 1];
-      if (!actionCell || !hasAccess('modifier_caisse') || movement.reference_id !== null || movement.caisse_statut !== 'OUVERTE') return;
+      if (!actionCell || !hasAccess('modifier_caisse') || movement.reference_id !== null || movement.dette_id !== null || movement.caisse_statut !== 'OUVERTE') return;
       if (movement.annulation_demande_id || movement.annulation_statut === 'EN_ATTENTE') {
         actionCell.insertAdjacentHTML('beforeend', ' <span class="status warning">En attente</span>');
         return;
@@ -1293,6 +1336,7 @@ async function openCashTransferForm() {
   modal.innerHTML = `<section class="entity-dialog"><h2>Convertir entre deux caisses</h2><p class="panel-subtitle">Le taux configuré de l’entreprise sera utilisé. Les soldes des deux caisses seront ajustés ensemble.</p><form class="entity-form"><label class="full">Caisse source<select name="source_caisse_id" required>${boxes.map(box => `<option value="${Number(box.caisse_id)}" data-currency="${escapeHtml(box.monais)}">${escapeHtml(box.name)} · ${escapeHtml(branchOptions.find(branch => Number(branch.succursale_id) === Number(box.succursale_id))?.name || '')} · ${moneyCurrencyLabel(box.solde_courant, box.monais)}</option>`).join('')}</select></label><label class="full">Caisse destinataire<select name="target_caisse_id" required></select></label><label class="full">Montant à convertir<input name="amount" type="number" min="0.01" step="0.01" required></label><p class="panel-subtitle full" data-cash-transfer-preview aria-live="polite">Choisissez les caisses et saisissez un montant pour afficher le calcul.</p><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit" disabled>Confirmer la conversion</button></div></form></section>`;
   document.body.appendChild(modal);
   const form = modal.querySelector('form');
+  addPhoneNormalizationHints(form);
   const source = form.elements.namedItem('source_caisse_id');
   const target = form.elements.namedItem('target_caisse_id');
   const amount = form.elements.namedItem('amount');
@@ -1446,6 +1490,127 @@ async function openCashMovementForm(type = 'ENTREE') {
     }
   });
 }
+async function openCashDebtForm(debt = null) {
+  let cashboxes = [];
+  let banks = [];
+  let exchangeRates = {};
+  try {
+    let page = 1;
+    let pages = 1;
+    while (page <= pages) {
+      const result = await fetchReportPage('cashboxes-list', page);
+      cashboxes.push(...result.rows);
+      pages = result.pagination.pages;
+      page++;
+    }
+    cashboxes = cashboxes.filter(box => box.statut === 'OUVERTE' &&
+      (!debt || Number(box.succursale_id) === Number(debt.succursale_id)));
+    if (debt) {
+      const ratesResponse = await fetch('../backend/public/auth.php?action=exchange-rates', {credentials:'include'});
+      const ratesResult = await readJson(ratesResponse);
+      if (!ratesResponse.ok || !ratesResult.success) throw new Error(ratesResult.message || 'Chargement des taux de change impossible.');
+      exchangeRates = Object.fromEntries((ratesResult.data?.rates || []).map(rate => [rate.monais, Number(rate.taux_vers_reference)]));
+    }
+    const response = await fetch('../backend/public/auth.php?action=banks', {credentials:'include'});
+    const result = await readJson(response);
+    if (!response.ok || !result.success) throw new Error(result.message || 'Chargement des banques impossible.');
+    banks = result.data || [];
+  } catch (error) {
+    showToast(error.message);
+    return;
+  }
+  if (!cashboxes.length) {
+    showToast(debt ? 'Aucune caisse ouverte de la bonne succursale et monnaie.' : 'Ouvrez une caisse avant d’enregistrer une dette.');
+    return;
+  }
+  const isPayment = Boolean(debt);
+  if (isPayment && (!Number.isFinite(exchangeRates[debt.monais]) || exchangeRates[debt.monais] <= 0)) {
+    showToast(`Aucun taux de change configuré pour la monnaie ${debt.monais}.`);
+    return;
+  }
+  cashboxes = cashboxes.filter(box => !isPayment ||
+    (Number.isFinite(exchangeRates[box.monais]) && exchangeRates[box.monais] > 0));
+  if (!cashboxes.length) {
+    showToast('Aucune caisse ouverte avec une monnaie ayant un taux de change configuré.');
+    return;
+  }
+  const modal = document.createElement('div');
+  modal.className = 'entity-modal';
+  modal.innerHTML = `<section class="entity-dialog"><h2>${isPayment ? `Remboursement · ${escapeHtml(debt.beneficiaire)}` : 'Enregistrer une dette accordée'}</h2>${isPayment ? `<p class="panel-subtitle">Solde restant : ${moneyCurrencyLabel(debt.solde_restant,debt.monais)}</p>` : ''}<form class="entity-form">${isPayment ? `<input type="hidden" name="dette_id" value="${Number(debt.dette_id)}">` : `<label class="full">Nom du bénéficiaire<input name="beneficiaire" maxlength="120" required></label><label class="full">Téléphone (facultatif)<input name="telephone" maxlength="40"><small>Si le numéro commence par 0, il sera enregistré avec +243 à la place du premier 0.</small></label><label class="full">Description / motif (facultatif)<textarea name="description" maxlength="500" rows="3"></textarea></label>`}<label class="full">Caisse<select name="caisse_id" required>${cashboxes.map(box=>`<option value="${Number(box.caisse_id)}" data-currency="${escapeHtml(box.monais)}" data-mode-code="${escapeHtml(box.payment_mode_code)}" data-bank-id="${Number(box.banque_id||0)}">${escapeHtml(box.name)} · ${escapeHtml(branchOptions.find(branch=>Number(branch.succursale_id)===Number(box.succursale_id))?.name||`ID ${Number(box.succursale_id)}`)} · ${escapeHtml(box.payment_mode)} · ${escapeHtml(box.monais)} · Solde ${moneyCurrencyLabel(box.solde_courant,box.monais)}</option>`).join('')}</select></label><label class="full" data-debt-bank-label>Banque<select name="banque_id">${banks.map(bank=>`<option value="${Number(bank.banque_id)}">${escapeHtml(bank.name)}${bank.account_number?` · ${escapeHtml(bank.account_number)}`:''}</option>`).join('')}</select><small ${banks.length?'hidden':''}>Créez d’abord une banque dans le module Caisse.</small></label><label class="full" data-debt-reference-label>Référence bancaire<input name="bank_reference" maxlength="120" placeholder="N° de virement ou reçu"></label><label class="full">${isPayment?'Montant reçu':'Montant prêté'}<input name="montant" type="number" min="0.01" step="0.01" required></label>${isPayment?'<p class="panel-subtitle full" data-debt-conversion></p>':''}<div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit cash-submit-out">${isPayment?'Enregistrer le remboursement':'Enregistrer le prêt'}</button></div></form></section>`;
+  document.body.appendChild(modal);
+  const form = modal.querySelector('form');
+  const cashSelect = form.elements.namedItem('caisse_id');
+  const bankLabel = modal.querySelector('[data-debt-bank-label]');
+  const referenceLabel = modal.querySelector('[data-debt-reference-label]');
+  const bankSelect = form.elements.namedItem('banque_id');
+  const referenceInput = form.elements.namedItem('bank_reference');
+  const amountInput = form.elements.namedItem('montant');
+  const conversionLabel = modal.querySelector('[data-debt-conversion]');
+  const submit = form.querySelector('.modal-submit');
+  const syncCash = () => {
+    const selected = cashSelect.selectedOptions[0];
+    const receivedCurrency = selected?.dataset.currency;
+    const isBank = selected?.dataset.modeCode === 'BANK';
+    const linkedBank = selected?.dataset.bankId || '';
+    if (linkedBank) bankSelect.value = linkedBank;
+    bankLabel.hidden = !isBank;
+    bankSelect.required = isBank;
+    bankSelect.disabled = !isBank || Boolean(linkedBank);
+    referenceLabel.hidden = !isBank;
+    referenceInput.required = isBank;
+    referenceInput.disabled = !isBank;
+    submit.disabled = (isBank && !banks.length) || (isPayment && !Number.isFinite(exchangeRates[receivedCurrency]));
+    if (isPayment) {
+      const exchangeRate = exchangeRates[receivedCurrency] / exchangeRates[debt.monais];
+      const maxReceived = Math.floor((Number(debt.solde_restant) / exchangeRate + 1e-8) * 100) / 100;
+      amountInput.max = maxReceived.toFixed(2);
+      const receivedAmount = Number(amountInput.value);
+      const appliedAmount = Number.isFinite(receivedAmount) ? Math.round(receivedAmount * exchangeRate * 100) / 100 : 0;
+      conversionLabel.textContent = `Monnaie reçue : ${receivedCurrency} · Taux appliqué : ${exchangeRate.toFixed(6)} · Montant imputé à la dette : ${moneyCurrencyLabel(appliedAmount, debt.monais)} (maximum reçu : ${moneyCurrencyLabel(maxReceived, receivedCurrency)})`;
+    }
+  };
+  cashSelect.addEventListener('change', syncCash);
+  amountInput.addEventListener('input', syncCash);
+  syncCash();
+  modal.querySelector('.modal-cancel').addEventListener('click', () => modal.remove());
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(form));
+    data.montant = Number(data.montant);
+    data.caisse_id = Number(data.caisse_id);
+    data.monais_recue = cashSelect.selectedOptions[0]?.dataset.currency || '';
+    data.banque_id = Number(cashSelect.selectedOptions[0]?.dataset.bankId || data.banque_id || 0) || null;
+    submit.disabled = true;
+    try {
+      const action = isPayment ? 'pay-cash-debt' : 'create-cash-debt';
+      const response = await fetch(`../backend/public/auth.php?action=${action}`, {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(data)});
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Enregistrement impossible.');
+      modal.remove();
+      showToast(isPayment ? 'Remboursement de dette enregistré.' : 'Dette enregistrée et sortie débitée de la caisse.');
+      loadCashRows();
+    } catch (error) {
+      submit.disabled = false;
+      showToast(error.message);
+    }
+  });
+}
+function whatsAppContactMarkup(phone, label, message = '') {
+  const enteredNumber = String(phone || '').trim();
+  const normalizedNumber = enteredNumber.startsWith('0') ? `+243${enteredNumber.slice(1)}` : enteredNumber;
+  const number = normalizedNumber.replace(/\D/g, '');
+  if (number.length < 7) return '';
+  const messageQuery = message ? `?text=${encodeURIComponent(message)}` : '';
+  const href = escapeHtml(`https://wa.me/${number}${messageQuery}`);
+  return `<a href="${href}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" style="display:inline-flex;vertical-align:middle;color:#168a52;margin-left:6px"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11.5a8.5 8.5 0 0 1-12.6 7.4L4 20l1.1-3.2A8.5 8.5 0 1 1 20 11.5Z"/><path d="M9 8.5c.3-.5.6-.5.9-.5l.7 1.6c.1.2 0 .4-.2.6l-.5.5c.5 1 1.3 1.8 2.3 2.3l.5-.5c.2-.2.4-.3.6-.2l1.6.7c0 .3 0 .6-.5.9-.6.4-1.2.5-1.8.3-2.3-.7-4-2.4-4.7-4.7-.2-.6-.1-1.2.3-1.8Z"/></svg></a>`;
+}
+function cashDebtReminderMessage(debt) {
+  const name = String(debt.beneficiaire || '').trim();
+  const date = dateLabel(debt.date_dette);
+  const description = String(debt.description || '').trim();
+  const reason = description ? `\nMotif : ${description}` : '';
+  return `Bonjour ${name}, ceci est un rappel concernant votre dette enregistrée le ${date}.${reason}\nMontant initial : ${moneyCurrencyLabel(debt.montant, debt.monais)}\nDéjà remboursé : ${moneyCurrencyLabel(debt.montant_rembourse, debt.monais)}\nSolde restant : ${moneyCurrencyLabel(debt.solde_restant, debt.monais)}\nMerci de nous contacter pour convenir du remboursement.`;
+}
 function cashMovementReceiptMarkup(movement, compact = false) {
   const isOut = movement.type === 'SORTIE';
   const bankDetails = movement.bank_name
@@ -1454,7 +1619,10 @@ function cashMovementReceiptMarkup(movement, compact = false) {
   const signatures = isOut
     ? '<div class="signature-row"><div>Signature du bénéficiaire</div><div>Signature et cachet du caissier</div></div>'
     : '<div class="signature-row"><div>Signature du déposant</div><div>Signature et cachet du caissier</div></div>';
-  return `<section class="${compact ? 'cash-receipt-card' : ''}"><h2>${isOut ? 'BON DE SORTIE DE CAISSE' : 'REÇU D’ENTRÉE EN CAISSE'}</h2><p><strong>Pièce n° :</strong> ${Number(movement.mouvement_id)}</p><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason || '—')}</p><h2>Montant ${isOut ? 'sorti' : 'reçu'} : ${moneyCurrencyLabel(movement.amount, movement.monais)}</h2><p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p>${signatures}</section>`;
+  const debtConversion = movement.dette_montant_impute
+    ? `<p><strong>Montant imputé à la dette :</strong> ${moneyCurrencyLabel(movement.dette_montant_impute, movement.dette_monais)} · <strong>Taux appliqué :</strong> ${Number(movement.dette_taux_change).toFixed(6)}</p>`
+    : '';
+  return `<section class="${compact ? 'cash-receipt-card' : ''}"><h2>${isOut ? 'BON DE SORTIE DE CAISSE' : 'REÇU D’ENTRÉE EN CAISSE'}</h2><p><strong>Pièce n° :</strong> ${Number(movement.mouvement_id)}</p><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason || '—')}</p><h2>Montant ${isOut ? 'sorti' : 'reçu'} : ${moneyCurrencyLabel(movement.amount, movement.monais)}</h2>${debtConversion}<p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p>${signatures}</section>`;
 }
 async function printCashMovementReceipt(movementId, printWindow) {
   if (movementId < 1) throw new Error('Identifiant du mouvement invalide.');
@@ -1550,7 +1718,7 @@ function renderSupplierRow(supplier) {
   const branchScoped = Boolean(sessionUser?.succursale_id && !sessionUser?.is_company_admin);
   const canManageThisSupplier = !branchScoped || Number(supplier.succursale_id) === Number(sessionUser.succursale_id);
   const actions = canManageThisSupplier && (hasAccess('modifier_fournisseurs') || hasAccess('supprimer_fournisseurs')) ? `${hasAccess('modifier_fournisseurs') ? `<button class="text-button" data-supplier-edit="${Number(supplier.fournisseur_id)}">Modifier</button>` : ''} ${hasAccess('supprimer_fournisseurs') ? `<button class="text-button" data-supplier-delete="${Number(supplier.fournisseur_id)}">Supprimer</button>` : ''}` : '—';
-  return `<tr><td>${escapeHtml(supplier.name)}</td><td>${escapeHtml(supplier.contact_name || '—')}</td><td>${escapeHtml(supplier.email || '—')}</td><td>${escapeHtml(supplier.phone || '—')}</td><td>${actions}</td></tr>`;
+  return `<tr><td>${escapeHtml(supplier.name)}</td><td>${escapeHtml(supplier.contact_name || '—')}</td><td>${escapeHtml(supplier.email || '—')}</td><td>${escapeHtml(supplier.phone || '—')} ${whatsAppContactMarkup(supplier.phone, `Contacter ${supplier.name} sur WhatsApp`)}</td><td>${actions}</td></tr>`;
 }
 async function loadSupplierRows(page = 1) {
   const body = document.getElementById('supplier-rows'); if (!body) return;
@@ -2380,7 +2548,7 @@ function openEntityForm(type, entity = null) {
     unit: {title: 'Enregistrer une unit&eacute; de mesure', endpoint: '../backend/public/api.php?resource=unites_mesure', fields: '<label>Unit&eacute; de mesure<input name="name" required maxlength="50" placeholder="Ex. Kilogramme"></label><label>Symbole<input name="symbole" required maxlength="15" placeholder="Ex. kg"></label>'},
     branch: {title:'Créer une succursale', endpoint:'../backend/public/api.php?resource=succursales', fields:'<label>Nom de la succursale<input name="name" required maxlength="100"></label><label>Code unique<input name="code" required maxlength="20" placeholder="Ex. MAG-01"></label><label class="full"><span>Définir comme succursale mère</span><input name="est_sucursal_mere" type="checkbox" value="1"></label><label class="full">Adresse<textarea name="address"></textarea></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"></label>'},
     client: {title:'Cr\u00e9er un client', endpoint:'../backend/public/api.php?resource=clients', fields:'<label>Nom du client<input name="name" required maxlength="100"></label><label>Adresse \u00e9lectronique<input name="email" type="email" maxlength="100"></label><label>T\u00e9l\u00e9phone<input name="phone" maxlength="20"></label><label class="full">Adresse<textarea name="address"></textarea></label>'},
-    supplier: {title:'Créer un fournisseur', endpoint:'../backend/public/api.php?resource=fournisseurs', fields:'<label>Nom du fournisseur<input name="name" required maxlength="100"></label><label>Personne de contact<input name="contact_name" maxlength="100"></label><label>Adresse électronique<input name="email" type="email" maxlength="100"></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"></label><label class="full">Adresse<textarea name="address"></textarea></label>'},
+    supplier: {title:'Créer un fournisseur', endpoint:'../backend/public/api.php?resource=fournisseurs', fields:'<label>Nom du fournisseur<input name="name" required maxlength="100"></label><label>Personne de contact<input name="contact_name" maxlength="100"></label><label>Adresse électronique<input name="email" type="email" maxlength="100"></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"><small>Un numéro qui commence par 0 sera enregistré avec +243 à la place du premier 0.</small></label><label class="full">Adresse<textarea name="address"></textarea></label>'},
     user: {title: 'Créer un utilisateur', endpoint: '../backend/public/auth.php?action=create-user', fields: '<label>Nom complet<input name="full_name" required></label><label>Nom d’utilisateur<input name="username" required></label><label>Adresse électronique<input name="email" type="email" required></label><label>Mot de passe<input name="password" type="password" minlength="4" required></label><label>Rôle d’accès<select name="role_id" id="user-role" required><option value="">Chargement des rôles…</option></select></label><label>Succursale (facultatif)<select name="succursale_id" id="user-branch"><option value="">Entreprise mère (sans succursale)</option></select></label><label class="full"><span>Compte actif</span><input name="is_active" type="checkbox" value="1" checked></label>'},
     role: {title: 'Créer un rôle', endpoint: '../backend/public/auth.php?action=create-role', fields: '<label>Nom du rôle<input name="role_name" placeholder="Ex. Responsable stock" required></label><label class="full">Description<textarea name="description"></textarea></label><fieldset class="full" style="border:1px solid #e6ebe7;border-radius:7px;padding:12px"><legend>Droits d’accès</legend><label><input type="checkbox" name="permissions" value="vente"> Accès aux ventes</label><label><input type="checkbox" name="permissions" value="caisse"> Accès à la caisse</label><label><input type="checkbox" name="permissions" value="stock"> Accès au stock et aux produits</label><label><input type="checkbox" name="permissions" value="approvisionnement"> Accès aux approvisionnements</label><label><input type="checkbox" name="permissions" value="clients"> Gestion des clients</label><label><input type="checkbox" name="permissions" value="comptabilite"> Accès à la comptabilité</label></fieldset>'},
     category: {title: 'Créer une catégorie', endpoint: '../backend/public/api.php?resource=categories', fields: '<label>Nom de la catégorie<input name="name" required maxlength="100"></label><label class="full">Description<textarea name="description"></textarea></label>'},
@@ -3290,6 +3458,12 @@ document.addEventListener('click', async event => {
   if (event.target.closest('[data-report-close]')) { event.target.closest('.report-modal')?.remove(); return; }
   if (event.target.closest('[data-print-selected-cash]')) { await printSelectedCashMovementReceipts(); return; }
   if (event.target.closest('[data-cash-transfer-open]')) { await openCashTransferForm(); return; }
+  if (event.target.closest('[data-cash-debt-open]')) { await openCashDebtForm(); return; }
+  const debtPaymentButton=event.target.closest('[data-cash-debt-pay]');
+  if(debtPaymentButton){
+    await openCashDebtForm({dette_id:Number(debtPaymentButton.dataset.cashDebtPay),beneficiaire:debtPaymentButton.dataset.debtName,succursale_id:Number(debtPaymentButton.dataset.debtBranch),monais:debtPaymentButton.dataset.debtCurrency,solde_restant:Number(debtPaymentButton.dataset.debtBalance)});
+    return;
+  }
   const cashSalePayButton=event.target.closest('[data-sale-pay-cash]');if(cashSalePayButton){await confirmSalePayment(cashSalePayButton);return;}
   const saleInvoiceButton=event.target.closest('[data-sale-invoice],[data-sale-receipt]');
   if(saleInvoiceButton){await printSaleInvoice(saleInvoiceButton);return;}
@@ -3434,13 +3608,16 @@ document.addEventListener('click', async event => {
 document.addEventListener('input', event => {
   if (event.target.matches('[data-report-from],[data-report-to],[data-report-search]')) {
     filterCurrentReport();
-    if (currentViewName === 'cash' && event.target.matches('[data-report-search]')) {
+    if (currentViewName === 'cash') {
       clearTimeout(cashSearchTimer);
       cashSearchTimer = setTimeout(() => loadCashRows(1, 1, 1), 250);
     }
   }
 });
 document.addEventListener('change', event => {
+  if (event.target.matches('[data-report-kind]')) {
+    filterCurrentReport();
+  }
   if (event.target.matches('[data-cash-print-select]')) {
     const movementId = Number(event.target.dataset.cashPrintSelect);
     if (event.target.checked) selectedCashMovementReceipts.add(movementId);

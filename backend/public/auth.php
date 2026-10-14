@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../Core/Database.php';
+require_once __DIR__ . '/../Core/PhoneNumberNormalizer.php';
 require_once __DIR__ . '/../Core/JsonResponse.php';
 require_once __DIR__ . '/../Core/Session.php';
 require_once __DIR__ . '/../Core/AuthGuard.php';
@@ -12,6 +13,7 @@ require_once __DIR__ . '/../Services/SalesService.php';
 require_once __DIR__ . '/../Services/CompanyProfileService.php';
 require_once __DIR__ . '/../Services/ExchangeRateService.php';
 require_once __DIR__ . '/../Services/CashTransferService.php';
+require_once __DIR__ . '/../Services/CashDebtService.php';
 
 use AlbaStock\Core\JsonResponse;
 use AlbaStock\Core\Session;
@@ -23,7 +25,9 @@ use AlbaStock\Services\SalesService;
 use AlbaStock\Services\CompanyProfileService;
 use AlbaStock\Services\ExchangeRateService;
 use AlbaStock\Services\CashTransferService;
+use AlbaStock\Services\CashDebtService;
 use AlbaStock\Core\Database;
+use AlbaStock\Core\PhoneNumberNormalizer;
 
 $method = $_SERVER['REQUEST_METHOD'];
 $action = trim((string) ($_GET['action'] ?? 'me'));
@@ -537,7 +541,7 @@ try {
         $actor=AuthGuard::requireAuthenticated();if(!$actor||$actor['type']!=='user')JsonResponse::error('Action réservée à un utilisateur d’entreprise.',403);
         Authorization::requireAnyPermission($actor,['creer_ventes','gerer_clients'],'Accès refusé. Autorisation requise : création de ventes ou gestion des clients.');$body=json_decode((string)file_get_contents('php://input'),true)?:[];
         $requested=isset($body['succursale_id'])?(int)$body['succursale_id']:null;Authorization::branchId($actor,$requested);
-        $name=trim((string)($body['name']??''));$email=trim((string)($body['email']??''));$phone=trim((string)($body['phone']??''));$address=trim((string)($body['address']??''));
+        $name=trim((string)($body['name']??''));$email=trim((string)($body['email']??''));$phone=PhoneNumberNormalizer::normalize((string)($body['phone']??''));$address=trim((string)($body['address']??''));
         if($name==='')JsonResponse::error('Le nom du client est obligatoire.',422);if($email!==''&&!filter_var($email,FILTER_VALIDATE_EMAIL))JsonResponse::error('Adresse électronique invalide.',422);
         $db=Database::connection();$enterprise=(int)$actor['entreprise_id'];$insert=$db->prepare('INSERT INTO clients (entreprise_id,name,email,phone,address) VALUES (?,?,?,?,?)');$insert->bind_param('issss',$enterprise,$name,$email,$phone,$address);$insert->execute();JsonResponse::send(['success'=>true,'data'=>['client_id'=>(int)$db->insert_id,'name'=>$name]],201);
     }
@@ -583,6 +587,38 @@ try {
             $usage=$db->prepare('SELECT (SELECT COUNT(*) FROM mouvements_caisse WHERE entreprise_id=? AND caisse_id=?) + (SELECT COUNT(*) FROM ventes WHERE entreprise_id=? AND caisse_id=?) + (SELECT COUNT(*) FROM paiements_ventes WHERE entreprise_id=? AND caisse_id=?) + (SELECT COUNT(*) FROM paiements_fournisseurs WHERE entreprise_id=? AND caisse_id=?) AS total');$usage->bind_param('iiiiiiii',$enterprise,$cashId,$enterprise,$cashId,$enterprise,$cashId,$enterprise,$cashId);$usage->execute();if((int)$usage->get_result()->fetch_assoc()['total']>0)throw new RuntimeException('Cette caisse contient des opérations ou des paiements. Elle ne peut pas être supprimée.');
             $delete=$db->prepare('DELETE FROM caisses WHERE caisse_id=? AND entreprise_id=? AND statut=\'FERMEE\'');$delete->bind_param('ii',$cashId,$enterprise);$delete->execute();$db->commit();JsonResponse::send(['success'=>true,'message'=>'Caisse supprimée.']);
         }catch(Throwable $exception){$db->rollback();throw $exception;}
+    }
+    if ($action === 'create-cash-debt' && $method === 'POST') {
+        $actor = AuthGuard::requireAuthenticated();
+        if (!$actor || $actor['type'] !== 'user') JsonResponse::error('Action réservée à un utilisateur d’entreprise.', 403);
+        Authorization::requirePermission($actor, 'modifier_caisse');
+        $body = json_decode((string) file_get_contents('php://input'), true);
+        if (!is_array($body)) JsonResponse::error('Corps JSON invalide.', 400);
+        $requestedBranch = isset($body['succursale_id']) ? (int) $body['succursale_id'] : null;
+        $allowedBranch = Authorization::branchId($actor, $requestedBranch);
+        $debtId = (new CashDebtService(Database::connection()))->create(
+            (int) $actor['entreprise_id'],
+            (int) $actor['id'],
+            $body,
+            $allowedBranch
+        );
+        JsonResponse::send(['success' => true, 'data' => ['dette_id' => $debtId]], 201);
+    }
+    if ($action === 'pay-cash-debt' && $method === 'POST') {
+        $actor = AuthGuard::requireAuthenticated();
+        if (!$actor || $actor['type'] !== 'user') JsonResponse::error('Action réservée à un utilisateur d’entreprise.', 403);
+        Authorization::requirePermission($actor, 'modifier_caisse');
+        $body = json_decode((string) file_get_contents('php://input'), true);
+        if (!is_array($body)) JsonResponse::error('Corps JSON invalide.', 400);
+        $requestedBranch = isset($body['succursale_id']) ? (int) $body['succursale_id'] : null;
+        $allowedBranch = Authorization::branchId($actor, $requestedBranch);
+        (new CashDebtService(Database::connection()))->pay(
+            (int) $actor['entreprise_id'],
+            (int) $actor['id'],
+            $body,
+            $allowedBranch
+        );
+        JsonResponse::send(['success' => true, 'message' => 'Remboursement enregistré en caisse.']);
     }
     if ($action === 'create-cash-movement' && $method === 'POST') {
         $actor=AuthGuard::requireAuthenticated();if(!$actor||$actor['type']!=='user')JsonResponse::error('Action réservée à un utilisateur d’entreprise.',403);Authorization::requirePermission($actor,'modifier_caisse');
