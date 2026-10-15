@@ -434,6 +434,61 @@ try {
         JsonResponse::send(['success'=>true,'data'=>['succursale_id'=>$targetBranch,'products'=>$productRows,'cashboxes'=>$cashRows,'clients'=>$clientRows]]);
     }
 
+    if ($action === 'sales-top-products') {
+        Authorization::requirePermission($user, 'voir_ventes');
+        $from = trim((string) ($_GET['date_debut'] ?? ''));
+        $to = trim((string) ($_GET['date_fin'] ?? ''));
+        $search = trim((string) ($_GET['recherche'] ?? ''));
+        $validDate = static fn (string $date): bool => preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) === 1 && checkdate((int) substr($date, 5, 2), (int) substr($date, 8, 2), (int) substr($date, 0, 4));
+        if (!$validDate($from) || !$validDate($to) || $from > $to || mb_strlen($search, 'UTF-8') > 120) {
+            JsonResponse::error('Les filtres du classement des ventes sont invalides.', 422);
+        }
+        $where = " WHERE v.entreprise_id=? AND v.status<>'CANCELLED' AND v.sale_date>=? AND v.sale_date<DATE_ADD(?, INTERVAL 1 DAY)";
+        $params = [$enterpriseId, $from, $to];
+        if ($branchId !== null) {
+            $where .= ' AND v.succursale_id=?';
+            $params[] = $branchId;
+        }
+        if ($search !== '') {
+            $where .= ' AND (p.name LIKE ? OR p.sku LIKE ?)';
+            $params[] = '%' . $search . '%';
+            $params[] = '%' . $search . '%';
+        }
+        $sql = 'SELECT p.produit_id,p.name AS product_name,p.sku,COALESCE(NULLIF(u.symbole,\'\'),u.name,\'\') AS unit_name,SUM(vd.quantity) AS quantity FROM ventes v JOIN vente_details vd ON vd.vente_id=v.vente_id AND vd.entreprise_id=v.entreprise_id JOIN produits p ON p.produit_id=vd.produit_id AND p.entreprise_id=vd.entreprise_id LEFT JOIN unites_mesure u ON u.unite_mesure_id=p.unite_de_mesure AND u.entreprise_id=p.entreprise_id' . $where . ' GROUP BY p.produit_id,p.name,p.sku,u.name,u.symbole ORDER BY quantity DESC,p.name ASC LIMIT 10';
+        $query = $db->prepare($sql);
+        $bindParams($query, $params);
+        $query->execute();
+        JsonResponse::send(['success' => true, 'data' => $query->get_result()->fetch_all(MYSQLI_ASSOC)]);
+    }
+
+    if ($action === 'procurement-trends') {
+        Authorization::requirePermission($user, 'voir_approvisionnements');
+        $from = trim((string) ($_GET['date_debut'] ?? ''));
+        $to = trim((string) ($_GET['date_fin'] ?? ''));
+        $search = trim((string) ($_GET['recherche'] ?? ''));
+        $validDate = static fn (string $date): bool => preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) === 1 && checkdate((int) substr($date, 5, 2), (int) substr($date, 8, 2), (int) substr($date, 0, 4));
+        if (!$validDate($from) || !$validDate($to) || $from > $to || mb_strlen($search, 'UTF-8') > 120) {
+            JsonResponse::error('Les filtres de tendance des approvisionnements sont invalides.', 422);
+        }
+        $groupByMonth = (new DateTimeImmutable($from))->diff(new DateTimeImmutable($to))->days > 62;
+        $periodExpression = $groupByMonth ? 'DATE_FORMAT(a.validation_date, \'%Y-%m-01\')' : 'DATE(a.validation_date)';
+        $where = ' WHERE a.entreprise_id=? AND a.movement_type=\'IN\' AND a.status=\'RECEIVED\' AND a.validation_date>=? AND a.validation_date<DATE_ADD(?, INTERVAL 1 DAY)';
+        $params = [$enterpriseId, $from, $to];
+        if ($branchId !== null) {
+            $where .= ' AND a.succursale_id=?';
+            $params[] = $branchId;
+        }
+        if ($search !== '') {
+            $where .= ' AND (p.name LIKE ? OR p.sku LIKE ? OR a.purchase_no LIKE ? OR COALESCE(f.name,\'\') LIKE ?)';
+            for ($index = 0; $index < 4; $index++) $params[] = '%' . $search . '%';
+        }
+        $sql = 'SELECT ' . $periodExpression . ' AS period_date,COALESCE(NULLIF(u.symbole,\'\'),u.name,\'Sans unité\') AS unit_name,p.monais,SUM(ad.quantity) AS quantity,SUM(ad.quantity*ad.unit_cost) AS amount FROM achats a JOIN achat_details ad ON ad.achat_id=a.achat_id AND ad.entreprise_id=a.entreprise_id JOIN produits p ON p.produit_id=ad.produit_id AND p.entreprise_id=ad.entreprise_id LEFT JOIN unites_mesure u ON u.unite_mesure_id=p.unite_de_mesure AND u.entreprise_id=p.entreprise_id LEFT JOIN fournisseurs f ON f.fournisseur_id=a.fournisseur_id AND f.entreprise_id=a.entreprise_id' . $where . ' GROUP BY period_date,unit_name,p.monais ORDER BY period_date,unit_name,p.monais';
+        $query = $db->prepare($sql);
+        $bindParams($query, $params);
+        $query->execute();
+        JsonResponse::send(['success' => true, 'data' => $query->get_result()->fetch_all(MYSQLI_ASSOC), 'group_by_month' => $groupByMonth]);
+    }
+
     if ($action === 'cash-sales-profit') {
         Authorization::requirePermission($user, 'voir_caisse');
         $page = max(1, (int) ($_GET['page'] ?? 1));
@@ -597,6 +652,11 @@ try {
             unset($purchaseRow);
         }
         $response['pagination'] = ['page' => $page, 'per_page' => $perPage, 'total' => $total, 'pages' => max(1, (int) ceil($total / $perPage))];
+        $currencyQuery = $db->prepare('SELECT DISTINCT p.monais FROM achats a JOIN achat_details ad ON ad.achat_id=a.achat_id AND ad.entreprise_id=a.entreprise_id JOIN produits p ON p.produit_id=ad.produit_id AND p.entreprise_id=ad.entreprise_id WHERE a.entreprise_id=?' . ($branchId !== null ? ' AND a.succursale_id=?' : '') . ' ORDER BY p.monais');
+        if ($branchId === null) $currencyQuery->bind_param('i', $enterpriseId);
+        else $currencyQuery->bind_param('ii', $enterpriseId, $branchId);
+        $currencyQuery->execute();
+        $response['summary'] = array_map(static fn (array $row): array => ['currency' => (string) $row['monais']], $currencyQuery->get_result()->fetch_all(MYSQLI_ASSOC));
         JsonResponse::send($response);
     }
 

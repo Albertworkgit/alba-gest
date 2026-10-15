@@ -18,6 +18,10 @@ let branchOptions = [];
 const branchScopedResources = new Set(['stocks', 'achats', 'caisses', 'ventes', 'fournisseurs']);
 let procurementSummaryTimer = null;
 let procurementSummaryRequest = 0;
+let procurementChartTimer = null;
+let procurementChartRequest = 0;
+let salesChartTimer = null;
+let salesChartRequest = 0;
 let cashSearchTimer = null;
 const selectedCashMovementReceipts = new Set();
 function canSelectCompanyBranches(user = sessionUser) {
@@ -153,6 +157,7 @@ function renderView(viewName) {
   }
   if (viewName === 'accounting') renderAccountingDraftPanel(container);
   if (viewName === 'stock') configureStockWorkspace();
+  configureActivityCharts(viewName);
   configureReportToolbar(viewName);
   renderModuleNavigation();
   if (viewName === 'accounting') {
@@ -218,6 +223,7 @@ function renderView(viewName) {
     loadStock();
     if (hasAccess('voir_fournisseurs')) loadSupplierRows();
     if (hasAccess('voir_approvisionnements')) loadPurchaseRows();
+    if (hasAccess('voir_approvisionnements')) loadProcurementTrends();
   }
   if (viewName === 'users') {
     const userPanel = container.querySelector('#user-rows')?.closest('section');
@@ -230,12 +236,13 @@ function renderView(viewName) {
     if (hasAccess('gerer_utilisateurs')) loadUserRows();
   }
   if (viewName === 'dashboard') { loadDashboardData(); loadExpiringStock(); }
-  if (viewName === 'sales') loadSalesRows();
+  if (viewName === 'sales') { loadSalesRows(); loadSalesTopProducts(); }
   if (viewName === 'cash') loadCashRows();
   if (viewName === 'accounting') loadAccountingData();
   if (viewName === 'branches') loadSimpleRows('succursales', 'branch-rows', 6, row => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.code)}</td><td>${Number(row.est_sucursal_mere) ? '<span class="status success">Principale</span>' : '—'}</td><td>${escapeHtml(row.address || '—')}</td><td>${escapeHtml(row.phone || '—')}</td><td><button class="text-button" data-branch-edit="${Number(row.succursale_id)}">Modifier</button> <button class="text-button" data-branch-delete="${Number(row.succursale_id)}">Supprimer</button></td></tr>`, 'Aucune succursale enregistrée.');
   if (viewName === 'clients') loadSimpleRows('clients', 'client-rows', 5, clientRowMarkup, 'Aucun client enregistr\u00e9.');
-  if (viewName === 'procurement') loadPurchaseRows();
+  if (viewName === 'procurement') { loadPurchaseRows(); loadProcurementTrends(); }
+  if (viewName === 'stock' && hasAccess('voir_approvisionnements')) loadProcurementTrends();
   if (viewName === 'branch-dashboard') { loadBranchDashboard(); loadExpiringStock(); }
   if (viewName === 'stock') loadExpiringStock();
   window.scrollTo({top: 0, behavior: 'smooth'});
@@ -253,15 +260,48 @@ function configureReportToolbar(viewName) {
     if(hasAccess('voir_caisse')) {
       select.add(new Option('Journal de caisse','cash'));
       select.add(new Option('Dettes accordées','debts'));
-      select.add(new Option('Bénéfices et pertes sur ventes','profits'));
+      select.add(new Option('Rapports des suivis des bénéfices et pertes sur les ventes','profits'));
     }
     select.value=viewName==='cash'?'cash':'sales';if(!select.value&&select.options.length)select.selectedIndex=0;label.append(select);toolbar.insertBefore(label,toolbar.querySelector('[data-report-from]').closest('label'));
   }
   container.prepend(toolbar);
 }
+function configureActivityCharts(viewName) {
+  let target = null;
+  let titleText = '';
+  let subtitle = '';
+  let chartId = '';
+  let chartMarkup = '';
+  if (viewName === 'sales') {
+    target = container.querySelector('#sales-rows')?.closest('section');
+    titleText = 'Produits les plus vendus';
+    subtitle = 'Classement par quantité vendue sur la période sélectionnée; par défaut, les 30 derniers jours.';
+    chartId = 'sales-top-products-chart';
+    chartMarkup = `<div id="${chartId}" class="activity-chart-content"><p class="empty-note">Chargement du classement…</p></div>`;
+  } else if (viewName === 'procurement' || viewName === 'stock') {
+    target = container.querySelector('#purchase-rows')?.closest('section');
+    titleText = 'Tendance des approvisionnements';
+    subtitle = 'Entrées validées, quantités par unité et montants séparés par monnaie; par défaut, les 30 derniers jours.';
+    chartId = 'procurement-trends-chart';
+    chartMarkup = `<div id="${chartId}" class="activity-chart-content"><p class="empty-note">Chargement des tendances…</p></div>`;
+  }
+  if (!target || !chartId) return;
+  const existing = container.querySelector(`.${chartId}`)?.closest('.activity-chart-panel');
+  if (existing) existing.remove();
+  const panel = document.createElement('section');
+  panel.className = 'panel activity-chart-panel';
+  panel.innerHTML = `<div class="panel-header"><div><h2>${escapeHtml(titleText)}</h2><p class="panel-subtitle">${escapeHtml(subtitle)}</p></div></div>${chartMarkup}`;
+  target.after(panel);
+}
 function reportDateColumn(row = null) {
   if (currentViewName === 'sales') return 4;
-  if (currentViewName === 'cash') return row?.closest('tbody')?.id === 'cash-movement-rows' ? 0 : 3;
+  if (currentViewName === 'cash') {
+    if (row?.closest('tbody')?.id === 'cash-movement-rows') return 0;
+    if (selectedReportKind() === 'sales') return 4;
+    if (selectedReportKind() === 'profits') return 0;
+    if (selectedReportKind() === 'debts') return 3;
+    return 0;
+  }
   if (currentViewName === 'stock' && container.querySelector('[data-stock-section].active')?.dataset.stockSection === 'procurement') return 2;
   if (currentViewName === 'procurement') return 2;
   return -1;
@@ -329,7 +369,7 @@ function currentReportSource() {
 }
 function selectedReportKind(){return container.querySelector('[data-report-kind]')?.value||(currentViewName==='cash'?'cash':'sales');}
 function currentReportTitle() {
-  if (currentViewName === 'sales' || currentViewName === 'cash') return selectedReportKind()==='debts'?'Rapport des dettes accordées':selectedReportKind()==='profits'?'Rapport des bénéfices et pertes sur ventes':selectedReportKind()==='cash'?'Journal de caisse':'Rapport des ventes';
+  if (currentViewName === 'sales' || currentViewName === 'cash') return selectedReportKind()==='debts'?'Rapport des dettes accordées':selectedReportKind()==='profits'?'Rapports des suivis des bénéfices et pertes sur les ventes':selectedReportKind()==='cash'?'Journal de caisse':'Rapport des ventes';
   if (currentViewName === 'stock') {
     const activeSection = container.querySelector('[data-stock-section].active');
     if (activeSection) return `Stock · ${activeSection.textContent.trim()}`;
@@ -377,7 +417,8 @@ function addReportTableTotals(root) {
         total.quantity += Number(row.dataset.purchaseQuantity || 0);
         const amounts = JSON.parse(row.dataset.purchaseAmounts || '[]');
         amounts.forEach(({currency = '', amount = 0}) => {
-          total.amounts.set(currency, (total.amounts.get(currency) || 0) + Number(amount));
+          const normalizedCurrency = String(currency).trim().toUpperCase();
+          total.amounts.set(normalizedCurrency, (total.amounts.get(normalizedCurrency) || 0) + Number(amount));
         });
         totals.set(key, total);
       });
@@ -385,7 +426,8 @@ function addReportTableTotals(root) {
       const exitIndex = headers.findIndex(header => /quantité sortie/i.test(header.textContent));
       const entryIndex = headers.findIndex(header => /quantité entrée/i.test(header.textContent));
       const amountIndex = headers.findIndex(header => /^total$/i.test(header.textContent.trim()));
-      if (quantityIndex >= 0 && exitIndex >= 0 && entryIndex >= 0 && amountIndex >= 0) {
+      const amountIndices = headers.map((header, index) => /^montant\s+.+$/i.test(header.textContent.trim()) ? index : -1).filter(index => index >= 0);
+      if (quantityIndex >= 0 && exitIndex >= 0 && entryIndex >= 0 && (amountIndex >= 0 || amountIndices.length)) {
         for (const total of totals.values()) {
           const row = body.insertRow();
           row.dataset.reportTotal = 'true';
@@ -400,6 +442,9 @@ function addReportTableTotals(root) {
               cell.textContent = `${total.quantity.toLocaleString('fr-FR', {maximumFractionDigits:2})}${total.unit ? ` ${total.unit}` : ''}`;
             } else if (index === amountIndex && total.amounts.size) {
               cell.textContent = [...total.amounts].map(([currency, amount]) => moneyCurrencyLabel(amount, currency)).join(' / ');
+            } else if (amountIndices.includes(index)) {
+              const currency = headers[index].textContent.trim().replace(/^montant\s+/i, '').toUpperCase();
+              cell.textContent = moneyCurrencyLabel(total.amounts.get(currency) || 0, currency);
             }
           });
         }
@@ -460,39 +505,43 @@ async function selectedReportNode(){
       rows.push(...reportPage.rows);
     }
     const node=document.createElement('section');node.className='panel';
-    node.innerHTML=`<div class="panel-header"><div><h2>${escapeHtml(currentReportTitle())}</h2><p class="panel-subtitle">Le coût provient des lots d’achat associés à la vente lorsqu’ils sont disponibles, sinon du coût enregistré sur la fiche produit. Les réductions sont déduites du total vendu.</p></div></div>${currencies.size?`<div style="overflow:auto"><table class="data-table"><thead><tr><th>Monnaie</th><th>Quantité vendue</th><th>Ventes nettes</th><th>Coût total</th><th>Bénéfices</th><th>Pertes</th></tr></thead><tbody>${[...currencies].map(([currency,total])=>`<tr><td>${escapeHtml(currency)}</td><td>${total.quantity.toLocaleString('fr-FR')}</td><td>${escapeHtml(moneyCurrencyLabel(total.sales,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.cost,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.profit,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.loss,currency))}</td></tr>`).join('')}</tbody></table></div>`:''}<div style="overflow:auto"><table class="data-table"><thead><tr>${['Date','Facture','Client','Produit','Quantité','Coût unitaire','Prix de vente unitaire','Réduction','Ventes nettes','Coût total','Bénéfice','Perte','Monnaie'].map(header=>`<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody data-profit-details></tbody></table></div>`;
+    node.innerHTML=`<div class="panel-header"><div><h2>${escapeHtml(currentReportTitle())}</h2><p class="panel-subtitle">Le coût provient des lots d’achat associés à la vente lorsqu’ils sont disponibles, sinon du coût enregistré sur la fiche produit. Les réductions sont déduites du total vendu. Le rapport présente aussi la marge bénéficiaire calculée sur le coût total : (ventes nettes − coût total) ÷ coût total × 100.</p></div></div>${currencies.size?`<div style="overflow:auto"><table class="data-table"><thead><tr><th>Monnaie</th><th>Quantité vendue</th><th>Ventes nettes</th><th>Coût total</th><th>Bénéfices</th><th>Pertes</th><th>Marge bénéficiaire</th></tr></thead><tbody>${[...currencies].map(([currency,total])=>{const margin=total.cost>0?`${((total.sales-total.cost)/total.cost*100).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} %`:'—';return `<tr><td>${escapeHtml(currency)}</td><td>${total.quantity.toLocaleString('fr-FR')}</td><td>${escapeHtml(moneyCurrencyLabel(total.sales,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.cost,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.profit,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.loss,currency))}</td><td>${escapeHtml(margin)}</td></tr>`}).join('')}</tbody></table></div>`:''}<div style="overflow:auto"><table class="data-table"><thead><tr>${['Date','Facture','Client','Produit','Quantité','Coût unitaire','Prix de vente unitaire','Réduction','Ventes nettes','Coût total','Bénéfice','Perte','Marge bénéficiaire','Monnaie'].map(header=>`<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody data-profit-details></tbody></table></div>`;
     const body=node.querySelector('[data-profit-details]');
     const unitCostLabel=(value,currency)=>`${Number(value||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:4})} ${String(currency||'').trim()}`.trim();
     rows.forEach(item=>{
       const row=body.insertRow();
       row.dataset.reportDate=String(item.sale_date||'').slice(0,10);
-      const values=[dateLabel(item.sale_date),item.invoice_no,item.client_name||'Client comptoir',item.product_name,Number(item.quantity),unitCostLabel(item.unit_cost,item.monais),moneyCurrencyLabel(item.unit_price,item.monais),moneyCurrencyLabel(item.discount_amount,item.monais),moneyCurrencyLabel(item.subtotal,item.monais),moneyCurrencyLabel(item.cost_total,item.monais),moneyCurrencyLabel(item.profit,item.monais),moneyCurrencyLabel(item.loss,item.monais),item.monais];
+      const margin=Number(item.cost_total)>0?`${((Number(item.subtotal)-Number(item.cost_total))/Number(item.cost_total)*100).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} %`:'—';
+      const values=[dateLabel(item.sale_date),item.invoice_no,item.client_name||'Client comptoir',item.product_name,Number(item.quantity),unitCostLabel(item.unit_cost,item.monais),moneyCurrencyLabel(item.unit_price,item.monais),moneyCurrencyLabel(item.discount_amount,item.monais),moneyCurrencyLabel(item.subtotal,item.monais),moneyCurrencyLabel(item.cost_total,item.monais),moneyCurrencyLabel(item.profit,item.monais),moneyCurrencyLabel(item.loss,item.monais),margin,item.monais];
       row.innerHTML=values.map(value=>`<td>${escapeHtml(value)}</td>`).join('');
     });
-    if(!rows.length){const empty=body.insertRow();empty.innerHTML='<td colspan="13">Aucune vente trouvée pour cette période et cette recherche.</td>';}
+    if(!rows.length){const empty=body.insertRow();empty.innerHTML='<td colspan="14">Aucune vente trouvée pour cette période et cette recherche.</td>';} 
     return node;
   }
   if(kind==='debts'){
     const rows=await fetchAllReportRows('cash-debts',params);
+    const currencies=[...new Set(rows.map(item=>String(item.monais||'').trim().toUpperCase()).filter(Boolean))].sort();
     const node=document.createElement('section');node.className='panel';
-    node.innerHTML=`<div class="panel-header"><h2>${escapeHtml(currentReportTitle())}</h2></div><table class="data-table"><thead><tr>${['Bénéficiaire','Téléphone','Succursale','Date','Description','Montant prêté','Remboursé','Solde restant','Statut'].map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody></tbody></table>`;
+    node.innerHTML=`<div class="panel-header"><h2>${escapeHtml(currentReportTitle())}</h2></div><table class="data-table"><thead><tr>${['Bénéficiaire','Téléphone','Succursale','Date','Description',...currencies.flatMap(currency=>[`${currency} · Prêté`,`${currency} · Remboursé`,`${currency} · Solde`]),'Statut'].map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody></tbody></table>`;
     const body=node.querySelector('tbody');
     rows.forEach(item=>{
       const row=body.insertRow();
       row.dataset.reportDate=String(item.date_dette||'').slice(0,10);
-      row.innerHTML=[item.beneficiaire,item.telephone||'—',item.branch_name,dateLabel(item.date_dette),item.description||'—',moneyCurrencyLabel(item.montant,item.monais),moneyCurrencyLabel(item.montant_rembourse,item.monais),moneyCurrencyLabel(item.solde_restant,item.monais),item.statut].map(value=>`<td>${escapeHtml(value)}</td>`).join('');
+      const currency=String(item.monais||'').trim().toUpperCase();
+      row.innerHTML=[item.beneficiaire,item.telephone||'—',item.branch_name,dateLabel(item.date_dette),item.description||'—',...currencies.flatMap(reportCurrency=>reportCurrency===currency?[moneyCurrencyLabel(item.montant,reportCurrency),moneyCurrencyLabel(item.montant_rembourse,reportCurrency),moneyCurrencyLabel(item.solde_restant,reportCurrency)]:['—','—','—']),item.statut].map(value=>`<td>${escapeHtml(value)}</td>`).join('');
     });
+    if(!rows.length){const empty=body.insertRow();empty.innerHTML=`<td colspan="${6+currencies.length*3}">Aucune dette trouvée pour cette période et cette recherche.</td>`;}
     return node;
   }
   const action=kind==='sales'?'sales-list':'cash-movements';
   const rows=await fetchAllReportRows(action,params);
   const isSales=kind==='sales';
-  const currencies=isSales?[]:[...new Set(rows.map(item=>String(item.monais||'').trim().toUpperCase()).filter(Boolean))].sort();
-  const headers=isSales?['Facture','Client','Succursale','Caissier','Date','Articles','Total','Payé','Statut']:['Date','Caisse','Motif','Référence',...currencies.flatMap(currency=>[`${currency} · Entrées`,`${currency} · Sorties`])];
+  const currencies=isSales?[...new Set(rows.flatMap(item=>(Array.isArray(item.currency_totals)&&item.currency_totals.length?item.currency_totals:[item]).map(balance=>String(balance.monais||'').trim().toUpperCase()).filter(Boolean)))].sort():[...new Set(rows.map(item=>String(item.monais||'').trim().toUpperCase()).filter(Boolean))].sort();
+  const headers=isSales?['Facture','Client','Succursale','Caissier','Date','Articles',...currencies.flatMap(currency=>[`${currency} · Total`,`${currency} · Payé`]),'Statut']:['Date','Caisse','Motif','Référence',...currencies.flatMap(currency=>[`${currency} · Entrées`,`${currency} · Sorties`])];
   const node=document.createElement('section');node.className='panel';node.innerHTML=`<div class="panel-header"><h2>${currentReportTitle()}</h2></div><table class="data-table"><thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody></tbody></table>`;
   const body=node.querySelector('tbody');
   const totalsByCurrency=new Map();
-  currencies.forEach(currency=>totalsByCurrency.set(currency,{entries:0,exits:0}));
+  currencies.forEach(currency=>totalsByCurrency.set(currency,isSales?{total:0,paid:0}:{entries:0,exits:0}));
   rows.forEach(item=>{
     const day=String(isSales?item.sale_date:item.movement_date).slice(0,10);
     const type=isSales?'':item.type==='ENTREE'?'Entrée':'Sortie';
@@ -503,8 +552,9 @@ async function selectedReportNode(){
       :[dateLabel(item.movement_date),item.cash_name,item.branch_name||'—',item.cashier||'—',item.invoice_no||'',item.client_name||'',item.dette_beneficiaire||'',item.dette_telephone||'',item.dette_description||'',item.payment_mode||'',item.bank_reference||'',type,item.reason||'—',reference,amount].join(' ');
     if ((from&&day<from)||(to&&day>to)||(search&&!searchText.toLocaleLowerCase('fr').includes(search))) return;
     const currency=String(item.monais||'').trim().toUpperCase();
+    const saleBalances=isSales?(Array.isArray(item.currency_totals)&&item.currency_totals.length?item.currency_totals:[item]):[];
     const values=isSales
-      ?[item.invoice_no,item.client_name||'Client comptoir',item.branch_name||'—',item.cashier||'—',dateLabel(item.sale_date),Number(item.item_count||0),saleCurrencyAmounts(item,'total_amount'),saleCurrencyAmounts(item,'amount_paid'),item.status]
+      ?[item.invoice_no,item.client_name||'Client comptoir',item.branch_name||'—',item.cashier||'—',dateLabel(item.sale_date),Number(item.item_count||0),...currencies.flatMap(reportCurrency=>{const balance=saleBalances.find(entry=>String(entry.monais||'').trim().toUpperCase()===reportCurrency);const totals=totalsByCurrency.get(reportCurrency);if(balance&&totals){totals.total+=Number(balance.total_amount||0);totals.paid+=Number(balance.amount_paid||0);}return [balance?moneyCurrencyLabel(balance.total_amount,reportCurrency):'—',balance?moneyCurrencyLabel(balance.amount_paid,reportCurrency):'—'];}),item.status]
       :[dateLabel(item.movement_date),item.cash_name,[item.reason,item.dette_telephone?`Téléphone : ${item.dette_telephone}`:'',item.dette_description].filter(Boolean).join(' · ')||'—',reference,...currencies.flatMap(reportCurrency=>[
         currency===reportCurrency&&item.type==='ENTREE'?amount:'—',
         currency===reportCurrency&&item.type==='SORTIE'?amount:'—'
@@ -521,6 +571,11 @@ async function selectedReportNode(){
       }
     }
   });
+  if (isSales&&totalsByCurrency.size) {
+    const totalRow=body.insertRow();
+    totalRow.className='report-total-row';totalRow.dataset.reportTotal='true';
+    totalRow.innerHTML=`<td colspan="6">Total</td>${[...totalsByCurrency].flatMap(([currency,totals])=>[`<td>${escapeHtml(moneyCurrencyLabel(totals.total,currency))}</td>`,`<td>${escapeHtml(moneyCurrencyLabel(totals.paid,currency))}</td>`]).join('')}<td></td>`;
+  }
   if (!isSales) {
     if (!body.rows.length) {
       const emptyRow=body.insertRow();
@@ -1712,10 +1767,10 @@ async function printSelectedCashMovementReceipts() {
     showToast(`Impression groupée impossible : ${error.message}`);
   }
 }
-function renderPurchaseRow(item) {
+function renderPurchaseRow(item, currencies = []) {
   const unit = item.unit_abbreviation || item.unit_name || '';
   const movementAmounts = Array.isArray(item.movement_amounts) ? item.movement_amounts : [{currency:item.monais || '', amount:Number(item.total_amount || 0)}];
-  const amountLabel = movementAmounts.map(({currency, amount}) => moneyCurrencyLabel(amount, currency)).join(' / ');
+  const amountsByCurrency = new Map(movementAmounts.map(({currency, amount}) => [String(currency || '').trim().toUpperCase(), Number(amount || 0)]));
   const isPerishableLot = Boolean(item.date_expiration);
   const quantityOut = item.movement_type === 'OUT'
     ? `${Number(item.total_quantity || 0).toLocaleString('fr-FR')} ${unit}`.trim()
@@ -1724,20 +1779,28 @@ function renderPurchaseRow(item) {
   const incoming = item.movement_type === 'IN' ? `${Number(item.total_quantity || 0).toLocaleString('fr-FR')} ${unit}`.trim() : '—';
   const reason = item.movement_type === 'OUT' ? (item.motif_sortie || 'Sortie stock') : (item.supplier_name || 'Approvisionnement');
   const canCancelValidated = item.status === 'RECEIVED' && item.validation_date && Date.now() - new Date(item.validation_date).getTime() < 172800000;
-  return `<tr data-report-date="${escapeHtml(String(item.validation_date || '').slice(0, 10))}" data-purchase-movement="${escapeHtml(item.movement_type)}" data-purchase-status="${escapeHtml(item.status)}" data-purchase-quantity="${Number(item.total_quantity || 0)}" data-purchase-amounts="${escapeHtml(JSON.stringify(movementAmounts))}" data-purchase-unit="${escapeHtml(unit)}"><td>${escapeHtml(item.purchase_no)}</td><td>${escapeHtml(reason)}</td><td>${escapeHtml(item.validation_date ? dateLabel(item.validation_date) : '—')}</td><td>${Number(item.total_quantity || 0).toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(quantityOut)}</td><td>${escapeHtml(incoming)}</td><td>${escapeHtml(remaining)}</td><td>${escapeHtml(amountLabel || moneyCurrencyLabel(item.total_amount, item.monais))}</td><td>${escapeHtml(purchaseStatusLabel(item.status))}${item.status === 'PENDING' ? ` <button type="button" data-purchase-validate="${Number(item.achat_id)}">Valider</button><button type="button" data-purchase-cancel="${Number(item.achat_id)}">Annuler</button>` : canCancelValidated ? ` <button type="button" data-purchase-cancel="${Number(item.achat_id)}">Annuler</button>` : ''}</td><td><button type="button" class="document-action-button purchase-voucher-button" title="Imprimer le bon" aria-label="Imprimer le bon" data-purchase-voucher="${Number(item.achat_id)}"><span>Bon</span></button></td></tr>`;
+  return `<tr data-report-date="${escapeHtml(String(item.validation_date || '').slice(0, 10))}" data-purchase-movement="${escapeHtml(item.movement_type)}" data-purchase-status="${escapeHtml(item.status)}" data-purchase-quantity="${Number(item.total_quantity || 0)}" data-purchase-amounts="${escapeHtml(JSON.stringify(movementAmounts))}" data-purchase-unit="${escapeHtml(unit)}"><td>${escapeHtml(item.purchase_no)}</td><td>${escapeHtml(reason)}</td><td>${escapeHtml(item.validation_date ? dateLabel(item.validation_date) : '—')}</td><td>${Number(item.total_quantity || 0).toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(quantityOut)}</td><td>${escapeHtml(incoming)}</td><td>${escapeHtml(remaining)}</td>${currencies.map(currency=>`<td>${amountsByCurrency.has(currency)?escapeHtml(moneyCurrencyLabel(amountsByCurrency.get(currency),currency)):'—'}</td>`).join('')}<td>${escapeHtml(purchaseStatusLabel(item.status))}${item.status === 'PENDING' ? ` <button type="button" data-purchase-validate="${Number(item.achat_id)}">Valider</button><button type="button" data-purchase-cancel="${Number(item.achat_id)}">Annuler</button>` : canCancelValidated ? ` <button type="button" data-purchase-cancel="${Number(item.achat_id)}">Annuler</button>` : ''}</td><td><button type="button" class="document-action-button purchase-voucher-button" title="Imprimer le bon" aria-label="Imprimer le bon" data-purchase-voucher="${Number(item.achat_id)}"><span>Bon</span></button></td></tr>`;
 }
 async function allPurchaseRows() {
-  const purchases = await fetchAllReportRows('procurement-list');
-  return purchases.length ? purchases.map(renderPurchaseRow).join('') : '<tr><td colspan="10">Aucun approvisionnement enregistré.</td></tr>';
+  let result = await fetchReportPage('procurement-list', 1, {}, 100);
+  const purchases = [...result.rows];
+  const currencies = result.summary.map(row=>String(row.currency||'').trim().toUpperCase()).filter(Boolean);
+  for(let page=2;page<=result.pagination.pages;page++){
+    result=await fetchReportPage('procurement-list',page,{},100);
+    purchases.push(...result.rows);
+  }
+  return purchases.length ? purchases.map(item=>renderPurchaseRow(item,currencies)).join('') : `<tr><td colspan="${9+currencies.length}">Aucun approvisionnement enregistré.</td></tr>`;
 }
 async function loadPurchaseRows(page = 1) {
   const body = document.getElementById('purchase-rows'); if (!body) return;
   try {
     const pageResult = await fetchReportPage('procurement-list', page);
     const purchases = pageResult.rows;
+    const currencies = pageResult.summary.map(row=>String(row.currency||'').trim().toUpperCase()).filter(Boolean);
     const header = body.closest('table')?.tHead?.rows[0];
-    if (header) header.innerHTML = '<th>Référence</th><th>Motif</th><th>Date</th><th>Quantité</th><th>Quantité sortie</th><th>Quantité entrée</th><th>Solde du lot</th><th>Total</th><th>Statut</th><th>Bon</th>';
-    body.innerHTML = purchases.length ? purchases.map(renderPurchaseRow).join('') : '<tr><td colspan="10">Aucun approvisionnement enregistré.</td></tr>';
+    if (header) header.innerHTML = `<th>Référence</th><th>Motif</th><th>Date</th><th>Quantité</th><th>Quantité sortie</th><th>Quantité entrée</th><th>Solde du lot</th>${currencies.map(currency=>`<th>Montant ${escapeHtml(currency)}</th>`).join('')}<th>Statut</th><th>Bon</th>`;
+    const emptyColumns = 9 + currencies.length;
+    body.innerHTML = purchases.length ? purchases.map(item=>renderPurchaseRow(item,currencies)).join('') : `<tr><td colspan="${emptyColumns}">Aucun approvisionnement enregistré.</td></tr>`;
     filterCurrentReport();
     showPagination(body, 'purchases', pageResult.pagination, loadPurchaseRows, allPurchaseRows);
   } catch (error) { showLoadError('purchase-rows', error, 10); }
@@ -2962,6 +3025,106 @@ async function fetchReportData(actionName, params = {}) {
   if (!response.ok || !result.success) throw new Error(result.message || 'Chargement du rapport impossible.');
   return result.data;
 }
+function chartLocalDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+}
+function activityChartRange() {
+  const filters = reportFilterValues();
+  const today = chartLocalDate(new Date());
+  const end = filters.to || today;
+  const endDate = new Date(`${end}T00:00:00`);
+  const startDate = new Date(endDate);
+  startDate.setDate(startDate.getDate()-29);
+  return {
+    from:filters.from || chartLocalDate(startDate),
+    to:end,
+    search:filters.search
+  };
+}
+function activityChartBuckets(from, to) {
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  const monthly = end-start > 62*86400000;
+  const buckets = [];
+  const cursor = new Date(start);
+  if(monthly)cursor.setDate(1);
+  while(cursor<=end){
+    const key=monthly?chartLocalDate(new Date(cursor.getFullYear(),cursor.getMonth(),1)):chartLocalDate(cursor);
+    buckets.push({key,label:monthly?new Intl.DateTimeFormat('fr-FR',{month:'short',year:'2-digit'}).format(cursor):new Intl.DateTimeFormat('fr-FR',{day:'2-digit',month:'2-digit'}).format(cursor)});
+    if(monthly)cursor.setMonth(cursor.getMonth()+1);
+    else cursor.setDate(cursor.getDate()+1);
+  }
+  return {buckets,monthly};
+}
+function renderTrendSeries(target, rows, groupField, valueField, range, valueLabel) {
+  if(!rows.length){
+    target.innerHTML='<p class="empty-note">Aucune entrée validée trouvée sur cette période.</p>';
+    return;
+  }
+  const {buckets,monthly}=activityChartBuckets(range.from,range.to);
+  const series=new Map();
+  rows.forEach(row=>{
+    const name=String(row[groupField]||'Non précisé').trim();
+    const key=String(row.period_date||'').slice(0,10);
+    const bucketKey=monthly?key.slice(0,7)+'-01':key;
+    const values=series.get(name)||new Map();
+    values.set(bucketKey,(values.get(bucketKey)||0)+Number(row[valueField]||0));
+    series.set(name,values);
+  });
+  target.innerHTML=[...series].map(([name,values],seriesIndex)=>{
+    const points=buckets.map((bucket,index)=>({x:52+index*(720/Math.max(1,buckets.length-1)),value:values.get(bucket.key)||0,label:bucket.label}));
+    const max=Math.max(...points.map(point=>point.value),1);
+    const y=value=>180-(value/max)*150;
+    const polyline=points.map(point=>`${point.x},${y(point.value)}`).join(' ');
+    const grid=[0,1,2,3].map(step=>{
+      const value=max*(3-step)/3;
+      const lineY=30+step*50;
+      return `<line class="activity-chart-gridline" x1="48" y1="${lineY}" x2="780" y2="${lineY}"></line><text class="activity-chart-axis-label" x="43" y="${lineY+4}" text-anchor="end">${escapeHtml(value.toLocaleString('fr-FR',{maximumFractionDigits:1}))}</text>`;
+    }).join('');
+    const visibleTicks=Math.min(8,points.length);
+    const labelStep=Math.max(1,Math.ceil(points.length/visibleTicks));
+    const labels=points.map((point,index)=>index%labelStep===0||index===points.length-1?`<text class="activity-chart-axis-label" x="${point.x}" y="211" text-anchor="middle">${escapeHtml(point.label)}</text>`:'').join('');
+    const circles=points.map(point=>`<circle class="activity-chart-point" cx="${point.x}" cy="${y(point.value)}" r="3"><title>${escapeHtml(point.label)} : ${escapeHtml(valueLabel(point.value))}</title></circle>`).join('');
+    return `<div class="activity-chart-series"><h4>${escapeHtml(name)}</h4><svg class="activity-chart-svg" viewBox="0 0 800 230" role="img" aria-label="${escapeHtml(name)} au fil du temps">${grid}<polyline class="activity-chart-line" points="${polyline}"></polyline>${circles}${labels}</svg></div>`;
+  }).join('');
+}
+async function loadProcurementTrends() {
+  const target=document.getElementById('procurement-trends-chart');
+  if(!target)return;
+  const requestId=++procurementChartRequest;
+  const range=activityChartRange();
+  target.innerHTML='<p class="empty-note">Chargement des tendances…</p>';
+  try{
+    const rows=await fetchReportData('procurement-trends',{date_debut:range.from,date_fin:range.to,recherche:range.search});
+    if(requestId!==procurementChartRequest||!target.isConnected)return;
+    const {buckets,monthly}=activityChartBuckets(range.from,range.to);
+    const subtitle=target.closest('.activity-chart-panel')?.querySelector('.panel-subtitle');
+    if(subtitle)subtitle.textContent=`Entrées validées · ${formatReportDate(range.from)} – ${formatReportDate(range.to)} · ${monthly?'tendances mensuelles':'tendances quotidiennes'} · valeurs séparées par unité et monnaie`;
+    target.innerHTML='<div class="activity-chart-grid"><section><h3>Quantités reçues par unité</h3><div data-procurement-quantity-trend></div></section><section><h3>Montants par monnaie</h3><div data-procurement-amount-trend></div></section></div>';
+    renderTrendSeries(target.querySelector('[data-procurement-quantity-trend]'),rows,'unit_name','quantity',range,value=>`${value.toLocaleString('fr-FR')} unités`);
+    renderTrendSeries(target.querySelector('[data-procurement-amount-trend]'),rows,'monais','amount',range,(value)=>moneyLabel(value));
+  }catch(error){
+    if(requestId===procurementChartRequest&&target.isConnected)target.innerHTML=`<p class="empty-note">${escapeHtml(error.message)}</p>`;
+  }
+}
+async function loadSalesTopProducts() {
+  const target=document.getElementById('sales-top-products-chart');
+  if(!target)return;
+  const requestId=++salesChartRequest;
+  const range=activityChartRange();
+  target.innerHTML='<p class="empty-note">Chargement du classement…</p>';
+  try{
+    const rows=await fetchReportData('sales-top-products',{date_debut:range.from,date_fin:range.to,recherche:range.search});
+    if(requestId!==salesChartRequest||!target.isConnected)return;
+    const subtitle=target.closest('.activity-chart-panel')?.querySelector('.panel-subtitle');
+    if(subtitle)subtitle.textContent=`Quantités vendues · ${formatReportDate(range.from)} – ${formatReportDate(range.to)} · ${rows.length?`Top ${rows.length} produits`:'aucun produit vendu'}`;
+    if(!rows.length){target.innerHTML='<p class="empty-note">Aucune vente de produit trouvée sur cette période.</p>';return;}
+    const max=Math.max(...rows.map(row=>Number(row.quantity||0)),1);
+    target.innerHTML=`<div class="sales-product-ranking">${rows.map((row,index)=>{const quantity=Number(row.quantity||0);const width=Math.max(2,quantity/max*100);const name=String(row.product_name||'Produit');const unit=String(row.unit_name||'');return `<div class="sales-product-row"><span class="sales-product-name" title="${escapeHtml(name)}">${index+1}. ${escapeHtml(name)}</span><div class="sales-product-track"><i style="width:${width}%"></i></div><strong>${quantity.toLocaleString('fr-FR')} ${escapeHtml(unit)}</strong></div>`}).join('')}</div>`;
+  }catch(error){
+    if(requestId===salesChartRequest&&target.isConnected)target.innerHTML=`<p class="empty-note">${escapeHtml(error.message)}</p>`;
+  }
+}
 async function fetchReportPage(actionName, page, params = {}, perPage = PAGE_SIZE) {
   const query = new URLSearchParams({action:actionName, ...params, page:String(page), per_page:String(perPage)});
   if (activeBranchId) query.set('succursale_id', activeBranchId);
@@ -3636,6 +3799,14 @@ document.addEventListener('click', async event => {
 document.addEventListener('input', event => {
   if (event.target.matches('[data-report-from],[data-report-to],[data-report-search]')) {
     filterCurrentReport();
+    if(currentViewName==='procurement'||(currentViewName==='stock'&&container.querySelector('[data-stock-section].active')?.dataset.stockSection==='procurement')){
+      clearTimeout(procurementChartTimer);
+      procurementChartTimer=setTimeout(loadProcurementTrends,250);
+    }
+    if(currentViewName==='sales'){
+      clearTimeout(salesChartTimer);
+      salesChartTimer=setTimeout(loadSalesTopProducts,250);
+    }
     if (currentViewName === 'cash') {
       clearTimeout(cashSearchTimer);
       cashSearchTimer = setTimeout(() => loadCashRows(1, 1, 1), 250);
