@@ -151,7 +151,7 @@ function renderView(viewName) {
   if (viewName === 'cash') {
     const debtPanel = document.createElement('section');
     debtPanel.className = 'panel table-panel';
-    debtPanel.innerHTML = `<div class="panel-header"><div><h2>Suivi des dettes accordées</h2><p class="panel-subtitle">Prêts accordés par l’entreprise à des personnes extérieures et remboursements reçus.</p></div><button type="button" class="cash-action-button cash-action-out" data-cash-debt-open ${hasAccess('modifier_caisse') ? '' : 'hidden'}>＋ Enregistrer une dette</button></div><div id="cash-debt-summary"></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Bénéficiaire</th><th>Contact</th><th>Succursale</th><th>Date</th><th>Description</th><th>Montant prêté</th><th>Remboursé</th><th>Solde restant</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="cash-debt-rows"><tr><td colspan="10">Chargement…</td></tr></tbody></table></div></section>`;
+    debtPanel.innerHTML = `<div class="panel-header"><div><h2>Suivi des dettes accordées</h2><p class="panel-subtitle">Prêts accordés par l’entreprise à des personnes extérieures et remboursements reçus.</p></div><button type="button" class="cash-action-button cash-action-out" data-cash-debt-open ${hasAccess('modifier_caisse') ? '' : 'hidden'}>＋ Enregistrer une dette</button></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Bénéficiaire</th><th>Contact</th><th>Succursale</th><th>Date</th><th>Description</th><th>Montant prêté</th><th>Remboursé</th><th>Solde restant</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="cash-debt-rows"><tr><td colspan="10">Chargement…</td></tr></tbody></table></div><div id="cash-debt-summary"></div></section>`;
     const journal = container.querySelector('#cash-movement-rows')?.closest('.panel');
     if (journal) journal.before(debtPanel);
   }
@@ -451,7 +451,7 @@ function addReportTableTotals(root) {
       }
       return;
     }
-    const totalColumns = headers.map((header, index) => /quantit|entr[eé]e|sortie|ajustement|solde|total|montant|articles?|avant|apr[eè]s|op[eé]rations/i.test(header.textContent) ? index : -1).filter(index => index >= 0);
+    const totalColumns = headers.map((header, index) => /quantit|entr[eé]e|sortie|ajustement|solde|total|montant|pr[eê]t[eé]|rembours[eé]|articles?|avant|apr[eè]s|op[eé]rations/i.test(header.textContent) ? index : -1).filter(index => index >= 0);
     if (!totalColumns.length) return;
     const totals = new Map();
     totalColumns.forEach(index => {
@@ -506,6 +506,12 @@ async function selectedReportNode(){
     }
     const node=document.createElement('section');node.className='panel';
     node.innerHTML=`<div class="panel-header"><div><h2>${escapeHtml(currentReportTitle())}</h2><p class="panel-subtitle">Le coût provient des lots d’achat associés à la vente lorsqu’ils sont disponibles, sinon du coût enregistré sur la fiche produit. Les réductions sont déduites du total vendu. Le rapport présente aussi la marge bénéficiaire calculée sur le coût total : (ventes nettes − coût total) ÷ coût total × 100.</p></div></div>${currencies.size?`<div style="overflow:auto"><table class="data-table"><thead><tr><th>Monnaie</th><th>Quantité vendue</th><th>Ventes nettes</th><th>Coût total</th><th>Bénéfices</th><th>Pertes</th><th>Marge bénéficiaire</th></tr></thead><tbody>${[...currencies].map(([currency,total])=>{const margin=total.cost>0?`${((total.sales-total.cost)/total.cost*100).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} %`:'—';return `<tr><td>${escapeHtml(currency)}</td><td>${total.quantity.toLocaleString('fr-FR')}</td><td>${escapeHtml(moneyCurrencyLabel(total.sales,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.cost,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.profit,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.loss,currency))}</td><td>${escapeHtml(margin)}</td></tr>`}).join('')}</tbody></table></div>`:''}<div style="overflow:auto"><table class="data-table"><thead><tr>${['Date','Facture','Client','Produit','Quantité','Coût unitaire','Prix de vente unitaire','Réduction','Ventes nettes','Coût total','Bénéfice','Perte','Marge bénéficiaire','Monnaie'].map(header=>`<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody data-profit-details></tbody></table></div>`;
+    const reportTables=node.querySelectorAll('.data-table');
+    if(reportTables.length===2){
+      reportTables[0].dataset.skipReportTotals='true';
+      reportTables[1].dataset.skipReportTotals='true';
+      reportTables[1].after(reportTables[0]);
+    }
     const body=node.querySelector('[data-profit-details]');
     const unitCostLabel=(value,currency)=>`${Number(value||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:4})} ${String(currency||'').trim()}`.trim();
     rows.forEach(item=>{
@@ -524,13 +530,30 @@ async function selectedReportNode(){
     const node=document.createElement('section');node.className='panel';
     node.innerHTML=`<div class="panel-header"><h2>${escapeHtml(currentReportTitle())}</h2></div><table class="data-table"><thead><tr>${['Bénéficiaire','Téléphone','Succursale','Date','Description',...currencies.flatMap(currency=>[`${currency} · Prêté`,`${currency} · Remboursé`,`${currency} · Solde`]),'Statut'].map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody></tbody></table>`;
     const body=node.querySelector('tbody');
+    const totalsByCurrency=new Map(currencies.map(currency=>[currency,{loaned:0,repaid:0,balance:0}]));
     rows.forEach(item=>{
       const row=body.insertRow();
       row.dataset.reportDate=String(item.date_dette||'').slice(0,10);
       const currency=String(item.monais||'').trim().toUpperCase();
+      const totals=totalsByCurrency.get(currency);
+      if(totals){
+        totals.loaned+=Number(item.montant||0);
+        totals.repaid+=Number(item.montant_rembourse||0);
+        totals.balance+=Number(item.solde_restant||0);
+      }
       row.innerHTML=[item.beneficiaire,item.telephone||'—',item.branch_name,dateLabel(item.date_dette),item.description||'—',...currencies.flatMap(reportCurrency=>reportCurrency===currency?[moneyCurrencyLabel(item.montant,reportCurrency),moneyCurrencyLabel(item.montant_rembourse,reportCurrency),moneyCurrencyLabel(item.solde_restant,reportCurrency)]:['—','—','—']),item.statut].map(value=>`<td>${escapeHtml(value)}</td>`).join('');
     });
     if(!rows.length){const empty=body.insertRow();empty.innerHTML=`<td colspan="${6+currencies.length*3}">Aucune dette trouvée pour cette période et cette recherche.</td>`;}
+    else{
+      const totalRow=body.insertRow();
+      totalRow.className='report-total-row';
+      totalRow.dataset.reportTotal='true';
+      const totalValues=['TOTAL PAR MONNAIE','','','','',...currencies.flatMap(currency=>{
+        const total=totalsByCurrency.get(currency);
+        return [moneyCurrencyLabel(total.loaned,currency),moneyCurrencyLabel(total.repaid,currency),moneyCurrencyLabel(total.balance,currency)];
+      }),''];
+      totalRow.innerHTML=totalValues.map(value=>`<td>${escapeHtml(value)}</td>`).join('');
+    }
     return node;
   }
   const action=kind==='sales'?'sales-list':'cash-movements';
@@ -1628,13 +1651,21 @@ async function openCashDebtForm(debt = null) {
   const bankSelect = form.elements.namedItem('banque_id');
   const referenceInput = form.elements.namedItem('bank_reference');
   const amountInput = form.elements.namedItem('montant');
-  const conversionLabel = modal.querySelector('[data-debt-conversion]');
+  let conversionLabel = modal.querySelector('[data-debt-conversion]');
+  if (!conversionLabel) {
+    conversionLabel = document.createElement('p');
+    conversionLabel.className = 'panel-subtitle full';
+    conversionLabel.dataset.debtConversion = '';
+    amountInput.closest('label')?.after(conversionLabel);
+  }
   const submit = form.querySelector('.modal-submit');
   const syncCash = () => {
     const selected = cashSelect.selectedOptions[0];
     const receivedCurrency = selected?.dataset.currency;
     const isBank = selected?.dataset.modeCode === 'BANK';
     const linkedBank = selected?.dataset.bankId || '';
+    const availableCash = Math.max(0, Number(cashboxes.find(box => Number(box.caisse_id) === Number(cashSelect.value))?.solde_courant || 0));
+    const maxCashAmount = Math.floor((availableCash + 1e-8) * 100) / 100;
     if (linkedBank) bankSelect.value = linkedBank;
     bankLabel.hidden = !isBank;
     bankSelect.required = isBank;
@@ -1642,14 +1673,27 @@ async function openCashDebtForm(debt = null) {
     referenceLabel.hidden = !isBank;
     referenceInput.required = isBank;
     referenceInput.disabled = !isBank;
-    submit.disabled = (isBank && !banks.length) || (isPayment && !Number.isFinite(exchangeRates[receivedCurrency]));
     if (isPayment) {
       const exchangeRate = exchangeRates[receivedCurrency] / exchangeRates[debt.monais];
-      const maxReceived = Math.floor((Number(debt.solde_restant) / exchangeRate + 1e-8) * 100) / 100;
+      const hasValidRate = Number.isFinite(exchangeRate) && exchangeRate > 0;
+      const maxByDebt = hasValidRate
+        ? Math.floor((Math.max(0, Number(debt.solde_restant)) / exchangeRate + 1e-8) * 100) / 100
+        : 0;
+      const maxReceived = Math.min(maxByDebt, maxCashAmount);
       amountInput.max = maxReceived.toFixed(2);
       const receivedAmount = Number(amountInput.value);
-      const appliedAmount = Number.isFinite(receivedAmount) ? Math.round(receivedAmount * exchangeRate * 100) / 100 : 0;
-      conversionLabel.textContent = `Monnaie reçue : ${receivedCurrency} · Taux appliqué : ${exchangeRate.toFixed(6)} · Montant imputé à la dette : ${moneyCurrencyLabel(appliedAmount, debt.monais)} (maximum reçu : ${moneyCurrencyLabel(maxReceived, receivedCurrency)})`;
+      const appliedAmount = hasValidRate && Number.isFinite(receivedAmount) ? Math.round(receivedAmount * exchangeRate * 100) / 100 : 0;
+      const invalidAmount = amountInput.value !== '' && (!Number.isFinite(receivedAmount) || receivedAmount < 0.01 || receivedAmount > maxReceived);
+      submit.disabled = (isBank && !banks.length) || !hasValidRate || maxReceived < 0.01 || invalidAmount;
+      conversionLabel.textContent = hasValidRate
+        ? `Monnaie reçue : ${receivedCurrency} · Taux appliqué : ${exchangeRate.toFixed(6)} · Montant imputé à la dette : ${moneyCurrencyLabel(appliedAmount, debt.monais)} · Maximum selon la dette et le solde disponible : ${moneyCurrencyLabel(maxReceived, receivedCurrency)}`
+        : `Aucun taux valide n’est configuré pour convertir ${receivedCurrency} en ${debt.monais}.`;
+    } else {
+      amountInput.max = maxCashAmount.toFixed(2);
+      const enteredAmount = Number(amountInput.value);
+      const invalidAmount = amountInput.value !== '' && (!Number.isFinite(enteredAmount) || enteredAmount < 0.01 || enteredAmount > maxCashAmount);
+      submit.disabled = (isBank && !banks.length) || maxCashAmount < 0.01 || invalidAmount;
+      conversionLabel.textContent = `Montant maximum du prêt selon le solde disponible : ${moneyCurrencyLabel(maxCashAmount, receivedCurrency)}.`;
     }
   };
   cashSelect.addEventListener('change', syncCash);

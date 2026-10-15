@@ -167,18 +167,21 @@ Caisse
   - Consulter les dettes accordees, les montants rembourses et le solde restant
     par monnaie. Enregistrer un remboursement partiel ou total depuis une
     caisse ouverte de la meme succursale, dans la monnaie de cette caisse. Le
-    taux convertit le montant recu dans la monnaie de la dette; la caisse est
-    creditee du montant recu et le solde ne peut pas etre depasse.
+    taux convertit le montant recu dans la monnaie de la dette; le montant
+    maximal propose est limite a la fois au solde de la dette et au solde
+    disponible de la caisse. La caisse est creditee du montant recu.
   - Rechercher un beneficiaire ou les informations d'une dette dans le suivi
     des dettes et dans le journal des mouvements. Le rapport des dettes accepte
     les filtres de date et de recherche, ainsi que l'impression et l'export.
   - Les rapports de ventes et de dettes separent les totaux en colonnes par
-    monnaie. Le rapport de marge presente aussi le taux de marge, calcule sur
-    le cout total : (ventes nettes - cout total) / cout total x 100.
+    monnaie et affichent leur synthese en bas du detail. Le rapport unique de
+    suivi des benefices et pertes sur ventes inclut aussi le taux de marge,
+    calcule sur le cout total : (ventes nettes - cout total) / cout total x 100.
   - Consulter le rapport des benefices et pertes sur ventes par produit,
     facture et monnaie. Il compare les ventes nettes apres reduction au cout
     des lots d'achat associes, ou au cout de la fiche produit si aucun lot
-    n'est associe. Les totaux sont presentes separement par monnaie.
+    n'est associe. Les totaux de ventes, couts, benefices, pertes et marge
+    sont presentes separement par monnaie sous les lignes detaillees.
   - Contacter un beneficiaire ou un fournisseur sur WhatsApp a partir de son
     numero de telephone enregistre. A la saisie, tout numero commencant par 0
     est enregistre en remplacant ce premier 0 par +243; les autres prefixes
