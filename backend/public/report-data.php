@@ -434,6 +434,58 @@ try {
         JsonResponse::send(['success'=>true,'data'=>['succursale_id'=>$targetBranch,'products'=>$productRows,'cashboxes'=>$cashRows,'clients'=>$clientRows]]);
     }
 
+    if ($action === 'cash-sales-profit') {
+        Authorization::requirePermission($user, 'voir_caisse');
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $perPage = min(100, max(1, (int) ($_GET['per_page'] ?? 10)));
+        $offset = ($page - 1) * $perPage;
+        $from = trim((string) ($_GET['date_debut'] ?? ''));
+        $to = trim((string) ($_GET['date_fin'] ?? ''));
+        $search = trim((string) ($_GET['recherche'] ?? ''));
+        $validDate = static fn (string $date): bool => $date === '' || (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) === 1 && checkdate((int) substr($date, 5, 2), (int) substr($date, 8, 2), (int) substr($date, 0, 4)));
+        if (!$validDate($from) || !$validDate($to) || ($from !== '' && $to !== '' && $from > $to) || mb_strlen($search, 'UTF-8') > 120) {
+            JsonResponse::error('Les filtres du rapport de bénéfices et pertes sont invalides.', 422);
+        }
+
+        $joins = ' FROM ventes v JOIN vente_details vd ON vd.vente_id=v.vente_id AND vd.entreprise_id=v.entreprise_id JOIN produits p ON p.produit_id=vd.produit_id AND p.entreprise_id=vd.entreprise_id JOIN succursales s ON s.succursale_id=v.succursale_id AND s.entreprise_id=v.entreprise_id LEFT JOIN clients cl ON cl.client_id=v.client_id AND cl.entreprise_id=v.entreprise_id LEFT JOIN users u ON u.user_id=v.user_id AND u.entreprise_id=v.entreprise_id LEFT JOIN (SELECT allocation.entreprise_id,allocation.vente_detail_id,SUM(allocation.quantity*source_detail.unit_cost)/NULLIF(SUM(allocation.quantity),0) AS unit_cost FROM vente_detail_lots allocation JOIN achat_details source_detail ON source_detail.achat_detail_id=allocation.achat_detail_id AND source_detail.entreprise_id=allocation.entreprise_id GROUP BY allocation.entreprise_id,allocation.vente_detail_id) lot_cost ON lot_cost.entreprise_id=vd.entreprise_id AND lot_cost.vente_detail_id=vd.vente_detail_id';
+        $where = " WHERE v.entreprise_id=? AND v.status<>'CANCELLED'";
+        $params = [$enterpriseId];
+        if ($branchId !== null) {
+            $where .= ' AND v.succursale_id=?';
+            $params[] = $branchId;
+        }
+        if ($from !== '') {
+            $where .= ' AND DATE(v.sale_date)>=?';
+            $params[] = $from;
+        }
+        if ($to !== '') {
+            $where .= ' AND DATE(v.sale_date)<=?';
+            $params[] = $to;
+        }
+        $searchFields = ['p.name', 'p.sku', 'v.invoice_no', "COALESCE(NULLIF(v.client_comptoir_name,''),cl.name)", 's.name', 'vd.monais'];
+        if ($search !== '') {
+            $where .= ' AND (' . implode(' LIKE ? OR ', $searchFields) . ' LIKE ?)';
+            foreach ($searchFields as $_) $params[] = '%' . $search . '%';
+        }
+
+        $count = $db->prepare('SELECT COUNT(*) AS total' . $joins . $where);
+        $bindParams($count, $params);
+        $count->execute();
+        $total = (int) ($count->get_result()->fetch_assoc()['total'] ?? 0);
+
+        $costExpression = 'COALESCE(lot_cost.unit_cost,p.cost_price)';
+        $summary = $db->prepare('SELECT vd.monais,SUM(vd.quantity) AS quantity,SUM(vd.subtotal) AS sales_total,SUM(vd.quantity*' . $costExpression . ') AS cost_total,SUM(GREATEST(vd.subtotal-vd.quantity*' . $costExpression . ',0)) AS profit_total,SUM(GREATEST(vd.quantity*' . $costExpression . '-vd.subtotal,0)) AS loss_total' . $joins . $where . ' GROUP BY vd.monais ORDER BY vd.monais');
+        $bindParams($summary, $params);
+        $summary->execute();
+        $summaryRows = $summary->get_result()->fetch_all(MYSQLI_ASSOC);
+
+        $sql = 'SELECT v.vente_id,v.invoice_no,v.sale_date,v.status,vd.vente_detail_id,vd.quantity,vd.unit_price,vd.discount_amount,vd.subtotal,vd.monais,p.name AS product_name,p.sku,s.name AS branch_name,COALESCE(NULLIF(v.client_comptoir_name,\'\'),cl.name) AS client_name,u.full_name AS cashier,ROUND(' . $costExpression . ',4) AS unit_cost,ROUND(vd.quantity*' . $costExpression . ',2) AS cost_total,ROUND(GREATEST(vd.subtotal-vd.quantity*' . $costExpression . ',0),2) AS profit,ROUND(GREATEST(vd.quantity*' . $costExpression . '-vd.subtotal,0),2) AS loss' . $joins . $where . ' ORDER BY v.sale_date DESC,v.vente_id DESC,vd.vente_detail_id LIMIT ? OFFSET ?';
+        $query = $db->prepare($sql);
+        $bindParams($query, [...$params, $perPage, $offset]);
+        $query->execute();
+        JsonResponse::send(['success' => true, 'data' => $query->get_result()->fetch_all(MYSQLI_ASSOC), 'summary' => $summaryRows, 'pagination' => ['page' => $page, 'per_page' => $perPage, 'total' => $total, 'pages' => max(1, (int) ceil($total / $perPage))]]);
+    }
+
     if ($action === 'sales-list') {
         Authorization::requirePermission($user,'voir_ventes');$page=max(1,(int)($_GET['page']??1));$perPage=min(100,max(1,(int)($_GET['per_page']??10)));$offset=($page-1)*$perPage;
         $where='v.entreprise_id=?'.($branchId!==null?' AND v.succursale_id=?':'');$count=$db->prepare('SELECT COUNT(*) AS total FROM ventes v WHERE '.$where);if($branchId===null)$count->bind_param('i',$enterpriseId);else$count->bind_param('ii',$enterpriseId,$branchId);$count->execute();$total=(int)($count->get_result()->fetch_assoc()['total']??0);

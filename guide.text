@@ -170,6 +170,10 @@ Caisse
   - Rechercher un beneficiaire ou les informations d'une dette dans le suivi
     des dettes et dans le journal des mouvements. Le rapport des dettes accepte
     les filtres de date et de recherche, ainsi que l'impression et l'export.
+  - Consulter le rapport des benefices et pertes sur ventes par produit,
+    facture et monnaie. Il compare les ventes nettes apres reduction au cout
+    des lots d'achat associes, ou au cout de la fiche produit si aucun lot
+    n'est associe. Les totaux sont presentes separement par monnaie.
   - Contacter un beneficiaire ou un fournisseur sur WhatsApp a partir de son
     numero de telephone enregistre. A la saisie, tout numero commencant par 0
     est enregistre en remplacant ce premier 0 par +243; les autres prefixes

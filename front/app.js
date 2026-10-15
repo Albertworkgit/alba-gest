@@ -253,6 +253,7 @@ function configureReportToolbar(viewName) {
     if(hasAccess('voir_caisse')) {
       select.add(new Option('Journal de caisse','cash'));
       select.add(new Option('Dettes accordées','debts'));
+      select.add(new Option('Bénéfices et pertes sur ventes','profits'));
     }
     select.value=viewName==='cash'?'cash':'sales';if(!select.value&&select.options.length)select.selectedIndex=0;label.append(select);toolbar.insertBefore(label,toolbar.querySelector('[data-report-from]').closest('label'));
   }
@@ -328,7 +329,7 @@ function currentReportSource() {
 }
 function selectedReportKind(){return container.querySelector('[data-report-kind]')?.value||(currentViewName==='cash'?'cash':'sales');}
 function currentReportTitle() {
-  if (currentViewName === 'sales' || currentViewName === 'cash') return selectedReportKind()==='debts'?'Rapport des dettes accordées':selectedReportKind()==='cash'?'Journal de caisse':'Rapport des ventes';
+  if (currentViewName === 'sales' || currentViewName === 'cash') return selectedReportKind()==='debts'?'Rapport des dettes accordées':selectedReportKind()==='profits'?'Rapport des bénéfices et pertes sur ventes':selectedReportKind()==='cash'?'Journal de caisse':'Rapport des ventes';
   if (currentViewName === 'stock') {
     const activeSection = container.querySelector('[data-stock-section].active');
     if (activeSection) return `Stock · ${activeSection.textContent.trim()}`;
@@ -444,6 +445,33 @@ async function selectedReportNode(){
   if(from)params.date_debut=from;
   if(to)params.date_fin=to;
   if(search)params.recherche=search;
+  if(kind==='profits'){
+    let reportPage=await fetchReportPage('cash-sales-profit',1,params,100);
+    const rows=[...reportPage.rows];
+    const currencies=new Map(reportPage.summary.map(item=>[String(item.monais||'').trim().toUpperCase(),{
+      quantity:Number(item.quantity||0),
+      sales:Number(item.sales_total||0),
+      cost:Number(item.cost_total||0),
+      profit:Number(item.profit_total||0),
+      loss:Number(item.loss_total||0)
+    }]));
+    for(let page=2;page<=reportPage.pagination.pages;page++){
+      reportPage=await fetchReportPage('cash-sales-profit',page,params,100);
+      rows.push(...reportPage.rows);
+    }
+    const node=document.createElement('section');node.className='panel';
+    node.innerHTML=`<div class="panel-header"><div><h2>${escapeHtml(currentReportTitle())}</h2><p class="panel-subtitle">Le coût provient des lots d’achat associés à la vente lorsqu’ils sont disponibles, sinon du coût enregistré sur la fiche produit. Les réductions sont déduites du total vendu.</p></div></div>${currencies.size?`<div style="overflow:auto"><table class="data-table"><thead><tr><th>Monnaie</th><th>Quantité vendue</th><th>Ventes nettes</th><th>Coût total</th><th>Bénéfices</th><th>Pertes</th></tr></thead><tbody>${[...currencies].map(([currency,total])=>`<tr><td>${escapeHtml(currency)}</td><td>${total.quantity.toLocaleString('fr-FR')}</td><td>${escapeHtml(moneyCurrencyLabel(total.sales,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.cost,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.profit,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.loss,currency))}</td></tr>`).join('')}</tbody></table></div>`:''}<div style="overflow:auto"><table class="data-table"><thead><tr>${['Date','Facture','Client','Produit','Quantité','Coût unitaire','Prix de vente unitaire','Réduction','Ventes nettes','Coût total','Bénéfice','Perte','Monnaie'].map(header=>`<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody data-profit-details></tbody></table></div>`;
+    const body=node.querySelector('[data-profit-details]');
+    const unitCostLabel=(value,currency)=>`${Number(value||0).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:4})} ${String(currency||'').trim()}`.trim();
+    rows.forEach(item=>{
+      const row=body.insertRow();
+      row.dataset.reportDate=String(item.sale_date||'').slice(0,10);
+      const values=[dateLabel(item.sale_date),item.invoice_no,item.client_name||'Client comptoir',item.product_name,Number(item.quantity),unitCostLabel(item.unit_cost,item.monais),moneyCurrencyLabel(item.unit_price,item.monais),moneyCurrencyLabel(item.discount_amount,item.monais),moneyCurrencyLabel(item.subtotal,item.monais),moneyCurrencyLabel(item.cost_total,item.monais),moneyCurrencyLabel(item.profit,item.monais),moneyCurrencyLabel(item.loss,item.monais),item.monais];
+      row.innerHTML=values.map(value=>`<td>${escapeHtml(value)}</td>`).join('');
+    });
+    if(!rows.length){const empty=body.insertRow();empty.innerHTML='<td colspan="13">Aucune vente trouvée pour cette période et cette recherche.</td>';}
+    return node;
+  }
   if(kind==='debts'){
     const rows=await fetchAllReportRows('cash-debts',params);
     const node=document.createElement('section');node.className='panel';
