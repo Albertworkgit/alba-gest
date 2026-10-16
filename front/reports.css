@@ -93,6 +93,8 @@
 
 @media (max-width: 650px) {
   .report-toolbar { align-items: flex-start; }
+  .report-toolbar > label { flex: 1 1 100%; min-width: 0; }
+  .report-toolbar label input,.report-toolbar label select,.report-toolbar > input { width: 100%; min-width: 0; }
   .report-toolbar > span { flex-basis: 100%; order: 2; }
   .report-toolbar-actions { flex-basis: 100%; order: 3; }
   .report-toolbar-actions button { flex: 1 1 auto; }

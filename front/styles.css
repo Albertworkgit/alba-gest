@@ -58,6 +58,21 @@
 .pagination-size select{padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit}
 .list-pagination button{padding:7px 11px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit;cursor:pointer}
 .list-pagination button:disabled{opacity:.45;cursor:not-allowed}
+
+@media(max-width:900px){
+  .topbar{gap:12px;padding-right:18px;padding-left:18px}
+  .breadcrumbs{flex:1;min-width:0;overflow:hidden;white-space:nowrap}
+  .breadcrumbs .workspace-identity{min-width:0;overflow:hidden}
+  .workspace-identity>strong{max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .top-actions{flex:0 0 auto;gap:8px}
+  .theme-button{width:32px;justify-content:center;padding:6px}
+  .theme-button span{display:none}
+}
+@media(max-width:720px){
+  .topbar{gap:8px;padding-right:14px;padding-left:14px}
+  .breadcrumbs{font-size:10px}
+  .workspace-identity>strong{max-width:60px}
+}
 @media(max-width:560px){.list-pagination{align-items:flex-start;flex-direction:column}.list-pagination>div{flex-wrap:wrap}}
 .movement-report-button:hover{background:#dcefe7}
 .movement-report-button[hidden]{display:none}
