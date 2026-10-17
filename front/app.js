@@ -146,7 +146,7 @@ function renderView(viewName) {
   const view = views[viewName] || views.dashboard;
   currentViewName = viewName;
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === viewName));
-  kicker.textContent = view.kicker; title.innerHTML = view.title; description.textContent = view.description; breadcrumb.textContent = view.label; action.innerHTML = view.action; action.hidden = !view.action || (viewName === 'stock' && !hasAccess('creer_produit')) || (viewName === 'procurement' && !hasAccess('creer_approvisionnements')) || (viewName === 'sales' && !hasAccess('creer_ventes')) || (viewName === 'cash' && !hasAccess('creer_caisse')) || (viewName === 'users' && !hasAccess('gerer_utilisateurs')) || (viewName === 'branches' && !hasAccess('*')); action.classList.toggle('user-create-action', viewName === 'users');
+  kicker.textContent = view.kicker; title.innerHTML = view.title; description.textContent = view.description; breadcrumb.textContent = view.label; action.innerHTML = view.action; action.hidden = !view.action; action.classList.toggle('user-create-action', viewName === 'users');
   container.innerHTML = view.html;
   if (viewName === 'cash') {
     const debtPanel = document.createElement('section');
@@ -159,12 +159,7 @@ function renderView(viewName) {
   if (viewName === 'stock') configureStockWorkspace();
   configureActivityCharts(viewName);
   configureReportToolbar(viewName);
-  renderModuleNavigation();
   if (viewName === 'accounting') {
-    const entryButton = container.querySelector('[data-account-entry-open]');
-    const accountButton = container.querySelector('[data-account-create-open]');
-    if (entryButton) entryButton.hidden = !hasAccess('creer_comptabilite');
-    if (accountButton) accountButton.hidden = !hasAccess('modifier_comptabilite');
     const entriesTable = container.querySelector('#accounting-entry-rows')?.closest('table');
     if (entriesTable?.tHead?.rows[0]) {
       const actionHeader = document.createElement('th');
@@ -176,7 +171,7 @@ function renderView(viewName) {
     const inbox = container.querySelector('[data-accounting-cancellation-inbox]');
     const cashInbox = container.querySelector('[data-cash-cancellation-inbox]');
     const emptyMessage = container.querySelector('[data-no-company-requests]');
-    const isCompanyAdmin = Boolean(sessionUser?.is_company_admin);
+    const isCompanyAdmin = accessRequirementAllowed('company_admin', sessionUser);
     if (inbox) inbox.hidden = !isCompanyAdmin;
     if (cashInbox) cashInbox.hidden = !isCompanyAdmin;
     if (emptyMessage) emptyMessage.hidden = isCompanyAdmin;
@@ -185,13 +180,7 @@ function renderView(viewName) {
       loadCashMovementCancellationRequests();
     }
   }
-  const categoryButton = container.querySelector('[data-create-category]');
-  if (categoryButton) categoryButton.hidden = !hasAccess('modifier_stock');
-  const categoryManagementButton = container.querySelector('[data-toggle-categories]');
-  if (categoryManagementButton) categoryManagementButton.hidden = !hasAccess('modifier_stock');
-  const unitManagementButton = container.querySelector('[data-create-unit]');
-  if (unitManagementButton) unitManagementButton.hidden = !sessionUser?.is_company_admin;
-  container.querySelectorAll('[data-stock-movement-report]').forEach(button => { button.hidden = !hasAnyAccess('voir_stock', 'voir_approvisionnements'); button.textContent = 'Afficher fiche de stock'; });
+  container.querySelectorAll('[data-stock-movement-report]').forEach(button => { button.textContent = 'Afficher fiche de stock'; });
   if (sessionUser) {
     container.querySelectorAll('[data-settings-company]').forEach(node => node.textContent = sessionUser.enterprise_name || '—');
     container.querySelectorAll('[data-settings-user]').forEach(node => node.textContent = sessionUser.full_name || sessionUser.email || '—');
@@ -201,7 +190,6 @@ function renderView(viewName) {
     const emailInput = container.querySelector('[data-profile-email]');
     const companyPanel = container.querySelector('#company-profile-panel');
     if (companyPanel) {
-      companyPanel.hidden = !sessionUser.is_company_admin;
       addPhoneNormalizationHints(companyPanel);
       companyPanel.querySelector('[data-company-name]').value = sessionUser.enterprise_name || '';
       companyPanel.querySelector('[data-company-email]').value = sessionUser.enterprise_email || '';
@@ -226,16 +214,13 @@ function renderView(viewName) {
     if (hasAccess('voir_approvisionnements')) loadProcurementTrends();
   }
   if (viewName === 'users') {
-    const userPanel = container.querySelector('#user-rows')?.closest('section');
-    const rolePanel = container.querySelector('#role-list')?.closest('aside');
-    if (userPanel) userPanel.hidden = !hasAccess('gerer_utilisateurs');
-    if (rolePanel) rolePanel.hidden = !hasAccess('voir_roles') && !hasAccess('gerer_roles');
-    const createRole = container.querySelector('[data-create-role]');
-    if (createRole) createRole.hidden = !hasAccess('gerer_roles');
     if (hasAccess('voir_roles') || hasAccess('gerer_roles')) loadRoleList();
     if (hasAccess('gerer_utilisateurs')) loadUserRows();
   }
-  if (viewName === 'dashboard') { loadDashboardData(); loadExpiringStock(); }
+  if (viewName === 'dashboard') {
+    loadDashboardData();
+    if (hasAccess('voir_stock')) loadExpiringStock();
+  }
   if (viewName === 'sales') { loadSalesRows(); loadSalesTopProducts(); }
   if (viewName === 'cash') loadCashRows();
   if (viewName === 'accounting') loadAccountingData();
@@ -243,13 +228,28 @@ function renderView(viewName) {
   if (viewName === 'clients') loadSimpleRows('clients', 'client-rows', 5, clientRowMarkup, 'Aucun client enregistr\u00e9.');
   if (viewName === 'procurement') { loadPurchaseRows(); loadProcurementTrends(); }
   if (viewName === 'stock' && hasAccess('voir_approvisionnements')) loadProcurementTrends();
-  if (viewName === 'branch-dashboard') { loadBranchDashboard(); loadExpiringStock(); }
-  if (viewName === 'stock') loadExpiringStock();
+  if (viewName === 'branch-dashboard') { loadBranchDashboard(); if (hasAccess('voir_stock')) loadExpiringStock(); }
+  if (viewName === 'stock' && hasAccess('voir_stock')) loadExpiringStock();
+  applyViewAccess(viewName, sessionUser);
+  renderModuleNavigation();
   window.scrollTo({top: 0, behavior: 'smooth'});
 }
 const reportableViews = new Set(['dashboard', 'stock', 'sales', 'cash', 'accounting', 'procurement', 'users', 'branches', 'clients', 'branch-dashboard']);
+const reportViewPermissions = {
+  dashboard: ['voir_stock', 'voir_ventes', 'voir_approvisionnements', 'voir_caisse'],
+  stock: ['voir_stock'],
+  sales: ['voir_ventes'],
+  cash: ['voir_caisse'],
+  accounting: ['voir_comptabilite'],
+  procurement: ['voir_approvisionnements'],
+  users: ['gerer_utilisateurs', 'voir_roles', 'gerer_roles'],
+  branches: ['voir_succursales'],
+  clients: ['voir_clients'],
+  'branch-dashboard': ['voir_stock'],
+};
 function configureReportToolbar(viewName) {
-  if (!reportableViews.has(viewName)) return;
+  const requiredPermissions = reportViewPermissions[viewName] || [];
+  if (!reportableViews.has(viewName) || !requiredPermissions.some(permission => hasAccess(permission))) return;
   const toolbar = document.createElement('div');
   toolbar.className = 'report-toolbar';
   toolbar.dataset.reportToolbar = '';
@@ -505,7 +505,7 @@ async function selectedReportNode(){
       rows.push(...reportPage.rows);
     }
     const node=document.createElement('section');node.className='panel';
-    node.innerHTML=`<div class="panel-header"><div><h2>${escapeHtml(currentReportTitle())}</h2><p class="panel-subtitle">Le coût provient des lots d’achat associés à la vente lorsqu’ils sont disponibles, sinon du coût enregistré sur la fiche produit. Les réductions sont déduites du total vendu. Le rapport présente aussi la marge bénéficiaire calculée sur le coût total : (ventes nettes − coût total) ÷ coût total × 100.</p></div></div>${currencies.size?`<div style="overflow:auto"><table class="data-table"><thead><tr><th>Monnaie</th><th>Quantité vendue</th><th>Ventes nettes</th><th>Coût total</th><th>Bénéfices</th><th>Pertes</th><th>Marge bénéficiaire</th></tr></thead><tbody>${[...currencies].map(([currency,total])=>{const margin=total.cost>0?`${((total.sales-total.cost)/total.cost*100).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} %`:'—';return `<tr><td>${escapeHtml(currency)}</td><td>${total.quantity.toLocaleString('fr-FR')}</td><td>${escapeHtml(moneyCurrencyLabel(total.sales,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.cost,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.profit,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.loss,currency))}</td><td>${escapeHtml(margin)}</td></tr>`}).join('')}</tbody></table></div>`:''}<div style="overflow:auto"><table class="data-table"><thead><tr>${['Date','Facture','Client','Produit','Quantité','Coût unitaire','Prix de vente unitaire','Réduction','Ventes nettes','Coût total','Bénéfice','Perte','Marge bénéficiaire','Monnaie'].map(header=>`<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody data-profit-details></tbody></table></div>`;
+    node.innerHTML=`<div class="panel-header"><div><h2>${escapeHtml(currentReportTitle())}</h2><p class="panel-subtitle">Le coût est calculé à partir des lots achetés lorsqu’ils sont disponibles, sinon du coût enregistré sur le produit. Les ventes nettes tiennent compte des réductions. Le pourcentage indique le résultat net en proportion des ventes nettes : (bénéfices − pertes) ÷ ventes nettes × 100. Un résultat positif signifie un bénéfice; un résultat négatif signifie une perte.</p></div></div>${currencies.size?`<div style="overflow:auto"><table class="data-table"><thead><tr><th>Monnaie</th><th>Quantité vendue</th><th>Ventes nettes</th><th>Coût total</th><th>Bénéfices</th><th>Pertes</th><th>Résultat net / ventes</th></tr></thead><tbody>${[...currencies].map(([currency,total])=>{const netResult=total.profit-total.loss;const margin=total.sales>0?`${(netResult/total.sales*100).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} %`:'—';return `<tr><td>${escapeHtml(currency)}</td><td>${total.quantity.toLocaleString('fr-FR')}</td><td>${escapeHtml(moneyCurrencyLabel(total.sales,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.cost,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.profit,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.loss,currency))}</td><td>${escapeHtml(margin)}</td></tr>`}).join('')}</tbody></table></div>`:''}<div style="overflow:auto"><table class="data-table"><thead><tr>${['Date','Facture','Client','Produit','Quantité','Coût unitaire','Prix de vente unitaire','Réduction','Ventes nettes','Coût total','Bénéfice','Perte','Résultat net / ventes','Monnaie'].map(header=>`<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody data-profit-details></tbody></table></div>`;
     const reportTables=node.querySelectorAll('.data-table');
     if(reportTables.length===2){
       reportTables[0].dataset.skipReportTotals='true';
@@ -517,7 +517,9 @@ async function selectedReportNode(){
     rows.forEach(item=>{
       const row=body.insertRow();
       row.dataset.reportDate=String(item.sale_date||'').slice(0,10);
-      const margin=Number(item.cost_total)>0?`${((Number(item.subtotal)-Number(item.cost_total))/Number(item.cost_total)*100).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} %`:'—';
+      const netSales=Number(item.subtotal||0);
+      const netResult=Number(item.profit||0)-Number(item.loss||0);
+      const margin=netSales>0?`${(netResult/netSales*100).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} %`:'—';
       const values=[dateLabel(item.sale_date),item.invoice_no,item.client_name||'Client comptoir',item.product_name,Number(item.quantity),unitCostLabel(item.unit_cost,item.monais),moneyCurrencyLabel(item.unit_price,item.monais),moneyCurrencyLabel(item.discount_amount,item.monais),moneyCurrencyLabel(item.subtotal,item.monais),moneyCurrencyLabel(item.cost_total,item.monais),moneyCurrencyLabel(item.profit,item.monais),moneyCurrencyLabel(item.loss,item.monais),margin,item.monais];
       row.innerHTML=values.map(value=>`<td>${escapeHtml(value)}</td>`).join('');
     });
@@ -764,18 +766,15 @@ function configureStockWorkspace() {
   purchasePanel.dataset.stockSectionPanel = 'procurement';
   purchasePanel.hidden = true;
   purchasePanel.innerHTML = `<div class="panel-header"><div><h2>Approvisionnements</h2><p class="panel-subtitle">Entrées et sorties appliquées au stock</p></div><button type="button" class="movement-report-button" data-stock-movement-report>Fiche de stock</button><button class="primary-button" type="button" data-create-purchase>+ Nouvel approvisionnement</button></div><div class="dashboard-grid procurement-summary"><article class="stat-card"><span class="stat-label">Quantités entrées (validées)</span><div class="stat-value" id="purchase-total-in">0</div></article><article class="stat-card"><span class="stat-label">Quantités sorties (validées)</span><div class="stat-value" id="purchase-total-out">0</div></article><article class="stat-card"><span class="stat-label">Solde net</span><div class="stat-value" id="purchase-balance">0</div></article></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Référence</th><th>Motif</th><th>Date</th><th>Quantité</th><th>Quantité sortie</th><th>Quantité entrée</th><th>Solde du lot</th><th>Total</th><th>Statut</th><th>Bon</th></tr></thead><tbody id="purchase-rows"><tr><td colspan="10">Chargement…</td></tr></tbody></table></div>`;
-  supplierPanel.querySelector('[data-create-supplier]').hidden = !hasAccess('creer_fournisseurs');
-  purchasePanel.querySelector('[data-create-purchase]').hidden = !hasAccess('creer_approvisionnements');
-  purchasePanel.querySelector('[data-stock-movement-report]').hidden = !hasAnyAccess('voir_stock', 'voir_approvisionnements');
   purchasePanel.querySelector('[data-stock-movement-report]').textContent = 'Afficher fiche de stock';
   const tabs = document.createElement('div');
   tabs.className = 'filter-bar stock-section-tabs';
   const sections = [
-    ['products', 'Produits', true],
-    ['categories', 'Catégories', hasAccess('voir_stock')],
-    ['suppliers', 'Fournisseurs', hasAccess('voir_fournisseurs')],
-    ['procurement', 'Approvisionnements', hasAccess('voir_approvisionnements')]
-  ].filter(([, , visible]) => visible);
+    ['products', 'Produits', 'voir_stock'],
+    ['categories', 'Catégories', 'voir_stock'],
+    ['suppliers', 'Fournisseurs', 'voir_fournisseurs'],
+    ['procurement', 'Approvisionnements', 'voir_approvisionnements']
+  ].filter(([, , requirement]) => accessRequirementAllowed(requirement, sessionUser));
   tabs.innerHTML = sections.map(([key, label], index) => `<button type="button" class="text-button${index === 0 ? ' active' : ''}" data-stock-section="${key}">${label}</button>`).join('');
   productPanel.before(tabs);
   categoryPanel.after(supplierPanel, purchasePanel);
@@ -820,21 +819,101 @@ function hasAccess(permission, user = sessionUser) {
   return module === null || (Array.isArray(enabledModules) && enabledModules.includes(module));
 }
 function hasAnyAccess(...permissions) { return permissions.some(permission => hasAccess(permission)); }
+function accessRequirementAllowed(requirement, user) {
+  if (requirement === 'session') return Boolean(user);
+  if (requirement === 'company_admin') return Boolean(user?.is_company_admin);
+  if (requirement === '*') return permissionList(user).includes('*');
+  return hasAccess(requirement, user);
+}
+function applyAccessVisibility(element, user, requirement = element.dataset.access) {
+  const allowed = requirement.split('|').some(permission => accessRequirementAllowed(permission, user));
+  element.hidden = !allowed;
+  element.style.display = allowed ? '' : 'none';
+}
+function applyViewAccess(viewName, user) {
+  const accessRules = {
+    dashboard: [['#dash-low-stock', 'voir_stock']],
+    cash: [['[data-cash-debt-open]', 'modifier_caisse']],
+    accounting: [
+      ['[data-account-entry-open]', 'creer_comptabilite'],
+      ['[data-account-create-open]', 'modifier_comptabilite'],
+    ],
+    stock: [
+      ['[data-create-category]', 'modifier_stock'],
+      ['[data-toggle-categories]', 'modifier_stock'],
+      ['[data-create-supplier]', 'creer_fournisseurs'],
+      ['[data-create-purchase]', 'creer_approvisionnements'],
+      ['[data-stock-movement-report]', 'voir_stock|voir_approvisionnements'],
+      ['[data-create-unit]', 'company_admin'],
+    ],
+    users: [
+      ['#user-rows', 'gerer_utilisateurs'],
+      ['#role-list', 'voir_roles|gerer_roles'],
+      ['[data-create-role]', 'gerer_roles'],
+    ],
+    settings: [['#company-profile-panel', 'company_admin']],
+  };
+  for (const [selector, requirement] of accessRules[viewName] || []) {
+    container.querySelectorAll(selector).forEach(element => {
+      const target = selector === '#dash-low-stock'
+        ? element.closest('.panel')
+        : selector === '#user-rows'
+          ? element.closest('section')
+          : selector === '#role-list'
+            ? element.closest('aside')
+            : element;
+      if (target) applyAccessVisibility(target, user, requirement);
+    });
+  }
+  if (viewName === 'dashboard') {
+    container.querySelectorAll('.dashboard-grid .stat-card').forEach(card => {
+      const requirement = card.querySelector('#dash-sales') ? 'voir_ventes' : 'voir_stock';
+      applyAccessVisibility(card, user, requirement);
+    });
+  }
+  if (viewName === 'stock') {
+    container.querySelectorAll('[data-stock-section]').forEach(button => {
+      const sectionPermissions = {
+        products: 'voir_stock',
+        categories: 'voir_stock',
+        suppliers: 'voir_fournisseurs',
+        procurement: 'voir_approvisionnements',
+      };
+      const requirement = sectionPermissions[button.dataset.stockSection];
+      if (requirement) applyAccessVisibility(button, user, requirement);
+    });
+  }
+  const actionPermissions = {
+    stock: 'creer_produit',
+    procurement: 'creer_approvisionnements',
+    sales: 'creer_ventes',
+    cash: 'creer_caisse',
+    users: 'gerer_utilisateurs',
+    branches: 'gerer_succursales',
+    clients: 'gerer_clients',
+  };
+  const actionPermission = actionPermissions[viewName];
+  if (actionPermission && action.textContent.trim()) applyAccessVisibility(action, user, actionPermission);
+}
 function applyMenuAccess(user) {
-  const permissions = permissionList(user);
   document.querySelectorAll('.nav-item[data-access]').forEach(item => {
-    const required = item.dataset.access.split('|');
-    item.hidden = !required.includes('session') && !required.some(permission => permission === '*' ? permissions.includes('*') : hasAccess(permission, user));
+    applyAccessVisibility(item, user);
   });
-  // Masque aussi les titres de groupe quand aucun des liens suivants n'est autorisé.
   document.querySelectorAll('[data-nav-section]').forEach(heading => {
     let sibling = heading.nextElementSibling;
     let hasVisibleItem = false;
     while (sibling && !sibling.matches('[data-nav-section]')) {
-      if (sibling.matches('.nav-item') && !sibling.hidden) hasVisibleItem = true;
+      const isVisibleNavItem = sibling.matches('.nav-item') && !sibling.hasAttribute('hidden') && sibling.style.display !== 'none';
+      if (isVisibleNavItem) hasVisibleItem = true;
       sibling = sibling.nextElementSibling;
     }
-    heading.hidden = !hasVisibleItem;
+    if (hasVisibleItem) {
+      heading.removeAttribute('hidden');
+      heading.style.display = '';
+    } else {
+      heading.setAttribute('hidden', 'hidden');
+      heading.style.display = 'none';
+    }
   });
 }
 const apiUrl = resource => `../backend/public/api.php?resource=${encodeURIComponent(resource)}`;
@@ -1869,18 +1948,29 @@ async function loadSupplierRows(page = 1) {
 }
 async function loadDashboardData() {
   const lowRows = document.getElementById('dash-low-stock'); if (!lowRows) return;
-  const [stocksResult, salesResult] = await Promise.allSettled([fetchStockSummary(), fetchReportPage('sales-list', 1)]);
-  if (stocksResult.status === 'fulfilled') {
+  const canViewStock = hasAccess('voir_stock');
+  const canViewSales = hasAccess('voir_ventes');
+  const [stocksResult, salesResult] = await Promise.allSettled([
+    canViewStock ? fetchStockSummary() : Promise.resolve(null),
+    canViewSales ? fetchReportPage('sales-list', 1) : Promise.resolve(null),
+  ]);
+  if (!canViewStock) {
+    lowRows.closest('.panel')?.remove();
+  } else if (stocksResult.status === 'fulfilled' && stocksResult.value) {
     const summary = stocksResult.value;
     document.getElementById('dash-products').textContent = Number(summary.products_count).toLocaleString('fr-FR');
     setQuantitySummary(document.getElementById('dash-quantity'), summary.branches.map(row => ({unit_abbreviation:row.unit_abbreviation, unit_name:row.unit_name, quantity:row.quantity})));
     document.getElementById('dash-alerts').textContent = Number(summary.low_stock_count).toLocaleString('fr-FR');
     lowRows.innerHTML = summary.low_stock_rows.length ? summary.low_stock_rows.map(item => { const unit = item.unit_abbreviation || item.unit_name || ''; return `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.branch_name || '—')}</td><td>${Number(item.quantity)} ${escapeHtml(unit)}</td><td>${Number(item.min_stock_level)} ${escapeHtml(unit)}</td></tr>`; }).join('') : '<tr><td colspan="4">Aucun produit sous son seuil minimum.</td></tr>';
-  } else {
+  } else if (stocksResult.status === 'rejected') {
     document.getElementById('dash-products').textContent = '—'; document.getElementById('dash-quantity').textContent = '—'; document.getElementById('dash-alerts').textContent = '—';
     showLoadError('dash-low-stock', stocksResult.reason, 4);
   }
-  document.getElementById('dash-sales').textContent = salesResult.status === 'fulfilled' ? Number(salesResult.value.pagination.total).toLocaleString('fr-FR') : '—';
+  if (canViewSales) {
+    document.getElementById('dash-sales').textContent = salesResult.status === 'fulfilled'
+      ? Number(salesResult.value.pagination.total).toLocaleString('fr-FR')
+      : '—';
+  }
 }
 async function loadAccountingData() {
   if (!document.getElementById('accounting-report-type')) return;
@@ -3164,7 +3254,17 @@ async function loadSalesTopProducts() {
     if(subtitle)subtitle.textContent=`Quantités vendues · ${formatReportDate(range.from)} – ${formatReportDate(range.to)} · ${rows.length?`Top ${rows.length} produits`:'aucun produit vendu'}`;
     if(!rows.length){target.innerHTML='<p class="empty-note">Aucune vente de produit trouvée sur cette période.</p>';return;}
     const max=Math.max(...rows.map(row=>Number(row.quantity||0)),1);
-    target.innerHTML=`<div class="sales-product-ranking">${rows.map((row,index)=>{const quantity=Number(row.quantity||0);const width=Math.max(2,quantity/max*100);const name=String(row.product_name||'Produit');const unit=String(row.unit_name||'');return `<div class="sales-product-row"><span class="sales-product-name" title="${escapeHtml(name)}">${index+1}. ${escapeHtml(name)}</span><div class="sales-product-track"><i style="width:${width}%"></i></div><strong>${quantity.toLocaleString('fr-FR')} ${escapeHtml(unit)}</strong></div>`}).join('')}</div>`;
+    const ranking=rows.map((row,index)=>{
+      const quantity=Number(row.quantity||0);
+      const ratio=quantity/max;
+      const level=ratio>=0.75?'high':ratio>=0.4?'medium':'low';
+      const levelLabel=level==='high'?'Ventes élevées':level==='medium'?'Ventes moyennes':'Ventes faibles';
+      const width=Math.max(2,ratio*100);
+      const name=String(row.product_name||'Produit');
+      const unit=String(row.unit_name||'');
+      return `<div class="sales-product-row"><span class="sales-product-name" title="${escapeHtml(name)}">${index+1}. ${escapeHtml(name)}</span><div class="sales-product-track" role="img" aria-label="${levelLabel} : ${Math.round(ratio*100)} % du produit le plus vendu"><i class="sales-product-bar sales-product-bar--${level}" style="width:${width}%"></i></div><strong>${quantity.toLocaleString('fr-FR')} ${escapeHtml(unit)}</strong></div>`;
+    }).join('');
+    target.innerHTML=`<div class="sales-product-legend" aria-label="Niveaux relatifs au produit le plus vendu"><span class="sales-product-legend-item sales-product-legend-item--high">Élevées : 75 % et plus</span><span class="sales-product-legend-item sales-product-legend-item--medium">Moyennes : 40 à 74 %</span><span class="sales-product-legend-item sales-product-legend-item--low">Faibles : moins de 40 %</span></div><div class="sales-product-ranking">${ranking}</div>`;
   }catch(error){
     if(requestId===salesChartRequest&&target.isConnected)target.innerHTML=`<p class="empty-note">${escapeHtml(error.message)}</p>`;
   }

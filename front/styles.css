@@ -99,7 +99,7 @@
 @media(max-width:650px){.movement-report-filters{grid-template-columns:1fr}.movement-product-list{grid-template-columns:1fr}.movement-report-actions{flex-wrap:wrap}.movement-report-actions button{flex:1}}
 
 /* Keep the navigation width fixed when labels or page content vary. */
-.sidebar{width:258px;min-width:258px;max-width:258px;flex:0 0 258px;overflow-x:hidden}.nav-item{width:100%;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sidebar{width:258px;min-width:258px;max-width:258px;flex:0 0 258px;overflow-x:hidden}.nav-item{width:100%;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.nav-item[hidden]{display:none!important}.nav-section[hidden]{display:none!important}
 
 
 /* Keep support and account controls immediately below navigation. */

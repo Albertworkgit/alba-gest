@@ -21,6 +21,7 @@ final class Session
     {
         self::start();
         session_regenerate_id(true);
+        $modulesAutorises = $user['modules_autorises'] ?? [];
         $_SESSION['auth'] = [
             'type' => $type,
             // La requête superadministrateur alias sup_admin_id sous super_admin_id.
@@ -34,6 +35,7 @@ final class Session
             'permissions' => $user['permissions'] ?? '[]',
             'full_name' => $user['full_name'] ?? $user['email'],
             'enterprise_name' => $user['enterprise_name'] ?? null,
+            'modules_autorises' => is_array($modulesAutorises) ? array_values(array_unique($modulesAutorises)) : [],
         ];
     }
 

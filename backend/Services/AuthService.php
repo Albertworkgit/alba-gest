@@ -287,7 +287,10 @@ final class AuthService
             $profile['permissions'] = json_encode(['*', 'toutes_succursales'], JSON_UNESCAPED_UNICODE);
         }
         unset($profile['first_user_id']);
-        return array_merge($actor, $profile, ['is_company_admin' => $isCompanyAdmin]);
+        return array_merge($actor, $profile, [
+            'is_company_admin' => $isCompanyAdmin,
+            'modules_autorises' => $this->enterpriseModules($enterpriseId),
+        ]);
     }
 
     // Met à jour les informations modifiables du compte actuellement connecté.
