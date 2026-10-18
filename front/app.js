@@ -389,6 +389,18 @@ function isCompanyWideReport() {
   const stockBranch = currentViewName === 'stock' ? document.getElementById('stock-branch')?.value : '';
   return !activeBranchId && !stockBranch && !(sessionUser?.succursale_id && !sessionUser?.is_company_admin);
 }
+function setBranchColumnVisibility(root, visible) {
+  root.querySelectorAll('table').forEach(table => {
+    const headers = [...table.querySelectorAll('thead th')];
+    headers.forEach((header, index) => {
+      if (!/succursale|branche/i.test(header.textContent.trim())) return;
+      header.hidden = !visible;
+      table.querySelectorAll('tbody tr').forEach(row => {
+        if (row.cells[index]) row.cells[index].hidden = !visible;
+      });
+    });
+  });
+}
 function removeBranchColumns(root) {
   if (isCompanyWideReport()) return;
   root.querySelectorAll('[data-report-total]').forEach(row => row.remove());
@@ -491,6 +503,7 @@ async function selectedReportNode(){
   if(to)params.date_fin=to;
   if(search)params.recherche=search;
   if(kind==='profits'){
+    const showBranchColumn=isCompanyWideReport();
     let reportPage=await fetchReportPage('cash-sales-profit',1,params,100);
     const rows=[...reportPage.rows];
     const currencies=new Map(reportPage.summary.map(item=>[String(item.monais||'').trim().toUpperCase(),{
@@ -505,7 +518,7 @@ async function selectedReportNode(){
       rows.push(...reportPage.rows);
     }
     const node=document.createElement('section');node.className='panel';
-    node.innerHTML=`<div class="panel-header"><div><h2>${escapeHtml(currentReportTitle())}</h2><p class="panel-subtitle">Le coût est calculé à partir des lots achetés lorsqu’ils sont disponibles, sinon du coût enregistré sur le produit. Les ventes nettes tiennent compte des réductions. Le pourcentage indique le résultat net en proportion des ventes nettes : (bénéfices − pertes) ÷ ventes nettes × 100. Un résultat positif signifie un bénéfice; un résultat négatif signifie une perte.</p></div></div>${currencies.size?`<div style="overflow:auto"><table class="data-table"><thead><tr><th>Monnaie</th><th>Quantité vendue</th><th>Ventes nettes</th><th>Coût total</th><th>Bénéfices</th><th>Pertes</th><th>Résultat net / ventes</th></tr></thead><tbody>${[...currencies].map(([currency,total])=>{const netResult=total.profit-total.loss;const margin=total.sales>0?`${(netResult/total.sales*100).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} %`:'—';return `<tr><td>${escapeHtml(currency)}</td><td>${total.quantity.toLocaleString('fr-FR')}</td><td>${escapeHtml(moneyCurrencyLabel(total.sales,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.cost,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.profit,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.loss,currency))}</td><td>${escapeHtml(margin)}</td></tr>`}).join('')}</tbody></table></div>`:''}<div style="overflow:auto"><table class="data-table"><thead><tr>${['Date','Facture','Client','Produit','Quantité','Coût unitaire','Prix de vente unitaire','Réduction','Ventes nettes','Coût total','Bénéfice','Perte','Résultat net / ventes','Monnaie'].map(header=>`<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody data-profit-details></tbody></table></div>`;
+    node.innerHTML=`<div class="panel-header"><div><h2>${escapeHtml(currentReportTitle())}</h2><p class="panel-subtitle">Le coût est calculé à partir des lots achetés lorsqu’ils sont disponibles, sinon du coût enregistré sur le produit. Les ventes nettes tiennent compte des réductions. Le pourcentage indique le résultat net en proportion des ventes nettes : (bénéfices − pertes) ÷ ventes nettes × 100. Un résultat positif signifie un bénéfice; un résultat négatif signifie une perte.</p></div></div>${currencies.size?`<div style="overflow:auto"><table class="data-table"><thead><tr><th>Monnaie</th><th>Quantité vendue</th><th>Ventes nettes</th><th>Coût total</th><th>Bénéfices</th><th>Pertes</th><th>Résultat net / ventes</th></tr></thead><tbody>${[...currencies].map(([currency,total])=>{const netResult=total.profit-total.loss;const margin=total.sales>0?`${(netResult/total.sales*100).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} %`:'—';return `<tr><td>${escapeHtml(currency)}</td><td>${total.quantity.toLocaleString('fr-FR')}</td><td>${escapeHtml(moneyCurrencyLabel(total.sales,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.cost,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.profit,currency))}</td><td>${escapeHtml(moneyCurrencyLabel(total.loss,currency))}</td><td>${escapeHtml(margin)}</td></tr>`}).join('')}</tbody></table></div>`:''}<div style="overflow:auto"><table class="data-table"><thead><tr>${['Date','Facture','Client',...(showBranchColumn?['Succursale']:[]),'Vendeur','Produit','Quantité','Coût unitaire','Prix de vente unitaire','Réduction','Ventes nettes','Coût total','Bénéfice','Perte','Résultat net / ventes','Monnaie'].map(header=>`<th>${escapeHtml(header)}</th>`).join('')}</tr></thead><tbody data-profit-details></tbody></table></div>`;
     const reportTables=node.querySelectorAll('.data-table');
     if(reportTables.length===2){
       reportTables[0].dataset.skipReportTotals='true';
@@ -520,17 +533,18 @@ async function selectedReportNode(){
       const netSales=Number(item.subtotal||0);
       const netResult=Number(item.profit||0)-Number(item.loss||0);
       const margin=netSales>0?`${(netResult/netSales*100).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})} %`:'—';
-      const values=[dateLabel(item.sale_date),item.invoice_no,item.client_name||'Client comptoir',item.product_name,Number(item.quantity),unitCostLabel(item.unit_cost,item.monais),moneyCurrencyLabel(item.unit_price,item.monais),moneyCurrencyLabel(item.discount_amount,item.monais),moneyCurrencyLabel(item.subtotal,item.monais),moneyCurrencyLabel(item.cost_total,item.monais),moneyCurrencyLabel(item.profit,item.monais),moneyCurrencyLabel(item.loss,item.monais),margin,item.monais];
+      const values=[dateLabel(item.sale_date),item.invoice_no,item.client_name||'Client comptoir',...(showBranchColumn?[item.branch_name||'—']:[]),item.cashier||'—',item.product_name,Number(item.quantity),unitCostLabel(item.unit_cost,item.monais),moneyCurrencyLabel(item.unit_price,item.monais),moneyCurrencyLabel(item.discount_amount,item.monais),moneyCurrencyLabel(item.subtotal,item.monais),moneyCurrencyLabel(item.cost_total,item.monais),moneyCurrencyLabel(item.profit,item.monais),moneyCurrencyLabel(item.loss,item.monais),margin,item.monais];
       row.innerHTML=values.map(value=>`<td>${escapeHtml(value)}</td>`).join('');
     });
-    if(!rows.length){const empty=body.insertRow();empty.innerHTML='<td colspan="14">Aucune vente trouvée pour cette période et cette recherche.</td>';} 
+    if(!rows.length){const empty=body.insertRow();empty.innerHTML=`<td colspan="${15+(showBranchColumn?1:0)}">Aucune vente trouvée pour cette période et cette recherche.</td>`;}
     return node;
   }
   if(kind==='debts'){
     const rows=await fetchAllReportRows('cash-debts',params);
     const currencies=[...new Set(rows.map(item=>String(item.monais||'').trim().toUpperCase()).filter(Boolean))].sort();
+    const showBranchColumn=isCompanyWideReport();
     const node=document.createElement('section');node.className='panel';
-    node.innerHTML=`<div class="panel-header"><h2>${escapeHtml(currentReportTitle())}</h2></div><table class="data-table"><thead><tr>${['Bénéficiaire','Téléphone','Succursale','Date','Description',...currencies.flatMap(currency=>[`${currency} · Prêté`,`${currency} · Remboursé`,`${currency} · Solde`]),'Statut'].map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody></tbody></table>`;
+    node.innerHTML=`<div class="panel-header"><h2>${escapeHtml(currentReportTitle())}</h2></div><table class="data-table"><thead><tr>${['Bénéficiaire','Téléphone',...(showBranchColumn?['Succursale']:[]),'Date','Description',...currencies.flatMap(currency=>[`${currency} · Prêté`,`${currency} · Remboursé`,`${currency} · Solde`]),'Statut'].map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody></tbody></table>`;
     const body=node.querySelector('tbody');
     const totalsByCurrency=new Map(currencies.map(currency=>[currency,{loaned:0,repaid:0,balance:0}]));
     rows.forEach(item=>{
@@ -543,14 +557,14 @@ async function selectedReportNode(){
         totals.repaid+=Number(item.montant_rembourse||0);
         totals.balance+=Number(item.solde_restant||0);
       }
-      row.innerHTML=[item.beneficiaire,item.telephone||'—',item.branch_name,dateLabel(item.date_dette),item.description||'—',...currencies.flatMap(reportCurrency=>reportCurrency===currency?[moneyCurrencyLabel(item.montant,reportCurrency),moneyCurrencyLabel(item.montant_rembourse,reportCurrency),moneyCurrencyLabel(item.solde_restant,reportCurrency)]:['—','—','—']),item.statut].map(value=>`<td>${escapeHtml(value)}</td>`).join('');
+      row.innerHTML=[item.beneficiaire,item.telephone||'—',...(showBranchColumn?[item.branch_name||'—']:[]),dateLabel(item.date_dette),item.description||'—',...currencies.flatMap(reportCurrency=>reportCurrency===currency?[moneyCurrencyLabel(item.montant,reportCurrency),moneyCurrencyLabel(item.montant_rembourse,reportCurrency),moneyCurrencyLabel(item.solde_restant,reportCurrency)]:['—','—','—']),statusLabel(item.statut)].map(value=>`<td>${escapeHtml(value)}</td>`).join('');
     });
-    if(!rows.length){const empty=body.insertRow();empty.innerHTML=`<td colspan="${6+currencies.length*3}">Aucune dette trouvée pour cette période et cette recherche.</td>`;}
+    if(!rows.length){const empty=body.insertRow();empty.innerHTML=`<td colspan="${5+(showBranchColumn?1:0)+currencies.length*3}">Aucune dette trouvée pour cette période et cette recherche.</td>`;}
     else{
       const totalRow=body.insertRow();
       totalRow.className='report-total-row';
       totalRow.dataset.reportTotal='true';
-      const totalValues=['TOTAL PAR MONNAIE','','','','',...currencies.flatMap(currency=>{
+      const totalValues=['TOTAL PAR MONNAIE',...Array(showBranchColumn?4:3).fill(''),...currencies.flatMap(currency=>{
         const total=totalsByCurrency.get(currency);
         return [moneyCurrencyLabel(total.loaned,currency),moneyCurrencyLabel(total.repaid,currency),moneyCurrencyLabel(total.balance,currency)];
       }),''];
@@ -561,8 +575,12 @@ async function selectedReportNode(){
   const action=kind==='sales'?'sales-list':'cash-movements';
   const rows=await fetchAllReportRows(action,params);
   const isSales=kind==='sales';
-  const currencies=isSales?[...new Set(rows.flatMap(item=>(Array.isArray(item.currency_totals)&&item.currency_totals.length?item.currency_totals:[item]).map(balance=>String(balance.monais||'').trim().toUpperCase()).filter(Boolean)))].sort():[...new Set(rows.map(item=>String(item.monais||'').trim().toUpperCase()).filter(Boolean))].sort();
-  const headers=isSales?['Facture','Client','Succursale','Caissier','Date','Articles',...currencies.flatMap(currency=>[`${currency} · Total`,`${currency} · Payé`]),'Statut']:['Date','Caisse','Motif','Référence',...currencies.flatMap(currency=>[`${currency} · Entrées`,`${currency} · Sorties`])];
+  const showBranchColumn=isCompanyWideReport();
+  const currencies=isSales?[...new Set(rows.flatMap(item=>[
+    ...(Array.isArray(item.currency_totals)&&item.currency_totals.length?item.currency_totals:[item]),
+    ...(Array.isArray(item.paid_currency_totals)?item.paid_currency_totals:[])
+  ].map(balance=>String(balance.monais||'').trim().toUpperCase()).filter(Boolean)))].sort():[...new Set(rows.map(item=>String(item.monais||'').trim().toUpperCase()).filter(Boolean))].sort();
+  const headers=isSales?['Facture','Client',...(showBranchColumn?['Succursale']:[]),'Vendeur','Date','Produits',...currencies.flatMap(currency=>[`${currency} · Total`,`${currency} · Payé`]),'Statut']:['Date',...(showBranchColumn?['Succursale']:[]),'Caisse','Motif','Référence',...currencies.flatMap(currency=>[`${currency} · Entrées`,`${currency} · Sorties`])];
   const node=document.createElement('section');node.className='panel';node.innerHTML=`<div class="panel-header"><h2>${currentReportTitle()}</h2></div><table class="data-table"><thead><tr>${headers.map(h=>`<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody></tbody></table>`;
   const body=node.querySelector('tbody');
   const totalsByCurrency=new Map();
@@ -573,14 +591,17 @@ async function selectedReportNode(){
     const reference=item.reference_id?`#${Number(item.reference_id)}`:'—';
     const amount=isSales?'':moneyCurrencyLabel(item.amount,item.monais);
     const searchText=isSales
-      ?[item.invoice_no,item.client_name||'Client comptoir',item.branch_name||'—',item.cashier||'—',dateLabel(item.sale_date),Number(item.item_count||0),saleCurrencyAmounts(item,'total_amount'),saleCurrencyAmounts(item,'amount_paid'),item.status].join(' ')
+      ?[item.invoice_no,item.client_name||'Client comptoir',item.branch_name||'—',item.seller_name||item.cashier||'—',dateLabel(item.sale_date),item.product_names||'',saleCurrencyAmounts(item,'total_amount'),saleCurrencyAmounts(item,'amount_paid'),saleStatusLabel(item.status)].join(' ')
       :[dateLabel(item.movement_date),item.cash_name,item.branch_name||'—',item.cashier||'—',item.invoice_no||'',item.client_name||'',item.dette_beneficiaire||'',item.dette_telephone||'',item.dette_description||'',item.payment_mode||'',item.bank_reference||'',type,item.reason||'—',reference,amount].join(' ');
     if ((from&&day<from)||(to&&day>to)||(search&&!searchText.toLocaleLowerCase('fr').includes(search))) return;
     const currency=String(item.monais||'').trim().toUpperCase();
     const saleBalances=isSales?(Array.isArray(item.currency_totals)&&item.currency_totals.length?item.currency_totals:[item]):[];
+    const salePayments=Array.isArray(item.paid_currency_totals)&&item.paid_currency_totals.length
+      ?item.paid_currency_totals
+      :saleBalances.filter(balance=>Number(balance.amount_paid||0)>0).map(balance=>({monais:balance.monais,amount_paid:balance.amount_paid}));
     const values=isSales
-      ?[item.invoice_no,item.client_name||'Client comptoir',item.branch_name||'—',item.cashier||'—',dateLabel(item.sale_date),Number(item.item_count||0),...currencies.flatMap(reportCurrency=>{const balance=saleBalances.find(entry=>String(entry.monais||'').trim().toUpperCase()===reportCurrency);const totals=totalsByCurrency.get(reportCurrency);if(balance&&totals){totals.total+=Number(balance.total_amount||0);totals.paid+=Number(balance.amount_paid||0);}return [balance?moneyCurrencyLabel(balance.total_amount,reportCurrency):'—',balance?moneyCurrencyLabel(balance.amount_paid,reportCurrency):'—'];}),item.status]
-      :[dateLabel(item.movement_date),item.cash_name,[item.reason,item.dette_telephone?`Téléphone : ${item.dette_telephone}`:'',item.dette_description].filter(Boolean).join(' · ')||'—',reference,...currencies.flatMap(reportCurrency=>[
+      ?[item.invoice_no,item.client_name||'Client comptoir',...(showBranchColumn?[item.branch_name||'—']:[]),item.seller_name||item.cashier||'—',dateLabel(item.sale_date),item.product_names||'—',...currencies.flatMap(reportCurrency=>{const balance=saleBalances.find(entry=>String(entry.monais||'').trim().toUpperCase()===reportCurrency);const paid=salePayments.find(entry=>String(entry.monais||'').trim().toUpperCase()===reportCurrency);const totals=totalsByCurrency.get(reportCurrency);if(balance&&totals)totals.total+=Number(balance.total_amount||0);if(paid&&totals)totals.paid+=Number(paid.amount_paid||0);return [balance?moneyCurrencyLabel(balance.total_amount,reportCurrency):'—',paid?moneyCurrencyLabel(paid.amount_paid,reportCurrency):'—'];}),saleStatusLabel(item.status)]
+      :[dateLabel(item.movement_date),...(showBranchColumn?[item.branch_name||'—']:[]),item.cash_name,[item.reason,item.dette_telephone?`Téléphone : ${item.dette_telephone}`:'',item.dette_description].filter(Boolean).join(' · ')||'—',reference,...currencies.flatMap(reportCurrency=>[
         currency===reportCurrency&&item.type==='ENTREE'?amount:'—',
         currency===reportCurrency&&item.type==='SORTIE'?amount:'—'
       ])];
@@ -599,7 +620,7 @@ async function selectedReportNode(){
   if (isSales&&totalsByCurrency.size) {
     const totalRow=body.insertRow();
     totalRow.className='report-total-row';totalRow.dataset.reportTotal='true';
-    totalRow.innerHTML=`<td colspan="6">Total</td>${[...totalsByCurrency].flatMap(([currency,totals])=>[`<td>${escapeHtml(moneyCurrencyLabel(totals.total,currency))}</td>`,`<td>${escapeHtml(moneyCurrencyLabel(totals.paid,currency))}</td>`]).join('')}<td></td>`;
+    totalRow.innerHTML=`<td colspan="${showBranchColumn?6:5}">Total</td>${[...totalsByCurrency].flatMap(([currency,totals])=>[`<td>${escapeHtml(moneyCurrencyLabel(totals.total,currency))}</td>`,`<td>${escapeHtml(moneyCurrencyLabel(totals.paid,currency))}</td>`]).join('')}<td></td>`;
   }
   if (!isSales) {
     if (!body.rows.length) {
@@ -610,7 +631,7 @@ async function selectedReportNode(){
       const totalRow=body.insertRow();
       totalRow.className='report-total-row';
       totalRow.dataset.reportTotal='true';
-      totalRow.innerHTML=`<td colspan="4">Total</td>${[...totalsByCurrency].flatMap(([currency,totals])=>[
+      totalRow.innerHTML=`<td colspan="${showBranchColumn?5:4}">Total</td>${[...totalsByCurrency].flatMap(([currency,totals])=>[
         `<td>${escapeHtml(moneyCurrencyLabel(totals.entries,currency))}</td>`,
         `<td>${escapeHtml(moneyCurrencyLabel(totals.exits,currency))}</td>`
       ]).join('')}`;
@@ -1049,11 +1070,34 @@ const currencyTotalsLabel = rows => {
   });
   return [...totals].map(([currency, total]) => moneyCurrencyLabel(total, currency)).join(' · ') || moneyCurrencyLabel(0, '');
 };
-const saleCurrencyAmounts = (sale, field) => {
-  const balances = Array.isArray(sale.currency_totals) && sale.currency_totals.length ? sale.currency_totals : [sale];
-  return balances.map(balance => moneyCurrencyLabel(balance[field], balance.monais)).join(' · ');
+const saleCurrencyBalances = sale => Array.isArray(sale.currency_totals) && sale.currency_totals.length ? sale.currency_totals : [sale];
+const salePaidCurrencyBalances = sale => Array.isArray(sale.paid_currency_totals) && sale.paid_currency_totals.length
+  ? sale.paid_currency_totals
+  : saleCurrencyBalances(sale).filter(balance => Number(balance.amount_paid || 0) > 0).map(balance => ({monais:balance.monais,amount_paid:balance.amount_paid}));
+const saleCurrencyDueBalances = sale => {
+  const paidByCurrency = new Map(salePaidCurrencyBalances(sale).map(balance => [String(balance.monais || '').trim().toUpperCase(), Number(balance.amount_paid || 0)]));
+  return saleCurrencyBalances(sale).map(balance => {
+    const currency = String(balance.monais || '').trim().toUpperCase();
+    const paid = paidByCurrency.has(currency) ? paidByCurrency.get(currency) : Number(balance.amount_paid || 0);
+    return {monais:balance.monais, due:Math.max(0, Number(balance.total_amount || 0) - paid)};
+  });
 };
-const purchaseStatusLabel = value => ({RECEIVED:'Validé', PENDING:'En attente', CANCELLED:'Annulé'}[String(value || '').toUpperCase()] || value || '—');
+const saleCurrencyAmounts = (sale, field) => (field === 'amount_paid' ? salePaidCurrencyBalances(sale) : saleCurrencyBalances(sale))
+  .map(balance => moneyCurrencyLabel(balance[field], balance.monais)).join(' · ');
+const statusLabels = {
+  PENDING:'En attente', PAID:'Payé', PARTIAL:'Partiellement payé', CANCELLED:'Annulé',
+  RECEIVED:'Reçu', COMPLETED:'Terminé', OPEN:'Ouvert', CLOSED:'Fermé',
+  APPROVED:'Approuvé', REJECTED:'Refusé', DRAFT:'Brouillon', VALIDATED:'Validé',
+  ACTIVE:'Actif', INACTIVE:'Inactif', OUVERTE:'Ouverte', FERMEE:'Fermée',
+  REMBOURSEE:'Remboursée', EN_ATTENTE:'En attente', APPROUVEE:'Approuvée',
+  REFUSEE:'Refusée', BROUILLON:'Brouillon', VALIDEE:'Validée', ANNULEE:'Annulée'
+};
+const statusLabel = (value, overrides = {}) => {
+  const key = String(value || '').toUpperCase();
+  return overrides[key] || statusLabels[key] || value || '—';
+};
+const saleStatusLabel = value => statusLabel(value, {PAID:'Payée', PARTIAL:'Partiellement payée', CANCELLED:'Annulée'});
+const purchaseStatusLabel = value => statusLabel(value, {RECEIVED:'Validé', CANCELLED:'Annulé'});
 function addUnitQuantity(totals, unit, quantity) {
   const amount = Number(quantity || 0);
   if (amount === 0) return;
@@ -1140,10 +1184,16 @@ function labelSaleInvoiceButtons(root) {
 async function loadSalesRows(page = 1) {
   const body = document.getElementById('sales-rows'); if (!body) return;
   try {
+    const headers = body.closest('table')?.tHead?.rows[0]?.cells;
+    if (headers) {
+      headers[3].textContent = 'Vendeur';
+      headers[5].textContent = 'Produits';
+      headers[2].hidden = !isCompanyWideReport();
+    }
     const result = await fetchReportPage('sales-list', page);
     const sales = result.rows;
     document.getElementById('sales-count').textContent = `${result.pagination.total} vente${result.pagination.total === 1 ? '' : 's'} enregistrée${result.pagination.total === 1 ? '' : 's'}`;
-    body.innerHTML = sales.length ? sales.map(sale => {const unpaidPending=sale.status==='PENDING'&&Number(sale.amount_paid)<=0;const cancelable=sale.status!=='CANCELLED'&&(unpaidPending||Date.now()-new Date(sale.sale_date).getTime()<172800000);return `<tr data-report-date="${escapeHtml(String(sale.sale_date).slice(0, 10))}"><td>${escapeHtml(sale.invoice_no)}</td><td>${escapeHtml(sale.client_name||'Client comptoir')}</td><td>${escapeHtml(sale.branch_name||'—')}</td><td>${escapeHtml(sale.cashier||'—')}</td><td>${escapeHtml(dateLabel(sale.sale_date))}</td><td>${Number(sale.item_count||0)}</td><td>${escapeHtml(saleCurrencyAmounts(sale,'total_amount'))}</td><td>${escapeHtml(saleCurrencyAmounts(sale,'amount_paid'))}</td><td>${escapeHtml(sale.status)}</td><td><button type="button" title="Imprimer la pièce justificative" aria-label="Imprimer la pièce justificative" data-sale-receipt="${Number(sale.vente_id)}">Imprimer la pièce justificative</button>${cancelable&&hasAccess('modifier_ventes')?` <button type="button" data-sale-cancel="${Number(sale.vente_id)}">Annuler</button>`:''}</td></tr>`;}).join('') : '<tr><td colspan="10">Aucune vente enregistrée.</td></tr>';
+    body.innerHTML = sales.length ? sales.map(sale => {const unpaidPending=sale.status==='PENDING'&&Number(sale.amount_paid)<=0;const cancelable=sale.status!=='CANCELLED'&&(unpaidPending||Date.now()-new Date(sale.sale_date).getTime()<172800000);return `<tr data-report-date="${escapeHtml(String(sale.sale_date).slice(0, 10))}"><td>${escapeHtml(sale.invoice_no)}</td><td>${escapeHtml(sale.client_name||'Client comptoir')}</td><td${isCompanyWideReport()?'':' hidden'}>${escapeHtml(sale.branch_name||'—')}</td><td>${escapeHtml(sale.seller_name||sale.cashier||'—')}</td><td>${escapeHtml(dateLabel(sale.sale_date))}</td><td>${escapeHtml(sale.product_names||'—')}</td><td>${escapeHtml(saleCurrencyAmounts(sale,'total_amount'))}</td><td>${escapeHtml(saleCurrencyAmounts(sale,'amount_paid'))}</td><td>${escapeHtml(saleStatusLabel(sale.status))}</td><td><button type="button" title="Imprimer la pièce justificative" aria-label="Imprimer la pièce justificative" data-sale-receipt="${Number(sale.vente_id)}">Imprimer la pièce justificative</button>${cancelable&&hasAccess('modifier_ventes')?` <button type="button" data-sale-cancel="${Number(sale.vente_id)}">Annuler</button>`:''}</td></tr>`;}).join('') : '<tr><td colspan="10">Aucune vente enregistrée.</td></tr>';
     labelSaleInvoiceButtons(body);
     filterCurrentReport();
     showPagination(body, 'sales', result.pagination, loadSalesRows);
@@ -1399,7 +1449,7 @@ async function loadCashRows(page = 1, movementPage = 1, externalPage = 1, debtPa
     const [result,movementResult,paymentResult,debtResult] = await Promise.all([fetchReportPage('cashboxes-list', page, searchParams),fetchReportPage('cash-movements',movementPage,searchParams),fetchReportPage('payment-journal',externalPage,searchParams),fetchReportPage('cash-debts',debtPage,searchParams)]);
     const externalPayments = paymentResult.rows;
     const cashboxes = result.rows;
-    body.innerHTML = cashboxes.length ? cashboxes.map(item => `<tr data-report-date="${escapeHtml(String(item.date_ouverture||'').slice(0,10))}" data-search-text="${escapeHtml([item.name,branchOptions.find(branch => Number(branch.succursale_id) === Number(item.succursale_id))?.name||'',item.currency_name,item.monais,item.payment_mode,item.bank_name||'',item.statut].join(' '))}"><td>${escapeHtml(item.name)}</td><td>${escapeHtml(branchOptions.find(branch => Number(branch.succursale_id) === Number(item.succursale_id))?.name || `ID ${Number(item.succursale_id)}`)}</td><td>${escapeHtml(item.currency_name)} (${escapeHtml(item.monais)}) · ${escapeHtml(item.payment_mode)}${item.bank_name?` · ${escapeHtml(item.bank_name)}`:``}</td><td>${escapeHtml(dateLabel(item.date_ouverture))}</td><td>${moneyCurrencyLabel(item.solde_ouverture,item.monais)}</td><td>${moneyCurrencyLabel(item.solde_courant,item.monais)}</td><td>${item.statut === 'FERMEE' ? moneyCurrencyLabel(item.solde_fermeture,item.monais) : '—'}</td><td>${escapeHtml(item.statut)}</td><td>${item.statut === 'OUVERTE' && hasAccess('modifier_caisse') ? `<button type="button" data-cash-close="${Number(item.caisse_id)}">Clôturer</button>` : item.statut === 'FERMEE' && hasAccess('creer_caisse') ? `<button type="button" data-cash-reopen="${Number(item.caisse_id)}" data-cash-name="${escapeHtml(item.name)}" data-cash-branch="${Number(item.succursale_id)}" data-cash-currency="${escapeHtml(item.monais)}" data-cash-mode="${Number(item.mode_paiement_id)}">Ouvrir</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="9">Aucune caisse enregistrée.</td></tr>';
+    body.innerHTML = cashboxes.length ? cashboxes.map(item => `<tr data-report-date="${escapeHtml(String(item.date_ouverture||'').slice(0,10))}" data-search-text="${escapeHtml([item.name,branchOptions.find(branch => Number(branch.succursale_id) === Number(item.succursale_id))?.name||'',item.currency_name,item.monais,item.payment_mode,item.bank_name||'',item.statut].join(' '))}"><td>${escapeHtml(item.name)}</td><td>${escapeHtml(branchOptions.find(branch => Number(branch.succursale_id) === Number(item.succursale_id))?.name || `ID ${Number(item.succursale_id)}`)}</td><td>${escapeHtml(item.currency_name)} (${escapeHtml(item.monais)}) · ${escapeHtml(item.payment_mode)}${item.bank_name?` · ${escapeHtml(item.bank_name)}`:``}</td><td>${escapeHtml(dateLabel(item.date_ouverture))}</td><td>${moneyCurrencyLabel(item.solde_ouverture,item.monais)}</td><td>${moneyCurrencyLabel(item.solde_courant,item.monais)}</td><td>${item.statut === 'FERMEE' ? moneyCurrencyLabel(item.solde_fermeture,item.monais) : '—'}</td><td>${escapeHtml(statusLabel(item.statut))}</td><td>${item.statut === 'OUVERTE' && hasAccess('modifier_caisse') ? `<button type="button" data-cash-close="${Number(item.caisse_id)}">Clôturer</button>` : item.statut === 'FERMEE' && hasAccess('creer_caisse') ? `<button type="button" data-cash-reopen="${Number(item.caisse_id)}" data-cash-name="${escapeHtml(item.name)}" data-cash-branch="${Number(item.succursale_id)}" data-cash-currency="${escapeHtml(item.monais)}" data-cash-mode="${Number(item.mode_paiement_id)}">Ouvrir</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="9">Aucune caisse enregistrée.</td></tr>';
     cashboxes.forEach((item,index)=>{const row=body.rows[index];if(!row)return;const reopen=row.querySelector('[data-cash-reopen]');if(reopen)reopen.dataset.cashBank=String(item.banque_id||'');if(item.statut==='FERMEE'&&hasAccess('supprimer_caisse'))row.cells[row.cells.length-1].insertAdjacentHTML('beforeend',` <button type="button" class="icon-action-button" title="Supprimer la caisse" aria-label="Supprimer la caisse" data-cash-delete="${Number(item.caisse_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`);});
     showPagination(body, 'cash', result.pagination, next=>loadCashRows(next,movementPage,externalPage,debtPage));
     const movementBody=document.getElementById('cash-movement-rows');if(movementBody){    movementBody.innerHTML=movementResult.rows.length?movementResult.rows.map(row=>`<tr data-report-date="${escapeHtml(String(row.movement_date).slice(0,10))}" data-search-text="${escapeHtml([row.cashier||'',row.branch_name||'',row.invoice_no||'',row.client_name||'',row.dette_beneficiaire||'',row.dette_telephone||'',row.dette_description||'',row.bank_reference||'',row.monais||''].join(' '))}"><td><input type="checkbox" data-cash-print-select="${Number(row.mouvement_id)}" aria-label="Sélectionner la pièce du mouvement ${Number(row.mouvement_id)}"${selectedCashMovementReceipts.has(Number(row.mouvement_id))?' checked':''}></td><td>${escapeHtml(dateLabel(row.movement_date))}</td><td>${escapeHtml(row.cash_name)}</td><td>${escapeHtml(row.type==='ENTREE'?'Entrée':'Sortie')}</td><td>${escapeHtml(row.payment_mode||'Caisse')}</td><td>${escapeHtml([row.reason||'—',row.client_name?`Client : ${row.client_name}`:'',row.dette_telephone?`Téléphone : ${row.dette_telephone}`:'',row.dette_description||'',row.dette_montant_impute?`Imputé sur la dette : ${moneyCurrencyLabel(row.dette_montant_impute,row.dette_monais)}`:''].filter(Boolean).join(' · '))}</td><td>${row.invoice_no?escapeHtml(row.invoice_no):row.reference_id?`#${Number(row.reference_id)}`:'—'}</td><td>${moneyCurrencyLabel(row.amount,row.monais)}</td></tr>`).join(''):'<tr><td colspan="8">Aucun mouvement de caisse enregistré.</td></tr>';const currencySummary=new Map((movementResult.summary||[]).map(item=>[item.monais,{entrees:Number(item.entrees),sorties:Number(item.sorties),operations:Number(item.operations)}]));let summaryBox=movementBody.closest('.panel').querySelector('#cash-currency-summary');if(!summaryBox){summaryBox=document.createElement('div');summaryBox.id='cash-currency-summary';summaryBox.style.overflow='auto';movementBody.closest('.panel').querySelector('.panel-header').after(summaryBox);}summaryBox.innerHTML=currencySummary.size?`<table class="data-table"><thead><tr><th>Monnaie</th><th>Total entrées</th><th>Total sorties</th><th>Solde net</th><th>Opérations</th></tr></thead><tbody>${[...currencySummary].map(([currency,item])=>`<tr><td>${escapeHtml(currency)}</td><td>${moneyCurrencyLabel(item.entrees,currency)}</td><td>${moneyCurrencyLabel(item.sorties,currency)}</td><td><strong>${moneyCurrencyLabel(item.entrees-item.sorties,currency)}</strong></td><td>${item.operations}</td></tr>`).join('')}</tbody></table>`:'<p class="panel-subtitle">Aucun mouvement enregistré.</p>';showPagination(movementBody,'cash-movements',movementResult.pagination,next=>loadCashRows(page,next,externalPage,debtPage));}const externalBody=document.getElementById('external-payment-rows');if(externalBody){externalBody.innerHTML=externalPayments.length?externalPayments.map(payment=>`<tr data-report-date="${escapeHtml(String(payment.payment_date).slice(0,10))}" data-search-text="${escapeHtml([payment.counterparty||'',payment.reference||'',payment.document_no||'',payment.payment_mode||'',payment.monais||''].join(' '))}"><td>${escapeHtml(dateLabel(payment.payment_date))}</td><td>${escapeHtml(payment.operation)}</td><td>${escapeHtml(payment.document_no)}</td><td>${escapeHtml(payment.counterparty||'—')}</td><td>${escapeHtml(payment.branch_name)}</td><td>${escapeHtml(payment.payment_mode)}</td><td>${escapeHtml(payment.reference||'—')}</td><td>${moneyCurrencyLabel(payment.amount,payment.monais)}</td></tr>`).join(''):'<tr><td colspan="8">Aucun paiement externe enregistré.</td></tr>';showPagination(externalBody,'external-payments',paymentResult.pagination,next=>loadCashRows(page,movementPage,next,debtPage)); }
@@ -1434,7 +1484,7 @@ async function loadCashRows(page = 1, movementPage = 1, externalPage = 1, debtPa
       actionCell.insertAdjacentHTML('beforeend', ` <button type="button" class="icon-action-button icon-action-danger" title="Demander l’annulation de cette opération" aria-label="Demander l’annulation de l’opération ${Number(movement.mouvement_id)}" data-cash-cancellation-request="${Number(movement.mouvement_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`);
     });
     addSalePaymentReceiptActions(document.getElementById('external-payment-rows'), externalPayments);
-    ensureBankPanels();await loadBanks();ensureExchangeRatePanel();await loadExchangeRates();renderModuleNavigation();
+    ensureBankPanels();await loadBanks();ensureExchangeRatePanel();await loadExchangeRates();renderModuleNavigation();setBranchColumnVisibility(container,isCompanyWideReport());
     if(hasAccess('modifier_caisse'))loadPendingSales(1, searchParams);
     filterCurrentReport();
   } catch (error) { showLoadError('cash-rows', error, 9); }
@@ -1456,8 +1506,7 @@ async function loadPendingSales(page = 1, params = {}) {
     const result = await fetchReportPage('pending-sales', page, params);
     panel.querySelector('h2').textContent = `Ventes à encaisser (${result.pagination.total})`;
     body.innerHTML = result.rows.length ? result.rows.map(sale => {
-      const balances = Array.isArray(sale.currency_totals) && sale.currency_totals.length ? sale.currency_totals : [{monais:sale.monais,total_amount:sale.total_amount,amount_paid:sale.amount_paid}];
-      const dueBalances = balances.map(balance => ({...balance, due:Math.max(0,Number(balance.total_amount)-Number(balance.amount_paid))}));
+      const dueBalances = saleCurrencyDueBalances(sale);
       const payableBalances = dueBalances.filter(balance => balance.due > 0).map(balance => ({monais:balance.monais || '', due:balance.due}));
       const paymentButton = payableBalances.length ? `<button type="button" data-sale-pay-cash="${Number(sale.vente_id)}" data-sale-balances="${escapeHtml(JSON.stringify(payableBalances))}" data-sale-branch="${Number(sale.succursale_id)}" data-sale-invoice-no="${escapeHtml(sale.invoice_no)}">Payer la facture</button>` : '';
       return `<tr><td>${escapeHtml(sale.invoice_no)}</td><td>${escapeHtml(sale.client_name || 'Client comptoir')}</td><td>${escapeHtml(sale.seller || '—')}</td><td>${escapeHtml(dateLabel(sale.sale_date))}</td><td>${saleCurrencyAmounts(sale,'total_amount')}</td><td>${saleCurrencyAmounts(sale,'amount_paid')}</td><td><strong>${dueBalances.map(balance => moneyCurrencyLabel(balance.due,balance.monais)).join(' · ')}</strong></td><td><button type="button" data-sale-view="${Number(sale.vente_id)}">Voir</button> ${paymentButton}</td></tr>`;
@@ -3507,7 +3556,7 @@ function purchaseVoucherMarkup(data) {
   const party = purchase.movement_type === 'OUT'
     ? `<p><strong>Succursale :</strong> ${escapeHtml(purchase.branch_name)} | <strong>Motif de sortie :</strong> ${escapeHtml(purchase.motif_sortie || '-')}</p>`
     : `<p><strong>Succursale :</strong> ${escapeHtml(purchase.branch_name)} | <strong>Fournisseur :</strong> ${escapeHtml(purchase.supplier_name || 'Non renseigne')}</p><p><strong>Contact fournisseur :</strong> ${escapeHtml(purchase.supplier_contact || purchase.supplier_phone || '-')}</p>`;
-  const content = `<p><strong>Reference :</strong> ${escapeHtml(purchase.purchase_no)} | <strong>Date :</strong> ${escapeHtml(dateLabel(purchase.purchase_date))}</p>${party}<p><strong>Statut :</strong> ${escapeHtml(purchase.status)}</p>${detailsHtml}`;
+  const content = `<p><strong>Reference :</strong> ${escapeHtml(purchase.purchase_no)} | <strong>Date :</strong> ${escapeHtml(dateLabel(purchase.purchase_date))}</p>${party}<p><strong>Statut :</strong> ${escapeHtml(purchaseStatusLabel(purchase.status))}</p>${detailsHtml}`;
   return {title:movement, content};
 }
 async function printPurchaseVoucher(button) {
@@ -3548,8 +3597,7 @@ async function viewPendingSale(button) {
     const data = await fetchReportData('sale-receipt', {vente_id:button.dataset.saleView});
     const sale = data.sale;
     const rows = data.details.map(item => `<tr><td>${escapeHtml(item.product_name)}</td><td>${Number(item.quantity)}</td><td>${moneyCurrencyLabel(item.unit_price, item.monais)}</td><td>${moneyCurrencyLabel(item.subtotal, item.monais)}</td></tr>`).join('');
-    const currencyBalances = Array.isArray(sale.currency_totals) && sale.currency_totals.length ? sale.currency_totals : [sale];
-    const due = currencyBalances.map(balance => moneyCurrencyLabel(Math.max(0, Number(balance.total_amount) - Number(balance.amount_paid)), balance.monais)).join(' · ');
+    const due = saleCurrencyDueBalances(sale).map(balance => moneyCurrencyLabel(balance.due, balance.monais)).join(' · ');
     const modal = document.createElement('div');
     modal.className = 'entity-modal';
     modal.innerHTML = `<section class="entity-dialog"><h2>Vente ${escapeHtml(sale.invoice_no)}</h2><p class="panel-subtitle">${escapeHtml(sale.client_name || 'Client comptoir')} · ${escapeHtml(dateLabel(sale.sale_date))}</p><div style="overflow:auto"><table class="data-table"><thead><tr><th>Article</th><th>Quantité</th><th>Prix</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table></div><p><strong>Total par monnaie :</strong> ${saleCurrencyAmounts(sale,'total_amount')}<br><strong>Déjà payé :</strong> ${saleCurrencyAmounts(sale,'amount_paid')}<br><strong>Reste à payer :</strong> ${due}</p><div class="entity-modal-actions"><button type="button" class="modal-cancel">Fermer</button></div></section>`;
@@ -3569,8 +3617,8 @@ async function printSaleInvoice(button){
       const discount=Number(row.discount_amount||0);
       return `<tr><td>${escapeHtml(row.sku)}</td><td>${escapeHtml(row.product_name)}</td><td>${Number(row.quantity)} ${escapeHtml(unit)}</td><td>${moneyCurrencyLabel(row.unit_price,row.monais)}</td><td>${discount>0?moneyCurrencyLabel(discount,row.monais):'—'}</td><td>${moneyCurrencyLabel(row.subtotal,row.monais)}</td></tr>`;
     }).join('');
-    const due=(sale.currency_totals||[]).map(balance=>moneyCurrencyLabel(Math.max(0,Number(balance.total_amount)-Number(balance.amount_paid)),balance.monais)).join(' · ')||moneyCurrencyLabel(Math.max(0,Number(sale.total_amount)-Number(sale.amount_paid)),sale.monais);
-    const content=`<p><strong>Facture :</strong> ${escapeHtml(sale.invoice_no)} · <strong>Date :</strong> ${escapeHtml(dateLabel(sale.sale_date))}</p><p><strong>Client :</strong> ${escapeHtml(sale.client_name||'Client comptoir')} · <strong>Succursale :</strong> ${escapeHtml(sale.branch_name)} · <strong>Vendeur :</strong> ${escapeHtml(sale.cashier||'—')}</p><table class="report-table"><thead><tr><th>Référence</th><th>Produit</th><th>Quantité</th><th>Prix de vente</th><th>Réduction</th><th>Total ligne</th></tr></thead><tbody>${rows}</tbody></table><h2>Totaux facture : ${saleCurrencyAmounts(sale,'total_amount')}</h2><p><strong>Montants payés :</strong> ${saleCurrencyAmounts(sale,'amount_paid')} · <strong>Restes à payer :</strong> ${due}</p><p><strong>Statut :</strong> ${escapeHtml(sale.status)}</p>`;
+    const due=saleCurrencyDueBalances(sale).map(balance=>moneyCurrencyLabel(balance.due,balance.monais)).join(' · ');
+    const content=`<p><strong>Facture :</strong> ${escapeHtml(sale.invoice_no)} · <strong>Date :</strong> ${escapeHtml(dateLabel(sale.sale_date))}</p><p><strong>Client :</strong> ${escapeHtml(sale.client_name||'Client comptoir')} · <strong>Succursale :</strong> ${escapeHtml(sale.branch_name)} · <strong>Vendeur :</strong> ${escapeHtml(sale.seller_name||sale.cashier||'—')}</p><table class="report-table"><thead><tr><th>Référence</th><th>Produit</th><th>Quantité</th><th>Prix de vente</th><th>Réduction</th><th>Total ligne</th></tr></thead><tbody>${rows}</tbody></table><h2>Totaux facture : ${saleCurrencyAmounts(sale,'total_amount')}</h2><p><strong>Montants payés :</strong> ${saleCurrencyAmounts(sale,'amount_paid')} · <strong>Restes à payer :</strong> ${due}</p><p><strong>Statut :</strong> ${escapeHtml(saleStatusLabel(sale.status))}</p>`;
     printReportInWindow(printWindow,`Facture ${sale.invoice_no}`,content);
   }catch(error){printWindow.close();showToast(`Impression de la facture impossible : ${error.message}`);}
 }
@@ -3583,11 +3631,13 @@ async function printSalePaymentReceipt(button){
     const data=await fetchReportData('sale-receipt',{vente_id:saleId});
     const sale=data.sale;
     const currency=button.dataset.salePaymentCurrency||sale.monais||'';
-    const currencyBalances=Array.isArray(sale.currency_totals)&&sale.currency_totals.length?sale.currency_totals:[sale];
+    const currencyBalances=saleCurrencyBalances(sale);
+    const paidByCurrency=new Map(salePaidCurrencyBalances(sale).map(balance=>[String(balance.monais||'').trim().toUpperCase(),Number(balance.amount_paid||0)]));
     const balanceRows=currencyBalances.map(balance=>{
       const balanceCurrency=balance.monais||'';
       const currencyTotal=Number(balance.total_amount||0);
-      const currencyPaid=Number(balance.amount_paid||0);
+      const normalizedCurrency=String(balanceCurrency).trim().toUpperCase();
+      const currencyPaid=paidByCurrency.has(normalizedCurrency)?paidByCurrency.get(normalizedCurrency):Number(balance.amount_paid||0);
       const due=Math.max(0,currencyTotal-currencyPaid);
       return `<tr><td>${escapeHtml(balanceCurrency)}</td><td>${moneyCurrencyLabel(currencyTotal,balanceCurrency)}</td><td>${moneyCurrencyLabel(currencyPaid,balanceCurrency)}</td><td>${moneyCurrencyLabel(due,balanceCurrency)}</td></tr>`;
     }).join('');
@@ -3613,9 +3663,8 @@ async function printSaleReceipt(button){
     const payments=data.payments||[];
     const paymentSummary=payments.length?`<h2>Règlements reçus</h2><table class="report-table"><thead><tr><th>Date</th><th>Mode</th><th>Référence</th><th>Montant</th></tr></thead><tbody>${payments.map(payment=>{const invoiceCurrency=payment.monais_facture||payment.monais;const converted=invoiceCurrency!==payment.monais;const rate=Number(payment.exchange_rate||1);const inverse=rate>0?1/rate:0;return `<tr><td>${escapeHtml(dateLabel(payment.payment_date))}</td><td>${escapeHtml(payment.payment_type==='REFUND'?`Remboursement — ${payment.payment_mode}`:payment.payment_mode)}</td><td>${escapeHtml(payment.reference||'—')}</td><td>${moneyCurrencyLabel(payment.amount,payment.monais)}${converted?`<br><small>Imputé : ${moneyCurrencyLabel(payment.amount_applied??payment.amount,invoiceCurrency)} · Taux : 1 ${escapeHtml(payment.monais)} = ${rate.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(invoiceCurrency)} · Inverse : ${inverse.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(payment.monais)} = 1 ${escapeHtml(invoiceCurrency)}</small>`:''}</td></tr>`;}).join('')}</tbody></table>`:'';
     const rows=data.details.map(row=>{const unit=row.unit_symbol||row.unit_name||'';return `<tr><td>${escapeHtml(row.sku)}</td><td>${escapeHtml(row.product_name)}</td><td>${Number(row.quantity)} ${escapeHtml(unit)}</td><td>${moneyCurrencyLabel(row.unit_price,row.monais)}</td><td>${Number(row.discount_percent)>0?moneyCurrencyLabel(row.discount_amount,row.monais):'—'}</td><td>${moneyCurrencyLabel(row.subtotal,row.monais)}</td></tr>`;}).join('');
-    const balances=sale.currency_totals||[];
-    const due=balances.map(balance=>moneyCurrencyLabel(Math.max(0,Number(balance.total_amount)-Number(balance.amount_paid)),balance.monais)).join(' · ')||moneyCurrencyLabel(Math.max(0,Number(sale.total_amount)-Number(sale.amount_paid)),sale.monais);
-    const content=`<p><strong>Facture :</strong> ${escapeHtml(sale.invoice_no)} · <strong>Date :</strong> ${escapeHtml(dateLabel(sale.sale_date))}</p><p><strong>Client :</strong> ${escapeHtml(sale.client_name||'Client comptoir')} · <strong>Succursale :</strong> ${escapeHtml(sale.branch_name)} · <strong>Caissier :</strong> ${escapeHtml(sale.cashier||'—')}</p><table class="report-table"><thead><tr><th>Référence</th><th>Produit</th><th>Quantité</th><th>Prix unitaire</th><th>Réduction</th><th>Total ligne</th></tr></thead><tbody>${rows}</tbody></table><h2>Totaux facture : ${saleCurrencyAmounts(sale,'total_amount')}</h2><p><strong>Montants payés :</strong> ${saleCurrencyAmounts(sale,'amount_paid')} · <strong>Restes à payer :</strong> ${due}</p><p><strong>Statut :</strong> ${escapeHtml(sale.status)}</p>${paymentSummary}`;
+    const due=saleCurrencyDueBalances(sale).map(balance=>moneyCurrencyLabel(balance.due,balance.monais)).join(' · ');
+    const content=`<p><strong>Facture :</strong> ${escapeHtml(sale.invoice_no)} · <strong>Date :</strong> ${escapeHtml(dateLabel(sale.sale_date))}</p><p><strong>Client :</strong> ${escapeHtml(sale.client_name||'Client comptoir')} · <strong>Succursale :</strong> ${escapeHtml(sale.branch_name)} · <strong>Vendeur :</strong> ${escapeHtml(sale.seller_name||sale.cashier||'—')}</p><table class="report-table"><thead><tr><th>Référence</th><th>Produit</th><th>Quantité</th><th>Prix unitaire</th><th>Réduction</th><th>Total ligne</th></tr></thead><tbody>${rows}</tbody></table><h2>Totaux facture : ${saleCurrencyAmounts(sale,'total_amount')}</h2><p><strong>Montants payés :</strong> ${saleCurrencyAmounts(sale,'amount_paid')} · <strong>Restes à payer :</strong> ${due}</p><p><strong>Statut :</strong> ${escapeHtml(saleStatusLabel(sale.status))}</p>${paymentSummary}`;
     printReportInWindow(printWindow,`Reçu de vente — ${sale.invoice_no}`,content,'Les marchandises vendues ne peuvent pas être reprises.');
   }catch(error){printWindow.close();showToast(`Impression du reçu impossible : ${error.message}`);}
 }

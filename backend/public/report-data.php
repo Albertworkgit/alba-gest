@@ -47,10 +47,30 @@ try {
         foreach ($query->get_result()->fetch_all(MYSQLI_ASSOC) as $total) {
             $totalsBySale[(int) $total['vente_id']][] = $total;
         }
+        $payments = $db->prepare('SELECT vente_id,COALESCE(NULLIF(monais_facture,\'\'),monais) AS monais,SUM(CASE WHEN payment_type=\'REFUND\' THEN -COALESCE(amount_applied,amount) ELSE COALESCE(amount_applied,amount) END) AS amount_paid FROM paiements_ventes WHERE entreprise_id=? AND vente_id IN (' . $idList . ') GROUP BY vente_id,COALESCE(NULLIF(monais_facture,\'\'),monais) ORDER BY vente_id,monais');
+        $payments->bind_param('i', $enterpriseId);
+        $payments->execute();
+        $paymentsBySale = [];
+        foreach ($payments->get_result()->fetch_all(MYSQLI_ASSOC) as $payment) {
+            $paymentsBySale[(int) $payment['vente_id']][] = $payment;
+        }
         foreach ($sales as &$sale) {
             $sale['currency_totals'] = $totalsBySale[(int) $sale['vente_id']] ?? [];
+            $sale['paid_currency_totals'] = $paymentsBySale[(int) $sale['vente_id']] ?? [];
             if ($sale['currency_totals'] === [] && !empty($sale['monais'])) {
                 $sale['currency_totals'][] = ['monais' => $sale['monais'], 'total_amount' => $sale['total_amount'], 'amount_paid' => $sale['amount_paid']];
+            }
+            if ($sale['paid_currency_totals'] === []) {
+                $sale['paid_currency_totals'] = array_values(array_filter(
+                    array_map(
+                        static fn (array $balance): array => ['monais' => $balance['monais'], 'amount_paid' => $balance['amount_paid']],
+                        $sale['currency_totals']
+                    ),
+                    static fn (array $balance): bool => (float) $balance['amount_paid'] > 0
+                ));
+                if ($sale['paid_currency_totals'] === [] && !empty($sale['monais']) && (float) $sale['amount_paid'] > 0) {
+                    $sale['paid_currency_totals'][] = ['monais' => $sale['monais'], 'amount_paid' => $sale['amount_paid']];
+                }
             }
         }
         unset($sale);
@@ -544,15 +564,19 @@ try {
     if ($action === 'sales-list') {
         Authorization::requirePermission($user,'voir_ventes');$page=max(1,(int)($_GET['page']??1));$perPage=min(100,max(1,(int)($_GET['per_page']??10)));$offset=($page-1)*$perPage;
         $where='v.entreprise_id=?'.($branchId!==null?' AND v.succursale_id=?':'');$count=$db->prepare('SELECT COUNT(*) AS total FROM ventes v WHERE '.$where);if($branchId===null)$count->bind_param('i',$enterpriseId);else$count->bind_param('ii',$enterpriseId,$branchId);$count->execute();$total=(int)($count->get_result()->fetch_assoc()['total']??0);
-        $sql='SELECT v.vente_id,v.invoice_no,v.sale_date,v.total_amount,v.monais,v.amount_paid,v.status,v.succursale_id,s.name AS branch_name,COALESCE(NULLIF(v.client_comptoir_name, \'\'),c.name) AS client_name,u.full_name AS cashier,0 AS item_count FROM ventes v JOIN succursales s ON s.succursale_id=v.succursale_id AND s.entreprise_id=v.entreprise_id LEFT JOIN clients c ON c.client_id=v.client_id AND c.entreprise_id=v.entreprise_id LEFT JOIN users u ON u.user_id=v.user_id AND u.entreprise_id=v.entreprise_id WHERE '.$where.' ORDER BY v.sale_date DESC,v.vente_id DESC LIMIT ? OFFSET ?';$query=$db->prepare($sql);if($branchId===null)$query->bind_param('iii',$enterpriseId,$perPage,$offset);else$query->bind_param('iiii',$enterpriseId,$branchId,$perPage,$offset);$query->execute();$salesRows=$query->get_result()->fetch_all(MYSQLI_ASSOC);
+        $sql='SELECT v.vente_id,v.invoice_no,v.sale_date,v.total_amount,v.monais,v.amount_paid,v.status,v.succursale_id,s.name AS branch_name,COALESCE(NULLIF(v.client_comptoir_name, \'\'),c.name) AS client_name,u.full_name AS cashier,u.full_name AS seller_name,0 AS item_count FROM ventes v JOIN succursales s ON s.succursale_id=v.succursale_id AND s.entreprise_id=v.entreprise_id LEFT JOIN clients c ON c.client_id=v.client_id AND c.entreprise_id=v.entreprise_id LEFT JOIN users u ON u.user_id=v.user_id AND u.entreprise_id=v.entreprise_id WHERE '.$where.' ORDER BY v.sale_date DESC,v.vente_id DESC LIMIT ? OFFSET ?';$query=$db->prepare($sql);if($branchId===null)$query->bind_param('iii',$enterpriseId,$perPage,$offset);else$query->bind_param('iiii',$enterpriseId,$branchId,$perPage,$offset);$query->execute();$salesRows=$query->get_result()->fetch_all(MYSQLI_ASSOC);
         if ($salesRows !== []) {
             $saleIds = implode(',', array_map(static fn (array $row): int => (int) $row['vente_id'], $salesRows));
-            $detailsQuery = $db->prepare('SELECT vente_id,SUM(quantity) AS item_count FROM vente_details WHERE entreprise_id=? AND vente_id IN (' . $saleIds . ') GROUP BY vente_id');
+            $detailsQuery = $db->prepare('SELECT d.vente_id,SUM(d.quantity) AS item_count,GROUP_CONCAT(DISTINCT p.name ORDER BY p.name SEPARATOR \', \') AS product_names FROM vente_details d JOIN produits p ON p.produit_id=d.produit_id AND p.entreprise_id=d.entreprise_id WHERE d.entreprise_id=? AND d.vente_id IN (' . $saleIds . ') GROUP BY d.vente_id');
             $detailsQuery->bind_param('i', $enterpriseId);
             $detailsQuery->execute();
             $itemCounts = [];
-            foreach ($detailsQuery->get_result()->fetch_all(MYSQLI_ASSOC) as $detail) $itemCounts[(int) $detail['vente_id']] = (int) $detail['item_count'];
-            foreach ($salesRows as &$saleRow) $saleRow['item_count'] = $itemCounts[(int) $saleRow['vente_id']] ?? 0;
+            foreach ($detailsQuery->get_result()->fetch_all(MYSQLI_ASSOC) as $detail) $itemCounts[(int) $detail['vente_id']] = $detail;
+            foreach ($salesRows as &$saleRow) {
+                $detail = $itemCounts[(int) $saleRow['vente_id']] ?? [];
+                $saleRow['item_count'] = (int) ($detail['item_count'] ?? 0);
+                $saleRow['product_names'] = (string) ($detail['product_names'] ?? '');
+            }
             unset($saleRow);
         }
         $salesRows = $attachCurrencyTotals($salesRows);
