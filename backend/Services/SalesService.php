@@ -54,6 +54,29 @@ final class SalesService
         }catch(\Throwable $e){$this->db->rollback();throw $e;}
     }
 
+    public function createServiceSale(array $actor, array $data): int
+    {
+        $enterprise=(int)$actor['entreprise_id']; $user=(int)$actor['id']; $branch=(int)($data['succursale_id']??$actor['succursale_id']??0);
+        $clientId=isset($data['client_id'])&&$data['client_id']!==''?(int)$data['client_id']:null;
+        $clientName=$clientId===null?trim((string)($data['client_comptoir_name']??'')):'';
+        $invoice=trim((string)($data['invoice_no']??'')); $lines=$data['items']??[];
+        if($branch<1||$invoice===''||!is_array($lines)||!count($lines)) throw new RuntimeException('Succursale, facture et au moins un service sont requis.');
+        if($clientId===null&&$clientName==='') throw new RuntimeException('Le nom du client est obligatoire.');
+        if(mb_strlen($clientName,'UTF-8')>100) throw new RuntimeException('Le nom du client ne peut pas dépasser 100 caractères.');
+        $this->db->begin_transaction();
+        try {
+            $q=$this->db->prepare('SELECT vente_id FROM ventes WHERE entreprise_id=? AND invoice_no=? LIMIT 1'); $q->bind_param('is',$enterprise,$invoice); $q->execute();
+            if($q->get_result()->fetch_assoc()) throw new RuntimeException('Cette référence de facture existe déjà.');
+            if($clientId!==null){$q=$this->db->prepare('SELECT client_id FROM clients WHERE client_id=? AND entreprise_id=?');$q->bind_param('ii',$clientId,$enterprise);$q->execute();if(!$q->get_result()->fetch_assoc())throw new RuntimeException('Client inconnu dans votre entreprise.');}
+            $prepared=[];$totals=[];
+            foreach($lines as $line){$name=trim((string)($line['service_name']??''));$qty=(float)($line['quantity']??0);$price=(float)($line['unit_price']??0);$code=trim((string)($line['monais']??''));if($name===''||mb_strlen($name,'UTF-8')>150||!is_finite($qty)||$qty<=0||!is_finite($price)||$price<=0||$code==='')throw new RuntimeException('Vérifiez le service, la quantité, le prix et la monnaie.');$discount=(float)($line['discount_amount']??0);$gross=round($qty*$price,2);if(!is_finite($discount)||$discount<0||$discount>$gross)throw new RuntimeException('La remise doit être positive et ne peut pas dépasser le montant du service.');$discountPercent=$gross>0?round($discount*100/$gross,2):0.0;$subtotal=round($gross-$discount,2);$currencyCheck=$this->db->prepare('SELECT type_monais FROM tb_monais WHERE type_monais=? LIMIT 1');$currencyCheck->bind_param('s',$code);$currencyCheck->execute();if(!$currencyCheck->get_result()->fetch_assoc())throw new RuntimeException('Monnaie de service inconnue ou inactive.');$totals[$code]=round(($totals[$code]??0)+$subtotal,2);$prepared[]=[$name,$qty,$price,$discountPercent,$discount,$code,$subtotal];}
+            $single=count($totals)===1;$currency=$single?(string)array_key_first($totals):null;$total=$single?(float)$totals[$currency]:0.0;$paid=0.0;$status='PENDING';$cashId=null;
+            $q=$this->db->prepare('INSERT INTO ventes (entreprise_id,succursale_id,caisse_id,user_id,client_id,client_comptoir_name,invoice_no,total_amount,monais,amount_paid,status) VALUES (?,?,?,?,?,?,?,?,?,?,?)');$q->bind_param('iiiiissdsds',$enterprise,$branch,$cashId,$user,$clientId,$clientName,$invoice,$total,$currency,$paid,$status);$q->execute();$saleId=(int)$this->db->insert_id;
+            $q=$this->db->prepare('INSERT INTO vente_totaux_monnaies (entreprise_id,vente_id,monais,total_amount,amount_paid) VALUES (?,?,?,?,0)');foreach($totals as $code=>$amount){$q->bind_param('iisd',$enterprise,$saleId,$code,$amount);$q->execute();}
+            $q=$this->db->prepare('INSERT INTO vente_service_details (entreprise_id,vente_id,service_name,quantity,unit_price,discount_percent,discount_amount,monais,subtotal) VALUES (?,?,?,?,?,?,?,?,?)');foreach($prepared as [$name,$qty,$price,$discountPercent,$discount,$code,$subtotal]){$q->bind_param('iisddddsd',$enterprise,$saleId,$name,$qty,$price,$discountPercent,$discount,$code,$subtotal);$q->execute();}
+            $this->db->commit();return $saleId;
+        } catch(\Throwable $e) { $this->db->rollback(); throw $e; }
+    }
     public function collectPayment(array $actor, int $saleId, string $currency, float $amount, string $receivedCurrency, int $paymentModeId, ?int $cashId, string $reference = '', ?int $bankId = null): bool
     {
         $currency=trim($currency);$receivedCurrency=trim($receivedCurrency);

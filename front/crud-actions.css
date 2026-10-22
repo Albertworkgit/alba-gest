@@ -241,3 +241,41 @@ button[data-currency-delete]:focus-visible,
 button[data-cash-delete]:focus-visible,
 button[data-sale-receipt]:focus-visible,
 button[data-purchase-voucher]:focus-visible { outline: 2px solid #147c70; outline-offset: 2px; }
+
+/* Service sale workflow */
+.sales-panel-heading { align-items: center; }
+.service-sale-button { display:inline-flex; align-items:center; gap:8px; padding:10px 15px; border:1px solid #c8e3d9; border-radius:8px; background:linear-gradient(135deg,#f1faf5,#e2f2eb); color:#12695d; font-size:12px; font-weight:700; box-shadow:0 3px 9px #164c3c12; transition:transform .16s ease,box-shadow .16s ease,background .16s ease; }
+
+.service-sale-button:hover { transform:translateY(-1px); background:#e5f4ec; box-shadow:0 6px 14px #164c3c1a; }
+.service-sale-button:focus-visible { outline:3px solid #83b9a8; outline-offset:2px; }
+.service-sale-dialog { width:min(920px,100%); }
+.service-sale-dialog > p:first-of-type { margin:7px 0 20px; color:#73807b; }
+.service-sale-dialog .sale-lines-wrap { border-color:#dce9e2; background:linear-gradient(180deg,#fbfdfb,#fff); }
+.service-sale-dialog .sale-line { grid-template-columns:minmax(145px,1.6fr) minmax(90px,.8fr) minmax(110px,1fr) minmax(100px,.9fr) minmax(110px,.9fr) minmax(120px,1fr) 36px; gap:9px; }
+.service-sale-dialog .sale-line label { color:#5f7169; font-weight:600; }
+.service-sale-dialog .sale-line input,.service-sale-dialog .sale-line select { min-height:39px; border-color:#dbe5df; box-shadow:0 1px 2px #183b3508; }
+.service-sale-dialog .sale-line input:focus,.service-sale-dialog .sale-line select:focus { outline:2px solid #9dcdbb; border-color:#65a892; }
+.service-sale-dialog .sale-line > strong { align-self:center; padding:10px 5px 5px; color:#12695d; font-size:12px; }
+.service-sale-dialog .sale-lines-heading button { border:1px solid #c8e3d9; background:#edf8f2; transition:background .15s ease; }
+.service-sale-dialog .sale-lines-heading button:hover { background:#dcefe8; }
+.service-sale-dialog .sale-line [data-service-remove] { width:36px; height:36px; padding:0; border:1px solid #f1d8d2; background:#fff4f1; color:#bd5e4c; font-size:19px; }
+.service-sale-dialog .sale-line [data-service-remove]:hover { background:#fde8e4; }
+.service-sale-dialog .sale-total { padding:14px 4px 0; border-top:1px solid #e7eee9; }
+.service-sale-dialog .modal-submit { min-width:185px; }
+@media (max-width:760px) { .service-sale-dialog .sale-line { grid-template-columns:1fr 1fr; padding:13px 0; } .service-sale-dialog .sale-line label:first-child { grid-column:1/-1; } .service-sale-dialog .sale-line > strong { padding:7px; } }.service-sale-hero { display:flex; justify-content:space-between; align-items:center; gap:20px; margin:-2px -2px 18px; padding:20px 22px; border:1px solid #dcece3; border-radius:12px; background:radial-gradient(circle at 88% 12%,#fff 0,#f2f9f5 32%,#e7f3ec 100%); }
+.service-sale-hero h2 { margin:5px 0 4px; color:#1d3932; font:600 22px 'Space Grotesk',sans-serif; letter-spacing:-.5px; }
+.service-sale-hero p { margin:0; color:#6d7e76; font-size:12px; }
+.service-sale-eyebrow { color:#168071; font-size:9px; font-weight:800; letter-spacing:1.25px; }
+
+.service-sale-steps { display:flex; align-items:center; gap:11px; margin:0 2px 20px; color:#65776f; font-size:10px; font-weight:700; }
+.service-sale-steps span { display:flex; align-items:center; gap:6px; white-space:nowrap; }
+.service-sale-steps b { display:grid; width:20px; height:20px; place-items:center; border-radius:50%; background:#dcefe8; color:#12695d; font-size:10px; }
+.service-sale-steps i { width:24px; height:1px; background:#dce5df; }
+.service-sale-form > label:not(.full) { min-width:0; }
+.service-sale-form > label small { color:#83918b; font-size:10px; font-weight:400; }
+.service-sale-form > label input,.service-sale-form > label select { min-height:40px; }
+.service-sale-form > [data-service-client] { max-width:100%; }
+.service-sale-total-label { margin:0 0 -14px; color:#76877f; font-size:10px; font-weight:800; letter-spacing:.7px; text-align:right; text-transform:uppercase; }
+.service-sale-total { margin-top:0; padding:13px 15px!important; border:1px solid #dcece3; border-radius:9px; background:#f3faf6; }
+.service-sale-dialog .entity-modal-actions { padding-top:8px; }
+@media (max-width:600px) { .service-sale-hero { padding:16px; } .service-sale-steps { gap:6px; font-size:9px; } .service-sale-steps i { width:12px; } }

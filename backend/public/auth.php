@@ -537,6 +537,11 @@ try {
         $requested=isset($body['succursale_id'])?(int)$body['succursale_id']:null; $allowed=Authorization::branchId($actor,$requested); if($allowed!==null)$body['succursale_id']=$allowed;
         $id=(new SalesService(Database::connection()))->create($actor,$body); JsonResponse::send(['success'=>true,'data'=>['vente_id'=>$id]],201);
     }
+    if ($action === 'create-service-sale' && $method === 'POST') {
+        $actor=AuthGuard::requireAuthenticated();if(!$actor||$actor['type']!=='user')JsonResponse::error('Action réservée à un utilisateur d’entreprise.',403);
+        Authorization::requirePermission($actor,'creer_ventes');$body=json_decode((string)file_get_contents('php://input'),true)?:[];$requested=isset($body['succursale_id'])?(int)$body['succursale_id']:null;$allowed=Authorization::branchId($actor,$requested);if($allowed!==null)$body['succursale_id']=$allowed;
+        $id=(new SalesService(Database::connection()))->createServiceSale($actor,$body);JsonResponse::send(['success'=>true,'data'=>['vente_id'=>$id]],201);
+    }
     if ($action === 'create-sale-client' && $method === 'POST') {
         $actor=AuthGuard::requireAuthenticated();if(!$actor||$actor['type']!=='user')JsonResponse::error('Action réservée à un utilisateur d’entreprise.',403);
         Authorization::requireAnyPermission($actor,['creer_ventes','gerer_clients'],'Accès refusé. Autorisation requise : création de ventes ou gestion des clients.');$body=json_decode((string)file_get_contents('php://input'),true)?:[];
