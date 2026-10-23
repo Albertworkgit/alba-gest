@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(500) NOT NULL,
     full_name VARCHAR(100),
     is_active TINYINT(1) NOT NULL DEFAULT 1,
+    preferred_language VARCHAR(5) NOT NULL DEFAULT 'fr',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_username (entreprise_id, username),
     CONSTRAINT fk_user_entreprise FOREIGN KEY (entreprise_id) REFERENCES entreprises(entreprise_id) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -296,6 +297,7 @@ CREATE TABLE IF NOT EXISTS super_admins (
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(100) NOT NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
+    preferred_language VARCHAR(5) NOT NULL DEFAULT 'fr',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 

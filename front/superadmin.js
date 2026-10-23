@@ -232,9 +232,31 @@ async function loadCurrencies() {
 async function loadAdminProfile() {
   const result = await requestJson('../backend/public/auth.php?action=me');
   currentSuperAdminId = Number(result.data.id);
+  const localLanguage = localStorage.getItem('westock-language');
+  window.setInterfaceLanguage?.(localLanguage || result.data.preferred_language || 'fr');
+  if (localLanguage && localLanguage !== result.data.preferred_language) {
+    requestJson('../backend/public/auth.php?action=preferred-language', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({language: localLanguage}),
+    }).catch(error => console.error('Enregistrement différé de la langue impossible.', error));
+  }
   document.getElementById('admin-profile-name').value = result.data.full_name || '';
   document.getElementById('admin-profile-email').value = result.data.email || '';
 }
+
+window.addEventListener('interface-language-change', async event => {
+  try {
+    await requestJson('../backend/public/auth.php?action=preferred-language', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({language: event.detail.language}),
+    });
+    notify('Langue enregistrée dans votre compte.');
+  } catch (error) {
+    notify(error.message);
+  }
+});
 
 // Modifie le nom et l'adresse email du super administrateur connecté.
 document.getElementById('admin-profile-form').addEventListener('submit', async event => {

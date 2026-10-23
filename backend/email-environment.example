@@ -1,0 +1,13 @@
+Configure these variables in Apache, PHP-FPM, or the hosting environment:
+
+ALBA_STOCK_NOTIFICATION_EMAIL=notifications@example.com
+ALBA_STOCK_SMTP_HOST=smtp.example.com
+ALBA_STOCK_SMTP_PORT=587
+ALBA_STOCK_SMTP_ENCRYPTION=tls
+ALBA_STOCK_SMTP_USERNAME=notifications@example.com
+ALBA_STOCK_SMTP_PASSWORD=replace-with-a-secret
+ALBA_STOCK_SMTP_FROM=notifications@example.com
+ALBA_STOCK_SMTP_FROM_NAME=ALBA-STOCK
+
+Do not commit real credentials. The notification recipient is deliberately
+configured separately from super-administrator account addresses.

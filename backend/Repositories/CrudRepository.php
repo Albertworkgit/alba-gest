@@ -34,9 +34,7 @@ final class CrudRepository
     {
         $sql = "SELECT * FROM `{$this->table}` WHERE entreprise_id = ?";
         if ($branchId !== null) {
-            $sql .= $this->table === 'fournisseurs'
-                ? ' AND (succursale_id = ? OR succursale_id IS NULL)'
-                : ' AND succursale_id = ?';
+            $sql .= ' AND succursale_id = ?';
         }
         $sql .= " ORDER BY `{$this->primaryKey}` DESC";
         $statement = $this->db->prepare($sql);
@@ -51,9 +49,7 @@ final class CrudRepository
     public function paginate(int $enterpriseId, ?int $branchId, int $page, int $perPage): array
     {
         $where = ' WHERE entreprise_id = ?';
-        if ($branchId !== null) $where .= $this->table === 'fournisseurs'
-            ? ' AND (succursale_id = ? OR succursale_id IS NULL)'
-            : ' AND succursale_id = ?';
+        if ($branchId !== null) $where .= ' AND succursale_id = ?';
         $count = $this->db->prepare("SELECT COUNT(*) AS total FROM `{$this->table}`{$where}");
         if ($branchId === null) $count->bind_param('i', $enterpriseId);
         else $count->bind_param('ii', $enterpriseId, $branchId);

@@ -29,7 +29,14 @@ function canSelectCompanyBranches(user = sessionUser) {
   if (!user.succursale_id || user.is_company_admin) return true;
   let permissions = user.permissions || [];
   if (typeof permissions === 'string') { try { permissions = JSON.parse(permissions); } catch { permissions = []; } }
-  return permissions.includes('toutes_succursales');
+  return Boolean(user.is_main_branch && (permissions.includes('*') || permissions.includes('toutes_succursales')));
+}
+function hideFixedBranchChoice(select) {
+  if (canSelectCompanyBranches() || !sessionUser?.succursale_id) return;
+  select.value = String(sessionUser.succursale_id);
+  const label = select.closest('label');
+  if (label) label.hidden = true;
+  select.required = false;
 }
 const container = document.getElementById('view-container');
 const title = document.getElementById('page-title');
@@ -142,11 +149,17 @@ function clientRowMarkup(row) {
   const actions = hasAccess('gerer_clients') ? `<button type="button" data-client-edit="${Number(row.client_id)}" aria-label="Modifier ${escapeHtml(row.name)}">Modifier</button> <button type="button" data-client-delete="${Number(row.client_id)}" aria-label="Supprimer ${escapeHtml(row.name)}">Supprimer</button>` : '\u2014';
   return `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.email || '\u2014')}</td><td>${escapeHtml(row.phone || '\u2014')}</td><td>${escapeHtml(row.address || '\u2014')}</td><td>${actions}</td></tr>`;
 }
+function branchRowMarkup(row) {
+  const actions = canSelectCompanyBranches()
+    ? `<button class="text-button" data-branch-edit="${Number(row.succursale_id)}">Modifier</button> <button class="text-button" data-branch-delete="${Number(row.succursale_id)}">Supprimer</button>`
+    : '—';
+  return `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.code)}</td><td>${Number(row.est_sucursal_mere) ? '<span class="status success">Principale</span>' : '—'}</td><td>${escapeHtml(row.address || '—')}</td><td>${escapeHtml(row.phone || '—')}</td><td>${actions}</td></tr>`;
+}
 function renderView(viewName) {
   const view = views[viewName] || views.dashboard;
   currentViewName = viewName;
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === viewName));
-  kicker.textContent = view.kicker; title.innerHTML = view.title; description.textContent = view.description; breadcrumb.textContent = view.label; action.innerHTML = view.action; action.hidden = !view.action; action.classList.toggle('user-create-action', viewName === 'users');
+  kicker.textContent = view.kicker; title.innerHTML = view.title; description.textContent = view.description; breadcrumb.textContent = view.label; action.innerHTML = view.action; action.hidden = !view.action || (viewName === 'branches' && !canSelectCompanyBranches()); action.classList.toggle('user-create-action', viewName === 'users');
   container.innerHTML = view.html;
   const serviceSaleButton=container.querySelector('[data-new-service-sale]');if(serviceSaleButton)serviceSaleButton.hidden=!hasAccess('creer_ventes');
   if (viewName === 'cash') {
@@ -231,13 +244,15 @@ function renderView(viewName) {
   if (viewName === 'sales') { loadSalesRows(); loadSalesTopProducts(); }
   if (viewName === 'cash') loadCashRows();
   if (viewName === 'accounting') loadAccountingData();
-  if (viewName === 'branches') loadSimpleRows('succursales', 'branch-rows', 6, row => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.code)}</td><td>${Number(row.est_sucursal_mere) ? '<span class="status success">Principale</span>' : '—'}</td><td>${escapeHtml(row.address || '—')}</td><td>${escapeHtml(row.phone || '—')}</td><td><button class="text-button" data-branch-edit="${Number(row.succursale_id)}">Modifier</button> <button class="text-button" data-branch-delete="${Number(row.succursale_id)}">Supprimer</button></td></tr>`, 'Aucune succursale enregistrée.');
+  if (viewName === 'branches') loadSimpleRows('succursales', 'branch-rows', 6, branchRowMarkup, 'Aucune succursale enregistrée.');
   if (viewName === 'clients') loadSimpleRows('clients', 'client-rows', 5, clientRowMarkup, 'Aucun client enregistr\u00e9.');
   if (viewName === 'procurement') { loadPurchaseRows(); loadProcurementTrends(); }
   if (viewName === 'stock' && hasAccess('voir_approvisionnements')) loadProcurementTrends();
   if (viewName === 'branch-dashboard') { loadBranchDashboard(); if (hasAccess('voir_stock')) loadExpiringStock(); }
   if (viewName === 'stock' && hasAccess('voir_stock')) loadExpiringStock();
   applyViewAccess(viewName, sessionUser);
+  if (viewName === 'branches' && !canSelectCompanyBranches()) action.hidden = true;
+  if (viewName === 'users' && !canSelectCompanyBranches()) container.querySelector('[data-create-role]')?.setAttribute('hidden', '');
   renderModuleNavigation();
   window.scrollTo({top: 0, behavior: 'smooth'});
 }
@@ -394,7 +409,7 @@ function currentReportBranch() {
 }
 function isCompanyWideReport() {
   const stockBranch = currentViewName === 'stock' ? document.getElementById('stock-branch')?.value : '';
-  return !activeBranchId && !stockBranch && !(sessionUser?.succursale_id && !sessionUser?.is_company_admin);
+  return !activeBranchId && !stockBranch && canSelectCompanyBranches();
 }
 function setBranchColumnVisibility(root, visible) {
   root.querySelectorAll('table').forEach(table => {
@@ -677,8 +692,8 @@ function reportDocument(title, content, note = '', orientation = 'portrait') {
   const filters = reportFilterValues();
   const filterSummary = [filters.from && `Du ${formatReportDate(filters.from)}`, filters.to && `au ${formatReportDate(filters.to)}`, filters.search && `Recherche : ${filters.search}`].filter(Boolean).join(' · ');
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · ${enterprise}</title><style>
-    @page{size:${orientation === 'landscape' ? 'A4 landscape' : 'A4'};margin:${orientation === 'landscape' ? '8mm' : '12mm'}}*{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#1d2926;margin:0}header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #147c70;padding-bottom:12px;margin-bottom:18px}h1{font-size:21px;color:#126b5e;margin:0 0 6px}h2{font-size:15px;margin:15px 0 8px}p{margin:4px 0;color:#53635d}.report-meta{text-align:right;font-size:10px}.report-table,.data-table{width:100%;border-collapse:collapse;margin:12px 0 18px}.report-table th,.report-table td,.data-table th,.data-table td{border:1px solid #cfd9d3;padding:7px;text-align:left;font-size:10px}.report-table th,.data-table th{background:#eaf3ee;color:#254b42}.report-total-row td{font-weight:800;background:#eaf3ee;border-top:2px solid #147c70}.panel,.stat-card{border:0;box-shadow:none;padding:0;margin:10px 0}.dashboard-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.stat-card{border:1px solid #d9e3dd;padding:10px}.stat-label{display:block;font-size:10px;color:#53635d}.stat-value{font-size:17px;font-weight:bold;margin-top:5px}.status{border:1px solid #ccd8d1;padding:2px 5px}.empty-note{padding:10px;color:#53635d}.report-note{font-size:10px;color:#73807b;margin-top:12px}.report-company-footer{text-align:center;font-size:8px;color:#73807b;margin-top:20px}.signature-row{display:flex;justify-content:space-between;gap:30px;margin-top:38px}.signature-row div{width:42%;border-top:1px solid #697972;padding-top:6px;font-size:10px}.print-controls{position:sticky;top:0;background:#fff;padding:10px;text-align:right;border-bottom:1px solid #ddd}.print-controls button{border:0;border-radius:5px;padding:9px 14px;margin-left:6px;background:#147c70;color:#fff;font-weight:bold;cursor:pointer}@media print{.print-controls{display:none}}
-  </style></head><body><div class="print-controls"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button><button onclick="window.close()">Fermer</button></div><header><div><h1>${escapeHtml(title)}</h1>${companyDetails}<p>${branch}</p>${filterSummary ? `<p>Période et filtres : ${escapeHtml(filterSummary)}</p>` : ''}</div><div class="report-meta"><p>Date d’édition : ${new Date().toLocaleString('fr-FR')}</p><p>Format conseillé : A4 ${orientation === 'landscape' ? 'paysage' : 'portrait'} · modifiable dans les options de l’imprimante</p></div></header><main>${content}${note ? `<p class="report-note">${escapeHtml(note)}</p>` : ''}</main><footer class="report-company-footer">${enterprise}</footer></body></html>`;
+    @page{size:${orientation === 'landscape' ? 'A4 landscape' : 'A4'};margin:${orientation === 'landscape' ? '8mm' : '12mm'}}*{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#1d2926;margin:0}header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #147c70;padding-bottom:12px;margin-bottom:18px}h1{font-size:21px;color:#126b5e;margin:0 0 6px}h2{font-size:15px;margin:15px 0 8px}p{margin:4px 0;color:#53635d}.report-table,.data-table{width:100%;border-collapse:collapse;margin:12px 0 18px}.report-table th,.report-table td,.data-table th,.data-table td{border:1px solid #cfd9d3;padding:7px;text-align:left;font-size:10px}.report-table th,.data-table th{background:#eaf3ee;color:#254b42}.report-total-row td{font-weight:800;background:#eaf3ee;border-top:2px solid #147c70}.panel,.stat-card{border:0;box-shadow:none;padding:0;margin:10px 0}.dashboard-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.stat-card{border:1px solid #d9e3dd;padding:10px}.stat-label{display:block;font-size:10px;color:#53635d}.stat-value{font-size:17px;font-weight:bold;margin-top:5px}.status{border:1px solid #ccd8d1;padding:2px 5px}.empty-note{padding:10px;color:#53635d}.report-note{font-size:10px;color:#73807b;margin-top:12px}.report-company-footer{text-align:center;font-size:8px;color:#73807b;margin-top:20px}.signature-row{display:flex;justify-content:space-between;gap:30px;margin-top:38px}.signature-row div{width:42%;border-top:1px solid #697972;padding-top:6px;font-size:10px}.print-controls{position:sticky;top:0;background:#fff;padding:10px;text-align:right;border-bottom:1px solid #ddd}.print-controls button{border:0;border-radius:5px;padding:9px 14px;margin-left:6px;background:#147c70;color:#fff;font-weight:bold;cursor:pointer}@media print{.print-controls{display:none}}
+  </style></head><body><div class="print-controls"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button><button onclick="window.close()">Fermer</button></div><header><div><h1>${escapeHtml(title)}</h1><p class="report-company-name"><strong>${enterprise}</strong></p>${companyDetails}<p>${branch}</p>${filterSummary ? `<p>Période et filtres : ${escapeHtml(filterSummary)}</p>` : ''}</div></header><main>${content}${note ? `<p class="report-note">${escapeHtml(note)}</p>` : ''}</main><footer class="report-company-footer">${enterprise}</footer></body></html>`;
 }
 function reportPageOrientation(content) {
   const report = new DOMParser().parseFromString(content, 'text/html');
@@ -1054,7 +1069,7 @@ async function loadRoleList(page = 1) {
       let permissions = role.permissions;
       if (typeof permissions === 'string') { try { permissions = JSON.parse(permissions); } catch { permissions = []; } }
       const labels = Array.isArray(permissions) && permissions.includes('*') ? ['Accès complet'] : (Array.isArray(permissions) ? permissions.map(permission => permissionLabels[permission]).filter(Boolean) : []);
-      const actions = hasAccess('gerer_roles') ? `<div class="user-action-group"><button class="user-action-button user-action-edit" title="Modifier le rôle" aria-label="Modifier le rôle ${escapeHtml(role.role_name)}" data-role-edit="${Number(role.role_id)}"><span aria-hidden="true">✎</span> Modifier</button><button class="user-action-button user-action-delete" title="Supprimer le rôle" aria-label="Supprimer le rôle ${escapeHtml(role.role_name)}" data-role-delete="${Number(role.role_id)}"><span aria-hidden="true">×</span> Supprimer</button></div>` : '';
+      const actions = hasAccess('gerer_roles') && canSelectCompanyBranches() ? `<div class="user-action-group"><button class="user-action-button user-action-edit" title="Modifier le rôle" aria-label="Modifier le rôle ${escapeHtml(role.role_name)}" data-role-edit="${Number(role.role_id)}"><span aria-hidden="true">✎</span> Modifier</button><button class="user-action-button user-action-delete" title="Supprimer le rôle" aria-label="Supprimer le rôle ${escapeHtml(role.role_name)}" data-role-delete="${Number(role.role_id)}"><span aria-hidden="true">×</span> Supprimer</button></div>` : '';
       return `<div class="permission"><strong>${escapeHtml(role.role_name)}</strong><small>${escapeHtml(labels.join(' · ') || 'Aucun droit attribué')}</small>${actions}</div>`;
     }).join('') : '<p class="empty-note">Aucun rôle défini. Créez un rôle pour commencer.</p>';
     showPagination(list, 'roles', pageResult.pagination, loadRoleList);
@@ -1166,7 +1181,7 @@ async function openSaleForm() {
   const counterClientField=form.querySelector('[data-counter-client-field]'),counterClientInput=counterClientField.querySelector('input');const syncCounterClientField=()=>{const counterSale=!clientSelect.value;counterClientField.hidden=!counterSale;counterClientInput.required=counterSale;if(!counterSale)counterClientInput.value='';};syncCounterClientField();clientSelect.addEventListener('change',syncCounterClientField);
   if(hasAccess('creer_ventes')||hasAccess('gerer_clients')){const addClientButton=document.createElement('button');addClientButton.type='button';addClientButton.className='sale-add-client-button';addClientButton.textContent='+ Ajouter un client';clientSelect.closest('label').append(addClientButton);addClientButton.addEventListener('click',()=>openSaleClientForm(branchSelect.value,client=>{if(!catalog)catalog={clients:[]};catalog.clients.push(client);const option=document.createElement('option');option.value=String(client.client_id);option.textContent=client.name;clientSelect.append(option);clientSelect.value=option.value;}));}
   const branches=branchOptions.length?branchOptions:sessionUser?.succursale_id?[{succursale_id:sessionUser.succursale_id,name:sessionUser.branch_name||'Ma succursale'}]:[];
-  branchSelect.innerHTML=branches.map(b=>`<option value="${Number(b.succursale_id)}">${escapeHtml(b.name)}</option>`).join('');branchSelect.value=String(activeBranchId||sessionUser?.succursale_id||branches[0]?.succursale_id||'');
+  branchSelect.innerHTML=branches.map(b=>`<option value="${Number(b.succursale_id)}">${escapeHtml(b.name)}</option>`).join('');branchSelect.value=String(activeBranchId||sessionUser?.succursale_id||branches[0]?.succursale_id||'');hideFixedBranchChoice(branchSelect);
   form.elements.namedItem('invoice_no').value=`FAC-${new Date().toISOString().slice(0,10).replaceAll('-','')}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
   let catalog=null;
   const loadCatalog=async()=>{linesBox.querySelectorAll('[data-sale-product]').forEach(select=>{select.disabled=true;select.innerHTML='<option value="">Chargement…</option>';});try{catalog=await fetchReportData('sale-catalog',{succursale_id:branchSelect.value});clientSelect.innerHTML='<option value="">Client comptoir</option>'+catalog.clients.map(c=>`<option value="${Number(c.client_id)}">${escapeHtml(c.name)}</option>`).join('');syncCounterClientField();linesBox.querySelectorAll('[data-sale-line]').forEach(fillSaleProducts);linesBox.querySelectorAll('[data-sale-product]').forEach(select=>{select.disabled=false;if(select.options.length===1)select.options[0].textContent='Aucun produit disponible';});refreshSaleTotal();}catch(error){linesBox.querySelectorAll('[data-sale-product]').forEach(select=>{select.disabled=true;select.innerHTML=`<option value="">${escapeHtml(error.message||'Chargement impossible')}</option>`;});showToast(error.message);}};
@@ -1181,7 +1196,7 @@ async function openSaleForm() {
 async function openServiceSaleForm() {
   if(!hasAccess('creer_ventes'))return;
   const modal=document.createElement('div');modal.className='entity-modal';modal.innerHTML='<section class="entity-dialog sale-dialog service-sale-dialog"><header class="service-sale-hero"><div><span class="service-sale-eyebrow">FACTURATION DE PRESTATION</span><h2>Vendre un service</h2><p>Décrivez le service rendu et établissez sa facture.</p></div></header><div class="service-sale-steps"><span><b>1</b> Client</span><i></i><span><b>2</b> Prestation</span><i></i><span><b>3</b> Paiement en caisse</span></div><form class="entity-form service-sale-form"><label>Référence de facture<input name="invoice_no" required><small>Générée automatiquement, modifiable si besoin.</small></label><label>Succursale<select name="succursale_id" required></select></label><label class="full">Client (facultatif)<select name="client_id"><option value="">Client comptoir</option></select></label><label class="full" data-service-client>Nom du client<input name="client_comptoir_name" maxlength="100" required></label><div class="full sale-lines-wrap"><div class="sale-lines-heading"><strong>Prestations</strong><button type="button" data-service-add>+ Ajouter un service</button></div><div data-service-lines></div></div><p class="full service-sale-total-label">Montant de la facture</p><p class="full sale-total service-sale-total" data-service-total>Totaux par monnaie : —</p><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Enregistrer la facture</button></div></form></section>';document.body.appendChild(modal);
-  const form=modal.querySelector('form'),branch=form.elements.namedItem('succursale_id'),client=form.elements.namedItem('client_id'),clientName=form.elements.namedItem('client_comptoir_name'),lines=modal.querySelector('[data-service-lines]');const branches=branchOptions.length?branchOptions:sessionUser?.succursale_id?[{succursale_id:sessionUser.succursale_id,name:sessionUser.branch_name||'Ma succursale'}]:[];branch.innerHTML=branches.map(b=>`<option value="${Number(b.succursale_id)}">${escapeHtml(b.name)}</option>`).join('');branch.value=String(activeBranchId||sessionUser?.succursale_id||branches[0]?.succursale_id||'');form.elements.namedItem('invoice_no').value=`FAC-${new Date().toISOString().slice(0,10).replaceAll('-','')}-S${Math.random().toString(36).slice(2,5).toUpperCase()}`;
+  const form=modal.querySelector('form'),branch=form.elements.namedItem('succursale_id'),client=form.elements.namedItem('client_id'),clientName=form.elements.namedItem('client_comptoir_name'),lines=modal.querySelector('[data-service-lines]');const branches=branchOptions.length?branchOptions:sessionUser?.succursale_id?[{succursale_id:sessionUser.succursale_id,name:sessionUser.branch_name||'Ma succursale'}]:[];branch.innerHTML=branches.map(b=>`<option value="${Number(b.succursale_id)}">${escapeHtml(b.name)}</option>`).join('');branch.value=String(activeBranchId||sessionUser?.succursale_id||branches[0]?.succursale_id||'');hideFixedBranchChoice(branch);form.elements.namedItem('invoice_no').value=`FAC-${new Date().toISOString().slice(0,10).replaceAll('-','')}-S${Math.random().toString(36).slice(2,5).toUpperCase()}`;
   let catalog;try{catalog=await fetchReportData('sale-catalog',{succursale_id:branch.value});client.innerHTML='<option value="">Client comptoir</option>'+catalog.clients.map(c=>`<option value="${Number(c.client_id)}">${escapeHtml(c.name)}</option>`).join('');}catch(e){modal.remove();showToast(e.message);return;}
   const syncClient=()=>{const counter=!client.value;modal.querySelector('[data-service-client]').hidden=!counter;clientName.required=counter;if(!counter)clientName.value='';};client.addEventListener('change',syncClient);syncClient();const codes=[...new Set([...(catalog.currencies||[]),...catalog.cashboxes.map(c=>c.monais),...catalog.products.map(p=>p.monais)])];if(!codes.length){modal.remove();showToast('Aucune monnaie active n’est configurée pour cette entreprise.');return;}
   const recalc=()=>{const totals={};for(const row of lines.querySelectorAll('[data-service-line]')){const name=row.querySelector('[name=service_name]').value,qty=Number(row.querySelector('[name=quantity]').value||0),price=Number(row.querySelector('[name=unit_price]').value||0),discount=Number(row.querySelector('[name=discount_amount]').value||0),code=row.querySelector('[name=monais]').value;if(code)totals[code]=(totals[code]||0)+Math.max(0,qty*price-discount);row.querySelector('[data-service-subtotal]').textContent=moneyCurrencyLabel(Math.max(0,qty*price-discount),code);}modal.querySelector('[data-service-total]').textContent='Totaux par monnaie : '+(Object.entries(totals).map(([c,v])=>moneyCurrencyLabel(v,c)).join(' · ')||'—');};
@@ -1557,6 +1572,7 @@ async function openCashForm(reopenCash=null){
   modal.innerHTML=`<section class="entity-dialog"><h2>${reopenCash?'Ouvrir à nouveau la caisse':'Ouvrir une caisse'}</h2><form class="entity-form"><label class="full">Nom de la caisse<input name="name" required maxlength="100" placeholder="Ex. Caisse principale" value="${escapeHtml(reopenCash?.name||'')}"></label><label>Succursale<select name="succursale_id" required>${branchesHtml}</select></label><label>Monnaie de la caisse<select name="type_monais" required><option value="" ${reopenCash?'':'selected'} disabled>Choisir une monnaie</option>${currencies.map(currency=>`<option value="${escapeHtml(currency.type_monais)}" ${String(currency.type_monais)===String(reopenCash?.monais)?'selected':''}>${escapeHtml(currency.type_monais)} (${escapeHtml(currency.description||currency.type_monais)})</option>`).join('')}</select></label><label>Mode de paiement<select name="mode_paiement_id" required ${reopenCash?'disabled':''}>${modes.map(mode=>`<option value="${Number(mode.mode_paiement_id)}" data-mode-code="${escapeHtml(mode.code)}" ${Number(mode.mode_paiement_id)===Number(reopenCash?.mode_paiement_id)?'selected':''}>${escapeHtml(mode.name)}</option>`).join('')}</select></label><label class="full" data-open-cash-bank-label hidden>Banque<select name="banque_id"><option value="">Choisir une banque</option>${banks.map(bank=>`<option value="${Number(bank.banque_id)}" ${Number(bank.banque_id)===Number(reopenCash?.banque_id)?'selected':''}>${escapeHtml(bank.name)}${bank.account_number?` · ${escapeHtml(bank.account_number)}`:''}</option>`).join('')}</select><small data-open-cash-no-banks ${banks.length?'hidden':''}>Créez d’abord une banque dans le module Caisse.</small></label><label class="full">Solde d’ouverture<input name="solde_ouverture" type="number" min="0" step="0.01" value="0" required></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Ouvrir la caisse</button></div></form></section>`;
   document.body.appendChild(modal);
   const form=modal.querySelector('form'),modeSelect=form.elements.namedItem('mode_paiement_id'),bankLabel=modal.querySelector('[data-open-cash-bank-label]'),bankSelect=form.elements.namedItem('banque_id'),submit=form.querySelector('.modal-submit');
+  hideFixedBranchChoice(form.elements.namedItem('succursale_id'));
   const syncMode=()=>{const needsBank=modeSelect.selectedOptions[0]?.dataset.modeCode==='BANK';bankLabel.hidden=!needsBank;bankSelect.required=needsBank;bankSelect.disabled=!needsBank;modal.querySelector('[data-open-cash-no-banks]').hidden=banks.length>0;submit.disabled=needsBank&&!banks.length;};
   modeSelect.addEventListener('change',syncMode);syncMode();modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());
   form.addEventListener('submit',async event=>{event.preventDefault();const data=Object.fromEntries(new FormData(form));if(reopenCash)data.mode_paiement_id=Number(reopenCash.mode_paiement_id);data.banque_id=data.banque_id?Number(data.banque_id):null;try{const response=await fetch('../backend/public/auth.php?action=open-cash',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(data)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Ouverture impossible.');modal.remove();showToast('Caisse ouverte.');loadCashRows();}catch(error){showToast(error.message);}});
@@ -1895,7 +1911,7 @@ function cashMovementReceiptMarkup(movement, compact = false) {
   const debtConversion = movement.dette_montant_impute
     ? `<p><strong>Montant imputé à la dette :</strong> ${moneyCurrencyLabel(movement.dette_montant_impute, movement.dette_monais)} · <strong>Taux appliqué :</strong> ${Number(movement.dette_taux_change).toFixed(6)}</p>`
     : '';
-  return `<section class="${compact ? 'cash-receipt-card' : ''}"><h2>${isOut ? 'BON DE SORTIE DE CAISSE' : 'REÇU D’ENTRÉE EN CAISSE'}</h2><p><strong>Pièce n° :</strong> ${Number(movement.mouvement_id)}</p><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason || '—')}</p><h2>Montant ${isOut ? 'sorti' : 'reçu'} : ${moneyCurrencyLabel(movement.amount, movement.monais)}</h2>${debtConversion}<p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p>${signatures}</section>`;
+  return `<section class="${compact ? 'cash-receipt-card' : ''}"><h2>${isOut ? 'BON DE SORTIE DE CAISSE' : 'REÇU D’ENTRÉE EN CAISSE'}</h2><p class="receipt-company-name"><strong>${escapeHtml(movement.enterprise_name || sessionUser?.enterprise_name || 'ALBA-STOCK')}</strong></p><p><strong>Pièce n° :</strong> ${Number(movement.mouvement_id)}</p><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason || '—')}</p><h2>Montant ${isOut ? 'sorti' : 'reçu'} : ${moneyCurrencyLabel(movement.amount, movement.monais)}</h2>${debtConversion}<p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p>${signatures}</section>`;
 }
 async function printCashMovementReceipt(movementId, printWindow) {
   if (movementId < 1) throw new Error('Identifiant du mouvement invalide.');
@@ -1946,8 +1962,8 @@ async function printSelectedCashMovementReceipts() {
   }
   try {
     const movements = await Promise.all(movementIds.map(mouvement_id => fetchReportData('cash-movement-receipt', {mouvement_id})));
-    const companyDetails = [movements[0].enterprise_email, movements[0].enterprise_phone, movements[0].enterprise_address, movements[0].rccm ? `RCCM : ${movements[0].rccm}` : '', movements[0].boite_postale ? `BP : ${movements[0].boite_postale}` : ''].filter(Boolean).map(escapeHtml).join(' · ');
-    const content = `<div class="cash-receipt-sheet"><div class="cash-receipt-sheet-heading"><h2>Pièces de caisse (${movements.length})</h2><p>${companyDetails || escapeHtml(movements[0].enterprise_name)}</p></div><div class="cash-receipt-grid-viewport"><div class="cash-receipt-grid">${movements.map(movement => cashMovementReceiptMarkup(movement, true)).join('')}</div></div></div>`;
+    const companyDetails = [movements[0].enterprise_name, movements[0].enterprise_email, movements[0].enterprise_phone, movements[0].enterprise_address, movements[0].rccm ? `RCCM : ${movements[0].rccm}` : '', movements[0].boite_postale ? `BP : ${movements[0].boite_postale}` : ''].filter(Boolean).map(escapeHtml).join(' · ');
+    const content = `<div class="cash-receipt-sheet"><div class="cash-receipt-sheet-heading"><h2>Pièces de caisse (${movements.length})</h2><p>${companyDetails || escapeHtml(sessionUser?.enterprise_name || 'ALBA-STOCK')}</p></div><div class="cash-receipt-grid-viewport"><div class="cash-receipt-grid">${movements.map(movement => cashMovementReceiptMarkup(movement, true)).join('')}</div></div></div>`;
     printReportInWindow(printWindow, `Pièces de caisse (${movements.length})`, content, '', 'landscape');
     movementIds.forEach(id => selectedCashMovementReceipts.delete(id));
     document.querySelectorAll('[data-cash-print-select]').forEach(input => { input.checked = false; });
@@ -2664,6 +2680,21 @@ async function loadSession() {
     const user = result.data;
     if (user.type === 'super_admin') { window.location.replace('superadmin.html'); return; }
     sessionUser = user;
+    const localLanguage = localStorage.getItem('westock-language');
+    const preferredLanguage = localLanguage || user.preferred_language || 'fr';
+    window.setInterfaceLanguage?.(preferredLanguage);
+    if (localLanguage && localLanguage !== user.preferred_language) {
+      fetch('../backend/public/auth.php?action=preferred-language', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        credentials: 'include',
+        body: JSON.stringify({language: localLanguage}),
+      }).then(async response => {
+        const result = await readJson(response);
+        if (!response.ok || !result.success) throw new Error(result.message || 'La langue ne peut pas être enregistrée.');
+        sessionUser.preferred_language = localLanguage;
+      }).catch(error => console.error('Enregistrement différé de la langue impossible.', error));
+    }
     const name = user.full_name || user.email || 'Utilisateur';
     const initials = name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join('').toLocaleUpperCase();
     document.querySelectorAll('[data-session-name]').forEach(node => node.textContent = name);
@@ -2841,7 +2872,7 @@ function openEntityForm(type, entity = null) {
     branch: {title:'Créer une succursale', endpoint:'../backend/public/api.php?resource=succursales', fields:'<label>Nom de la succursale<input name="name" required maxlength="100"></label><label>Code unique<input name="code" required maxlength="20" placeholder="Ex. MAG-01"></label><label class="full"><span>Définir comme succursale mère</span><input name="est_sucursal_mere" type="checkbox" value="1"></label><label class="full">Adresse<textarea name="address"></textarea></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"></label>'},
     client: {title:'Cr\u00e9er un client', endpoint:'../backend/public/api.php?resource=clients', fields:'<label>Nom du client<input name="name" required maxlength="100"></label><label>Adresse \u00e9lectronique<input name="email" type="email" maxlength="100"></label><label>T\u00e9l\u00e9phone<input name="phone" maxlength="20"></label><label class="full">Adresse<textarea name="address"></textarea></label>'},
     supplier: {title:'Créer un fournisseur', endpoint:'../backend/public/api.php?resource=fournisseurs', fields:'<label>Nom du fournisseur<input name="name" required maxlength="100"></label><label>Personne de contact<input name="contact_name" maxlength="100"></label><label>Adresse électronique<input name="email" type="email" maxlength="100"></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"><small>Un numéro qui commence par 0 sera enregistré avec +243 à la place du premier 0.</small></label><label class="full">Adresse<textarea name="address"></textarea></label>'},
-    user: {title: 'Créer un utilisateur', endpoint: '../backend/public/auth.php?action=create-user', fields: '<label>Nom complet<input name="full_name" required></label><label>Nom d’utilisateur<input name="username" required></label><label>Adresse électronique<input name="email" type="email" required></label><label>Mot de passe<input name="password" type="password" minlength="4" required></label><label>Rôle d’accès<select name="role_id" id="user-role" required><option value="">Chargement des rôles…</option></select></label><label>Succursale (facultatif)<select name="succursale_id" id="user-branch"><option value="">Entreprise mère (sans succursale)</option></select></label><label class="full"><span>Compte actif</span><input name="is_active" type="checkbox" value="1" checked></label>'},
+    user: {title: 'Créer un utilisateur', endpoint: '../backend/public/auth.php?action=create-user', fields: '<label>Nom complet<input name="full_name" required></label><label>Nom d’utilisateur<input name="username" required></label><label>Adresse électronique<input name="email" type="email" required></label><label>Mot de passe<input name="password" type="password" minlength="4" data-password-feedback required></label><label>Rôle d’accès<select name="role_id" id="user-role" required><option value="">Chargement des rôles…</option></select></label><label>Succursale<select name="succursale_id" id="user-branch"><option value="">Entreprise mère (sans succursale)</option></select></label><label class="full"><span>Compte actif</span><input name="is_active" type="checkbox" value="1" checked></label>'},
     role: {title: 'Créer un rôle', endpoint: '../backend/public/auth.php?action=create-role', fields: '<label>Nom du rôle<input name="role_name" placeholder="Ex. Responsable stock" required></label><label class="full">Description<textarea name="description"></textarea></label><fieldset class="full" style="border:1px solid #e6ebe7;border-radius:7px;padding:12px"><legend>Droits d’accès</legend><label><input type="checkbox" name="permissions" value="vente"> Accès aux ventes</label><label><input type="checkbox" name="permissions" value="caisse"> Accès à la caisse</label><label><input type="checkbox" name="permissions" value="stock"> Accès au stock et aux produits</label><label><input type="checkbox" name="permissions" value="approvisionnement"> Accès aux approvisionnements</label><label><input type="checkbox" name="permissions" value="clients"> Gestion des clients</label><label><input type="checkbox" name="permissions" value="comptabilite"> Accès à la comptabilité</label></fieldset>'},
     category: {title: 'Créer une catégorie', endpoint: '../backend/public/api.php?resource=categories', fields: '<label>Nom de la catégorie<input name="name" required maxlength="100"></label><label class="full">Description<textarea name="description"></textarea></label>'},
     purchase: {title: 'Créer un approvisionnement', endpoint: '../backend/public/auth.php?action=create-purchase', fields: '<label id="purchase-reference-label">Référence<input name="purchase_no" required maxlength="50"></label><label>Opération<select name="movement_type" id="purchase-operation"><option value="IN">Entrée — augmenter le stock</option><option value="OUT">Sortie — diminuer le stock</option></select></label><div id="purchase-supplier-fields" class="full"><label>Rechercher un fournisseur<input type="search" id="purchase-supplier-search" placeholder="Nom ou contact"></label><label>Fournisseur<select name="fournisseur_id" id="purchase-supplier" required><option value="">Chargement…</option></select></label><button type="button" class="text-button full" id="purchase-add-supplier">+ Créer un fournisseur</button><div class="full" id="purchase-new-supplier" hidden><label>Nom du fournisseur<input id="new-supplier-name" maxlength="100"></label><label>Personne de contact<input id="new-supplier-contact" maxlength="100"></label><label>Adresse électronique<input id="new-supplier-email" type="email" maxlength="100"></label><label>Téléphone<input id="new-supplier-phone" maxlength="20"></label><label class="full">Adresse<textarea id="new-supplier-address"></textarea></label><button type="button" class="modal-submit" id="purchase-save-supplier">Enregistrer le fournisseur</button></div></div><label id="purchase-reason-field" hidden class="full">Motif de sortie<input name="motif_sortie" maxlength="255" placeholder="Ex. Vente, casse, transfert..."></label><label>Rechercher un produit<input type="search" id="purchase-product-search" placeholder="Nom ou référence du produit"></label><label>Produit<select name="produit_id" id="purchase-product" required><option value="">Chargement…</option></select></label><label>Quantité<input name="quantity" type="number" min="1" step="1" required></label><label id="purchase-cost-choice" class="full"><input type="checkbox" id="purchase-use-product-cost" name="use_product_cost" checked> Utiliser le cout enregistre dans la fiche du produit</label><label id="purchase-custom-cost-field" hidden>Autre cout unitaire<input name="unit_cost" type="number" min="0" step="0.01" value="0"></label><label>Traitement<select name="status"><option value="PENDING" selected>En attente — aucun mouvement de stock</option><option value="RECEIVED">Valider et appliquer au stock</option><option value="CANCELLED">Annuler sans mouvement</option></select></label>'}
@@ -3016,8 +3047,12 @@ function openEntityForm(type, entity = null) {
       const roleSelect = modal.querySelector('#user-role');
       roleSelect.innerHTML = '<option value="">Choisir un rôle</option>' + roles.map(role => `<option value="${Number(role.role_id)}">${escapeHtml(role.role_name)}</option>`).join('');
       const branchSelect = modal.querySelector('#user-branch');
+      branchSelect.innerHTML = canSelectCompanyBranches() ? '<option value="">Entreprise mère (sans succursale)</option>' : '';
       branchSelect.insertAdjacentHTML('beforeend', branches.map(branch => `<option value="${Number(branch.succursale_id)}">${escapeHtml(branch.name)}</option>`).join(''));
+      if (!canSelectCompanyBranches()) branchSelect.disabled = true;
       if (entity) { roleSelect.value = entity.role_id; branchSelect.value = entity.succursale_id || ''; }
+      else if (!canSelectCompanyBranches()) branchSelect.value = String(sessionUser.succursale_id);
+      hideFixedBranchChoice(branchSelect);
     }).catch(error => showToast(error.message));
   }
   if (type === 'role' && entity) {
@@ -3177,7 +3212,14 @@ function openEntityForm(type, entity = null) {
     if (type === 'user') { data.succursale_id = data.succursale_id || null; data.is_active = form.elements.namedItem('is_active').checked ? 1 : 0; }
     if (type === 'branch') data.est_sucursal_mere = form.elements.namedItem('est_sucursal_mere').checked ? 1 : 0;
     if (type === 'product') { data.est_perisable = data.est_perisable ? 1 : 0; data.category_id = data.category_id || null; delete data.fournisseur_id; data.unite_de_mesure = Number(data.unite_de_mesure); }
+    const submitButton = form.querySelector('button[type="submit"], button:not([type])');
+    const submitLabel = submitButton?.innerHTML;
     try {
+      if (type === 'user' && submitButton) {
+        submitButton.disabled = true;
+        submitButton.setAttribute('aria-busy', 'true');
+        submitButton.innerHTML = `<span class="loading-spinner" aria-hidden="true"></span>${entity ? 'Enregistrement…' : 'Création du compte…'}`;
+      }
       const primaryKeys = {client: 'client_id', unit: 'unite_mesure_id', product: 'produit_id', category: 'category_id', branch: 'succursale_id', supplier: 'fournisseur_id', user: 'user_id', role: 'role_id'};
       let endpoint = definition.endpoint;
       if (entity && type === 'user') endpoint = `../backend/public/auth.php?action=update-user&id=${encodeURIComponent(entity[primaryKeys[type]])}`;
@@ -3188,11 +3230,56 @@ function openEntityForm(type, entity = null) {
       if (!response.ok || !result.success) throw new Error(result.message || 'Enregistrement impossible.');
       formMessage.hidden = true;
       modal.remove();
-      showToast(entity ? 'Modifications enregistrées' : 'Enregistrement effectué'); if (type === 'product' || type === 'category' || type === 'unit') loadStock(); if (type === 'unit') refreshUnitManager?.(); if (type === 'role') loadRoleList(); if (type === 'user') loadUserRows(); if (type === 'purchase') loadPurchaseRows(); if (type === 'supplier') loadSupplierRows(); if (type === 'client') loadSimpleRows('clients', 'client-rows', 5, clientRowMarkup, 'Aucun client enregistr\u00e9.'); if (type === 'branch') loadSimpleRows('succursales', 'branch-rows', 6, row => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.code)}</td><td>${Number(row.est_sucursal_mere) ? '<span class="status success">Principale</span>' : '—'}</td><td>${escapeHtml(row.address || '—')}</td><td>${escapeHtml(row.phone || '—')}</td><td><button class="text-button" data-branch-edit="${Number(row.succursale_id)}">Modifier</button> <button class="text-button" data-branch-delete="${Number(row.succursale_id)}">Supprimer</button></td></tr>`, 'Aucune succursale enregistrée.');
+      showToast(entity ? 'Modifications enregistrées' : 'Enregistrement effectué'); if (type === 'product' || type === 'category' || type === 'unit') loadStock(); if (type === 'unit') refreshUnitManager?.(); if (type === 'role') loadRoleList(); if (type === 'user') loadUserRows(); if (type === 'purchase') loadPurchaseRows(); if (type === 'supplier') loadSupplierRows(); if (type === 'client') loadSimpleRows('clients', 'client-rows', 5, clientRowMarkup, 'Aucun client enregistré.'); if (type === 'branch') loadSimpleRows('succursales', 'branch-rows', 6, branchRowMarkup, 'Aucune succursale enregistrée.');
     } catch (error) { showFormError(error.message); }
+    finally {
+      const submitButton = form.querySelector('button[type="submit"], button:not([type])');
+      if (type === 'user' && submitButton) {
+        submitButton.disabled = false;
+        submitButton.removeAttribute('aria-busy');
+        submitButton.innerHTML = submitLabel;
+      }
+    }
   });
 }
 document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', () => { navigate(item.dataset.view); document.getElementById('sidebar').classList.remove('open'); }));
+function openWorkspaceSearch() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'workspace-search-backdrop';
+  backdrop.innerHTML = '<section class="workspace-search-dialog" role="dialog" aria-modal="true" aria-label="Rechercher dans l’application"><input type="search" placeholder="Rechercher un espace…" aria-label="Rechercher un espace"><div class="workspace-search-results"></div></section>';
+  document.body.append(backdrop);
+  const input = backdrop.querySelector('input');
+  const results = backdrop.querySelector('.workspace-search-results');
+  const renderResults = () => {
+    const query = input.value.trim().toLocaleLowerCase();
+    const matches = [...document.querySelectorAll('.nav-item[data-view]:not([hidden])')]
+      .filter(item => !query || item.textContent.trim().toLocaleLowerCase().includes(query));
+    results.innerHTML = matches.length
+      ? matches.map(item => `<button type="button" data-search-view="${escapeHtml(item.dataset.view)}">${escapeHtml(item.textContent.trim())}</button>`).join('')
+      : '<p class="workspace-search-empty">Aucun espace correspondant.</p>';
+  };
+  renderResults();
+  input.addEventListener('input', renderResults);
+  input.addEventListener('keydown', event => {
+    if (event.key === 'Escape') backdrop.remove();
+    if (event.key === 'Enter') results.querySelector('button')?.click();
+  });
+  results.addEventListener('click', event => {
+    const button = event.target.closest('[data-search-view]');
+    if (!button) return;
+    backdrop.remove();
+    navigate(button.dataset.searchView);
+  });
+  backdrop.addEventListener('click', event => { if (event.target === backdrop) backdrop.remove(); });
+  input.focus();
+}
+document.querySelector('[aria-label="Rechercher"]')?.addEventListener('click', openWorkspaceSearch);
+document.querySelector('[aria-label="Notifications"]')?.addEventListener('click', () => {
+  const requestsMenuItem = document.querySelector('.nav-item[data-view="requests"]');
+  if (requestsMenuItem && !requestsMenuItem.hidden) navigate('requests');
+  else showToast('Aucune notification disponible pour votre compte.');
+});
+document.querySelector('.profile-switch')?.addEventListener('click', () => navigate('settings'));
 document.querySelector('[data-logout]')?.addEventListener('click', async event => {
   const button = event.currentTarget;
   if (button.disabled) return;
@@ -3969,7 +4056,7 @@ document.addEventListener('click', async event => {
   const branchEdit = event.target.closest('[data-branch-edit]');
   if (branchEdit) { const rows = await apiGet('succursales'); const row = rows.find(item => Number(item.succursale_id) === Number(branchEdit.dataset.branchEdit)); if (row) openEntityForm('branch', row); return; }
   const branchDelete = event.target.closest('[data-branch-delete]');
-  if (branchDelete) { await deleteResource('succursales', branchDelete.dataset.branchDelete, 'cette succursale', () => loadSimpleRows('succursales', 'branch-rows', 6, row => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.code)}</td><td>${Number(row.est_sucursal_mere) ? '<span class="status success">Principale</span>' : '—'}</td><td>${escapeHtml(row.address || '—')}</td><td>${escapeHtml(row.phone || '—')}</td><td><button class="text-button" data-branch-edit="${Number(row.succursale_id)}">Modifier</button> <button class="text-button" data-branch-delete="${Number(row.succursale_id)}">Supprimer</button></td></tr>`, 'Aucune succursale enregistrée.')); return; }
+  if (branchDelete) { await deleteResource('succursales', branchDelete.dataset.branchDelete, 'cette succursale', () => loadSimpleRows('succursales', 'branch-rows', 6, branchRowMarkup, 'Aucune succursale enregistrée.')); return; }
   const clientEdit = event.target.closest('[data-client-edit]');
   if (clientEdit) { const rows = await apiGet('clients'); const client = rows.find(item => Number(item.client_id) === Number(clientEdit.dataset.clientEdit)); if (client) openEntityForm('client', client); return; }
   const clientDelete = event.target.closest('[data-client-delete]');
@@ -4161,7 +4248,27 @@ document.addEventListener('click', event => {
   row.querySelector('td:first-child small').textContent = 'Commande créée';
   showToast(`${requestId} est devenue une commande`);
 });
-document.getElementById('mobile-menu').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
+document.getElementById('mobile-menu').addEventListener('click', event => {
+  const isOpen = document.getElementById('sidebar').classList.toggle('open');
+  event.currentTarget.setAttribute('aria-expanded', String(isOpen));
+  event.currentTarget.setAttribute('aria-label', isOpen ? 'Fermer le menu' : 'Ouvrir le menu');
+});
+window.addEventListener('interface-language-change', async event => {
+  if (!sessionUser) return;
+  try {
+    const response = await fetch('../backend/public/auth.php?action=preferred-language', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      credentials: 'include',
+      body: JSON.stringify({language: event.detail.language}),
+    });
+    const result = await readJson(response);
+    if (!response.ok || !result.success) throw new Error(result.message || 'La langue ne peut pas être enregistrée.');
+    sessionUser.preferred_language = result.data.language;
+  } catch (error) {
+    console.error('Enregistrement de la langue impossible.', error);
+  }
+});
 themeButton.addEventListener('click', event => { event.stopPropagation(); const isOpen = themePanel.classList.toggle('open'); themeButton.setAttribute('aria-expanded', isOpen); });
 themeChoices.forEach(option => option.addEventListener('click', () => { localStorage.setItem(themeStorageKey, option.dataset.themeChoice); applyTheme(option.dataset.themeChoice); themePanel.classList.remove('open'); themeButton.setAttribute('aria-expanded', 'false'); showToast(`Thème ${option.textContent.trim()} activé`); }));
 document.addEventListener('click', event => { if (!event.target.closest('.theme-control')) { themePanel.classList.remove('open'); themeButton.setAttribute('aria-expanded', 'false'); } });

@@ -8,6 +8,7 @@ require_once __DIR__ . '/../Core/Session.php';
 require_once __DIR__ . '/../Core/AuthGuard.php';
 require_once __DIR__ . '/../Core/Authorization.php';
 require_once __DIR__ . '/../Services/AuthService.php';
+require_once __DIR__ . '/../Services/EmailNotificationService.php';
 require_once __DIR__ . '/../Services/ProcurementService.php';
 require_once __DIR__ . '/../Services/SalesService.php';
 require_once __DIR__ . '/../Services/CompanyProfileService.php';
@@ -20,6 +21,7 @@ use AlbaStock\Core\Session;
 use AlbaStock\Core\AuthGuard;
 use AlbaStock\Core\Authorization;
 use AlbaStock\Services\AuthService;
+use AlbaStock\Services\EmailNotificationService;
 use AlbaStock\Services\ProcurementService;
 use AlbaStock\Services\SalesService;
 use AlbaStock\Services\CompanyProfileService;
@@ -420,13 +422,37 @@ try {
         JsonResponse::send(['success' => true, 'message' => 'Mot de passe modifié.']);
     }
 
+    if ($action === 'preferred-language' && $method === 'PUT') {
+        $actor = AuthGuard::requireAuthenticated();
+        $body = json_decode((string) file_get_contents('php://input'), true);
+        if (!is_array($body)) JsonResponse::error('Corps JSON invalide.', 400);
+        $language = $service->setPreferredLanguage($actor, (string) ($body['language'] ?? ''));
+        JsonResponse::send(['success' => true, 'data' => ['language' => $language]]);
+    }
+
     if ($action === 'register' && $method === 'POST') {
         $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
         $enterpriseId = $service->registerEnterprise($body);
+        $notificationSent = false;
+        $notificationError = null;
+        try {
+            if (!is_file(__DIR__ . '/../../vendor/autoload.php')) {
+                throw new RuntimeException('La bibliothèque d’envoi email est absente. Exécutez composer install.');
+            }
+            require_once __DIR__ . '/../../vendor/autoload.php';
+            (new EmailNotificationService())->sendEnterpriseRegistration($body);
+            $notificationSent = true;
+        } catch (Throwable $exception) {
+            $notificationError = $exception->getMessage();
+            error_log('Notification de demande d’entreprise non envoyée : ' . $notificationError);
+        }
         JsonResponse::send([
             'success' => true,
-            'message' => 'Votre demande a été enregistrée. Le super administrateur doit activer votre entreprise.',
-            'data' => ['entreprise_id' => $enterpriseId],
+            'message' => $notificationSent
+                ? 'Votre demande a été enregistrée. Le super administrateur a été averti par email.'
+                : 'Votre demande a été enregistrée, mais la notification email n’a pas pu être envoyée. L’administrateur doit vérifier la configuration email.',
+            'data' => ['entreprise_id' => $enterpriseId, 'notification_sent' => $notificationSent],
+            'warning' => $notificationError,
         ], 201);
     }
 
@@ -480,6 +506,7 @@ try {
             JsonResponse::error('Seul un administrateur d’entreprise peut créer un rôle.', 403);
         }
         Authorization::requirePermission($actor, 'gerer_roles');
+        if (!Authorization::canSeeAllBranches($actor)) JsonResponse::error('Accès limité : les rôles sont communs à toute l’entreprise et ne peuvent être modifiés que depuis la succursale mère.', 403);
         $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
         $roleId = $service->createRole((int) $actor['entreprise_id'], $body);
         JsonResponse::send(['success' => true, 'data' => ['role_id' => $roleId]], 201);
@@ -489,6 +516,7 @@ try {
         $actor = AuthGuard::requireAuthenticated();
         if ($actor['type'] !== 'user') JsonResponse::error('Action réservée à un administrateur d’entreprise.', 403);
         Authorization::requirePermission($actor, 'gerer_roles');
+        if (!Authorization::canSeeAllBranches($actor)) JsonResponse::error('Accès limité : les rôles sont communs à toute l’entreprise et ne peuvent être modifiés que depuis la succursale mère.', 403);
         $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
         $roleId = (int) ($_GET['id'] ?? 0);
         if ($roleId < 1) JsonResponse::error('Identifiant rôle requis.', 422);
@@ -500,6 +528,7 @@ try {
         $actor = AuthGuard::requireAuthenticated();
         if ($actor['type'] !== 'user') JsonResponse::error('Action réservée à un administrateur d’entreprise.', 403);
         Authorization::requirePermission($actor, 'gerer_roles');
+        if (!Authorization::canSeeAllBranches($actor)) JsonResponse::error('Accès limité : les rôles sont communs à toute l’entreprise et ne peuvent être modifiés que depuis la succursale mère.', 403);
         $deleted = $service->deleteRole((int) $actor['entreprise_id'], (int) ($_GET['id'] ?? 0));
         JsonResponse::send(['success' => true, 'data' => ['deleted' => $deleted]]);
     }

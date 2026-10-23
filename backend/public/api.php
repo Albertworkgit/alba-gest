@@ -30,6 +30,9 @@ if ($resource === 'ventes' && in_array($_SERVER['REQUEST_METHOD'], ['POST','PUT'
 if ($resource === 'users' && $_SERVER['REQUEST_METHOD'] === 'GET') {
     JsonResponse::error('Utilisez auth.php?action=list-users pour consulter les utilisateurs sans exposer leurs mots de passe.', 410);
 }
+if ($resource === 'users' && in_array($_SERVER['REQUEST_METHOD'], ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+    JsonResponse::error('Utilisez les actions dédiées de auth.php pour gérer les utilisateurs.', 405);
+}
 
 $productCreationTransaction = false;
 $mainBranchTransaction = false;
@@ -46,8 +49,12 @@ try {
 
     // Les unités sont un référentiel de l'entreprise, administré par son compte propriétaire.
     if ($resource === 'unites_mesure' && $method !== 'GET'
-        && ($authenticatedUser['type'] === 'super_admin' || empty($authenticatedUser['is_company_admin']))) {
-        JsonResponse::error('Seul l’administrateur de l’entreprise peut gérer les unités de mesure.', 403);
+        && ($authenticatedUser['type'] === 'super_admin' || !Authorization::canSeeAllBranches($authenticatedUser))) {
+        JsonResponse::error('Seul l’administrateur de la succursale mère peut gérer les unités de mesure.', 403);
+    }
+    if ($resource === 'succursales' && !Authorization::canSeeAllBranches($authenticatedUser)) {
+        if ($method !== 'GET') JsonResponse::error('Seul l’administrateur de la succursale mère peut gérer les succursales.', 403);
+        $branchId = Authorization::branchId($authenticatedUser, $branchId);
     }
     if ($resource === 'unites_mesure' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
         foreach (['name' => 50, 'symbole' => 15] as $field => $maximumLength) {
@@ -112,7 +119,7 @@ try {
         $resetMainBranch->bind_param('i', $enterpriseId);
         $resetMainBranch->execute();
     }
-    $branchScopedResources = ['users', 'stocks', 'achats', 'caisses', 'ventes', 'mouvements-caisse', 'transferts-stock', 'fournisseurs'];
+    $branchScopedResources = ['users', 'succursales', 'stocks', 'achats', 'caisses', 'ventes', 'mouvements-caisse', 'transferts-stock', 'fournisseurs'];
     // Les ressources de succursale sont limitées au point de vente de l'utilisateur si son rôle en définit un.
     if (in_array($resource, $branchScopedResources, true)) {
         $branchId = Authorization::branchId($authenticatedUser, $branchId);

@@ -4,8 +4,10 @@ declare(strict_types=1);
 namespace AlbaStock\Services;
 
 require_once __DIR__ . '/../Core/PhoneNumberNormalizer.php';
+require_once __DIR__ . '/../Core/Authorization.php';
 
 use AlbaStock\Core\Database;
+use AlbaStock\Core\Authorization;
 use AlbaStock\Core\PhoneNumberNormalizer;
 use AlbaStock\Core\Session;
 use mysqli;
@@ -268,7 +270,7 @@ final class AuthService
         $logoColumn = $companyColumn('logo', 'enterprise_logo');
         $stampColumn = $companyColumn('cachet', 'enterprise_cachet');
         // Charge le nom de l'entreprise et de la succursale depuis la base, pas depuis le navigateur.
-        $statement = $this->db->prepare('SELECT u.full_name, u.username, u.email, u.succursale_id, r.role_name, r.permissions, e.name AS enterprise_name, e.email AS enterprise_email, e.phone AS enterprise_phone, e.address AS enterprise_address, ' . $rccmColumn . ', ' . $postalBoxColumn . ', ' . $logoColumn . ', ' . $stampColumn . ', s.name AS branch_name, (SELECT MIN(first_user.user_id) FROM users first_user WHERE first_user.entreprise_id = u.entreprise_id) AS first_user_id FROM users u INNER JOIN roles r ON r.role_id = u.role_id AND r.entreprise_id = u.entreprise_id INNER JOIN entreprises e ON e.entreprise_id = u.entreprise_id LEFT JOIN succursales s ON s.succursale_id = u.succursale_id AND s.entreprise_id = u.entreprise_id WHERE u.user_id = ? AND u.entreprise_id = ? AND u.is_active = 1 AND e.is_active = 1 LIMIT 1');
+        $statement = $this->db->prepare('SELECT u.full_name, u.username, u.email, u.succursale_id, u.preferred_language, s.est_sucursal_mere AS is_main_branch, r.role_name, r.permissions, e.name AS enterprise_name, e.email AS enterprise_email, e.phone AS enterprise_phone, e.address AS enterprise_address, ' . $rccmColumn . ', ' . $postalBoxColumn . ', ' . $logoColumn . ', ' . $stampColumn . ', s.name AS branch_name, (SELECT MIN(first_user.user_id) FROM users first_user WHERE first_user.entreprise_id = u.entreprise_id) AS first_user_id FROM users u INNER JOIN roles r ON r.role_id = u.role_id AND r.entreprise_id = u.entreprise_id INNER JOIN entreprises e ON e.entreprise_id = u.entreprise_id LEFT JOIN succursales s ON s.succursale_id = u.succursale_id AND s.entreprise_id = u.entreprise_id WHERE u.user_id = ? AND u.entreprise_id = ? AND u.is_active = 1 AND e.is_active = 1 LIMIT 1');
         $statement->bind_param('ii', $userId, $enterpriseId);
         $statement->execute();
         $profile = $statement->get_result()->fetch_assoc() ?: [];
@@ -289,6 +291,7 @@ final class AuthService
         unset($profile['first_user_id']);
         return array_merge($actor, $profile, [
             'is_company_admin' => $isCompanyAdmin,
+            'is_main_branch' => (bool) ($profile['is_main_branch'] ?? false),
             'modules_autorises' => $this->enterpriseModules($enterpriseId),
         ]);
     }
@@ -320,6 +323,38 @@ final class AuthService
 
         $_SESSION['auth'] = $updated;
         return $updated;
+    }
+
+    public function setPreferredLanguage(array $actor, string $language): string
+    {
+        if (!in_array($language, ['fr', 'en', 'sw', 'ln', 'kn'], true)) {
+            throw new RuntimeException('Langue d’affichage non prise en charge.');
+        }
+
+        $userId = (int) ($actor['id'] ?? 0);
+        if (($actor['type'] ?? '') === 'super_admin') {
+            $statement = $this->db->prepare('UPDATE super_admins SET preferred_language = ? WHERE super_admin_id = ?');
+        } else {
+            $enterpriseId = (int) ($actor['entreprise_id'] ?? 0);
+            $statement = $this->db->prepare('UPDATE users SET preferred_language = ? WHERE user_id = ? AND entreprise_id = ?');
+        }
+        if (($actor['type'] ?? '') === 'super_admin') {
+            $statement->bind_param('si', $language, $userId);
+        } else {
+            $statement->bind_param('sii', $language, $userId, $enterpriseId);
+        }
+        $statement->execute();
+        if ($statement->affected_rows === 0) {
+            $check = ($actor['type'] ?? '') === 'super_admin'
+                ? $this->db->prepare('SELECT super_admin_id FROM super_admins WHERE super_admin_id = ? LIMIT 1')
+                : $this->db->prepare('SELECT user_id FROM users WHERE user_id = ? AND entreprise_id = ? LIMIT 1');
+            if (($actor['type'] ?? '') === 'super_admin') $check->bind_param('i', $userId);
+            else $check->bind_param('ii', $userId, $enterpriseId);
+            $check->execute();
+            if (!$check->get_result()->fetch_assoc()) throw new RuntimeException('Compte introuvable.');
+        }
+        $_SESSION['auth']['preferred_language'] = $language;
+        return $language;
     }
 
     // Vérifie le mot de passe actuel avant de le remplacer par un hash sécurisé.
@@ -501,7 +536,7 @@ final class AuthService
             throw new RuntimeException('Le rôle sélectionné n’appartient pas à votre entreprise.');
         }
 
-        if ($actor['succursale_id'] !== null && empty($actor['is_company_admin'])) {
+        if (!Authorization::canSeeAllBranches($actor)) {
             $data['succursale_id'] = (int) $actor['succursale_id'];
         }
         if (isset($data['succursale_id']) && $data['succursale_id'] !== null) {
@@ -526,8 +561,15 @@ final class AuthService
         $role->execute();
         if (!$role->get_result()->fetch_assoc()) throw new RuntimeException('Le rôle choisi n’appartient pas à cette entreprise.');
 
+        $branchScope = Authorization::branchId($actor, null);
         $branchId = isset($data['succursale_id']) && $data['succursale_id'] !== '' ? (int) $data['succursale_id'] : null;
-        if ($actor['succursale_id'] !== null && empty($actor['is_company_admin'])) $branchId = (int) $actor['succursale_id'];
+        if ($branchScope !== null) {
+            $branchId = $branchScope;
+            $target = $this->db->prepare('SELECT user_id FROM users WHERE user_id = ? AND entreprise_id = ? AND succursale_id = ? LIMIT 1');
+            $target->bind_param('iii', $userId, $enterpriseId, $branchScope);
+            $target->execute();
+            if (!$target->get_result()->fetch_assoc()) throw new RuntimeException('Accès limité : cet utilisateur ne fait pas partie de votre succursale.');
+        }
         if ($branchId !== null) {
             $branch = $this->db->prepare('SELECT succursale_id FROM succursales WHERE succursale_id = ? AND entreprise_id = ? LIMIT 1');
             $branch->bind_param('ii', $branchId, $enterpriseId);
@@ -548,13 +590,16 @@ final class AuthService
 
         $password = (string) ($data['password'] ?? '');
         if ($password !== '' && strlen($password) < 4) throw new RuntimeException('Le mot de passe doit contenir au moins 4 caractères.');
+        $scopeSql = $branchScope !== null ? ' AND succursale_id = ?' : '';
         if ($password === '') {
-            $statement = $this->db->prepare('UPDATE users SET succursale_id = ?, role_id = ?, username = ?, email = ?, full_name = ?, is_active = ? WHERE user_id = ? AND entreprise_id = ?');
-            $statement->bind_param('iisssiii', $branchId, $roleId, $username, $email, $fullName, $active, $userId, $enterpriseId);
+            $statement = $this->db->prepare('UPDATE users SET succursale_id = ?, role_id = ?, username = ?, email = ?, full_name = ?, is_active = ? WHERE user_id = ? AND entreprise_id = ?' . $scopeSql);
+            if ($branchScope !== null) $statement->bind_param('iisssiiii', $branchId, $roleId, $username, $email, $fullName, $active, $userId, $enterpriseId, $branchScope);
+            else $statement->bind_param('iisssiii', $branchId, $roleId, $username, $email, $fullName, $active, $userId, $enterpriseId);
         } else {
             $hash = password_hash($password, PASSWORD_DEFAULT);
-            $statement = $this->db->prepare('UPDATE users SET succursale_id = ?, role_id = ?, username = ?, email = ?, full_name = ?, is_active = ?, password_hash = ? WHERE user_id = ? AND entreprise_id = ?');
-            $statement->bind_param('iisssisii', $branchId, $roleId, $username, $email, $fullName, $active, $hash, $userId, $enterpriseId);
+            $statement = $this->db->prepare('UPDATE users SET succursale_id = ?, role_id = ?, username = ?, email = ?, full_name = ?, is_active = ?, password_hash = ? WHERE user_id = ? AND entreprise_id = ?' . $scopeSql);
+            if ($branchScope !== null) $statement->bind_param('iisssisiii', $branchId, $roleId, $username, $email, $fullName, $active, $hash, $userId, $enterpriseId, $branchScope);
+            else $statement->bind_param('iisssisii', $branchId, $roleId, $username, $email, $fullName, $active, $hash, $userId, $enterpriseId);
         }
         $statement->execute();
     }
@@ -564,8 +609,20 @@ final class AuthService
     {
         if ($userId === (int) $actor['id']) throw new RuntimeException('Vous ne pouvez pas supprimer votre propre compte.');
         $enterpriseId = (int) $actor['entreprise_id'];
-        $statement = $this->db->prepare('DELETE FROM users WHERE user_id = ? AND entreprise_id = ?');
-        $statement->bind_param('ii', $userId, $enterpriseId);
+        $branchScope = Authorization::branchId($actor, null);
+        $sql = 'DELETE FROM users WHERE user_id = ? AND entreprise_id = ?';
+        if ($branchScope !== null) {
+            $target = $this->db->prepare('SELECT user_id FROM users WHERE user_id = ? AND entreprise_id = ? AND succursale_id = ? LIMIT 1');
+            $target->bind_param('iii', $userId, $enterpriseId, $branchScope);
+            $target->execute();
+            if (!$target->get_result()->fetch_assoc()) throw new RuntimeException('Accès limité : cet utilisateur ne fait pas partie de votre succursale.');
+            $sql .= ' AND succursale_id = ?';
+            $statement = $this->db->prepare($sql);
+            $statement->bind_param('iii', $userId, $enterpriseId, $branchScope);
+        } else {
+            $statement = $this->db->prepare($sql);
+            $statement->bind_param('ii', $userId, $enterpriseId);
+        }
         $statement->execute();
         return $statement->affected_rows > 0;
     }
@@ -664,6 +721,8 @@ final class AuthService
         if ($name === '' || $email === '' || $fullName === '' || $username === '' || strlen($password) < 6) {
             throw new RuntimeException('Tous les champs sont obligatoires et le mot de passe doit contenir au moins 6 caractères.');
         }
+        $language = (string) ($data['preferred_language'] ?? 'fr');
+        if (!in_array($language, ['fr', 'en', 'sw', 'ln', 'kn'], true)) throw new RuntimeException('Langue d’affichage non prise en charge.');
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             throw new RuntimeException('Adresse email invalide.');
         }
@@ -698,9 +757,9 @@ final class AuthService
             $roleId = (int) $this->db->insert_id;
 
             // Le compte est également inactif tant que l’entreprise n’est pas validée.
-            $user = $this->db->prepare('INSERT INTO users (entreprise_id, succursale_id, role_id, username, email, password_hash, full_name, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 0)');
+            $user = $this->db->prepare('INSERT INTO users (entreprise_id, succursale_id, role_id, username, email, password_hash, full_name, is_active, preferred_language) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)');
             $hash = password_hash($password, PASSWORD_DEFAULT);
-            $user->bind_param('iiissss', $enterpriseId, $branchId, $roleId, $username, $email, $hash, $fullName);
+            $user->bind_param('iiisssss', $enterpriseId, $branchId, $roleId, $username, $email, $hash, $fullName, $language);
             $user->execute();
             $this->db->commit();
             return $enterpriseId;
@@ -721,7 +780,7 @@ final class AuthService
     private function findSuperAdmin(string $email): ?array
     {
         // Le schéma déjà présent dans la base XAMPP utilise super_admins et email.
-        $statement = $this->db->prepare('SELECT super_admin_id, email, password_hash, full_name, is_active, created_at FROM super_admins WHERE email = ? AND is_active = 1 LIMIT 1');
+        $statement = $this->db->prepare('SELECT super_admin_id, email, password_hash, full_name, is_active, preferred_language, created_at FROM super_admins WHERE email = ? AND is_active = 1 LIMIT 1');
         $statement->bind_param('s', $email);
         $statement->execute();
         return $statement->get_result()->fetch_assoc() ?: null;

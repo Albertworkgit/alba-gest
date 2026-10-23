@@ -18,7 +18,7 @@ final class AuthGuard
         if ($user['type'] === 'user') {
             $userId = (int) ($user['id'] ?? 0);
             $enterpriseId = (int) ($user['entreprise_id'] ?? 0);
-            $statement = Database::connection()->prepare('SELECT u.succursale_id, r.permissions, r.role_name, e.name AS enterprise_name, (SELECT MIN(first_user.user_id) FROM users first_user WHERE first_user.entreprise_id = u.entreprise_id) AS first_user_id FROM users u INNER JOIN roles r ON r.role_id = u.role_id AND r.entreprise_id = u.entreprise_id INNER JOIN entreprises e ON e.entreprise_id = u.entreprise_id WHERE u.user_id = ? AND u.entreprise_id = ? AND u.is_active = 1 AND e.is_active = 1 LIMIT 1');
+            $statement = Database::connection()->prepare('SELECT u.succursale_id, s.est_sucursal_mere AS is_main_branch, r.permissions, r.role_name, e.name AS enterprise_name, (SELECT MIN(first_user.user_id) FROM users first_user WHERE first_user.entreprise_id = u.entreprise_id) AS first_user_id FROM users u INNER JOIN roles r ON r.role_id = u.role_id AND r.entreprise_id = u.entreprise_id INNER JOIN entreprises e ON e.entreprise_id = u.entreprise_id LEFT JOIN succursales s ON s.succursale_id = u.succursale_id AND s.entreprise_id = u.entreprise_id WHERE u.user_id = ? AND u.entreprise_id = ? AND u.is_active = 1 AND e.is_active = 1 LIMIT 1');
             $statement->bind_param('ii', $userId, $enterpriseId);
             $statement->execute();
             $currentAccess = $statement->get_result()->fetch_assoc();

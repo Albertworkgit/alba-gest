@@ -178,8 +178,14 @@ final class Authorization
     // Les administrateurs multi-succursales peuvent voir tous les rapports de leur entreprise.
     public static function canSeeAllBranches(array $user): bool
     {
-        return $user['type'] === 'super_admin'
-            || $user['succursale_id'] === null
-            || in_array('toutes_succursales', self::permissions($user), true);
+        if (($user['type'] ?? '') === 'super_admin'
+            || ($user['succursale_id'] ?? null) === null
+            || !empty($user['is_company_admin'])) {
+            return true;
+        }
+
+        $permissions = self::permissions($user);
+        return !empty($user['is_main_branch'])
+            && (in_array('*', $permissions, true) || in_array('toutes_succursales', $permissions, true));
     }
 }

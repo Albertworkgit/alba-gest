@@ -26,12 +26,14 @@
         <label class="register-field">Nom complet<input name="full_name" autocomplete="name" required></label>
         <label class="register-field">Nom utilisateur<input name="username" autocomplete="username" required></label>
         <label class="register-field">Email<input name="email" type="email" autocomplete="email" required></label>
-        <label class="register-field">Mot de passe<input name="password" type="password" minlength="6" autocomplete="new-password" required></label>
+        <label class="register-field">Mot de passe<input name="password" type="password" minlength="6" autocomplete="new-password" data-password-feedback required></label>
       </div><button class="register-submit">Envoyer la demande <span aria-hidden="true">→</span></button></form>
       <p class="auth-form-footer">Vous avez déjà un compte ? <a href="login.html">Se connecter</a></p>
     </section>
   </main>
   <script src="password-toggle.js?v=20261011-ui-polish-2"></script>
+  <script src="password-feedback.js"></script>
+  <script src="interface-language.js"></script>
   <script src="register.js"></script>
 </body>
 </html>
