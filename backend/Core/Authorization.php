@@ -33,7 +33,7 @@ final class Authorization
         if (str_ends_with($permission, '_comptabilite')) return 'comptabilite';
         if (in_array($permission, ['gerer_utilisateurs', 'gerer_roles', 'voir_roles'], true)) return 'utilisateurs';
         if ($permission === 'voir_rapports') return 'rapports';
-        if (in_array($permission, ['voir_succursales', 'gerer_succursales', 'voir_clients', 'gerer_clients'], true) || str_ends_with($permission, '_clients')) return 'administration';
+        if (in_array($permission, ['voir_succursales', 'gerer_succursales', 'voir_clients', 'gerer_clients', 'gerer_demandes'], true) || str_ends_with($permission, '_clients')) return 'administration';
         return null;
     }
 
@@ -187,5 +187,42 @@ final class Authorization
         $permissions = self::permissions($user);
         return !empty($user['is_main_branch'])
             && (in_array('*', $permissions, true) || in_array('toutes_succursales', $permissions, true));
+    }
+
+    public static function canManageBranchRequests(array $user): bool
+    {
+        return ($user['type'] ?? '') === 'user'
+            && (!empty($user['is_company_admin']) || !empty($user['is_branch_admin']));
+    }
+
+    public static function requireRequestManagement(array $user, string $module): void
+    {
+        if (!self::canManageBranchRequests($user)) {
+            throw new RuntimeException('Accès réservé aux administrateurs.');
+        }
+        self::requireModule($user, $module);
+    }
+
+    public static function canUseProductFromBranch(array $user, int $originBranchId): bool
+    {
+        if (self::canSeeAllBranches($user)) return true;
+        $branchId = (int) ($user['succursale_id'] ?? 0);
+        if ($originBranchId === $branchId) return true;
+        return $originBranchId > 0
+            && $originBranchId === (int) ($user['main_branch_id'] ?? 0)
+            && !empty($user['partager_produits_mere']);
+    }
+
+    public static function productOrigins(array $user): ?array
+    {
+        if (self::canSeeAllBranches($user)) return null;
+        $branchId = (int) ($user['succursale_id'] ?? 0);
+        if ($branchId < 1) return [];
+        $origins = [$branchId];
+        $mainBranchId = (int) ($user['main_branch_id'] ?? 0);
+        if ($mainBranchId > 0 && !empty($user['partager_produits_mere'])) {
+            $origins[] = $mainBranchId;
+        }
+        return array_values(array_unique($origins));
     }
 }

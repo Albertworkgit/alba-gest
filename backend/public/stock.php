@@ -27,16 +27,17 @@ try {
         // La consultation du catalogue stock est indépendante du droit de modification.
         Authorization::requirePermission($actor, 'voir_stock');
         $branchId = Authorization::branchId($actor, $branchId);
+        $productOrigins = Authorization::productOrigins($actor);
         if (($_GET['action'] ?? '') === 'summary') {
-            JsonResponse::send(['success' => true, 'data' => $service->summary($enterpriseId, $branchId)]);
+            JsonResponse::send(['success' => true, 'data' => $service->summary($enterpriseId, $branchId, $productOrigins)]);
         }
         if (isset($_GET['page'])) {
             $page = max(1, (int) $_GET['page']);
             $perPage = min(100, max(1, (int) ($_GET['per_page'] ?? 10)));
-            $pageResult = $service->list($enterpriseId, $branchId, $page, $perPage);
+            $pageResult = $service->list($enterpriseId, $branchId, $page, $perPage, $productOrigins);
             JsonResponse::send(['success' => true, 'data' => $pageResult['rows'], 'pagination' => $pageResult['pagination']]);
         }
-        JsonResponse::send(['success' => true, 'data' => $service->list($enterpriseId, $branchId)]);
+        JsonResponse::send(['success' => true, 'data' => $service->list($enterpriseId, $branchId, null, 20, $productOrigins)]);
     }
 
     if ($method !== 'POST') JsonResponse::error('Méthode HTTP non supportée.', 405);
@@ -57,7 +58,8 @@ try {
         (string) ($body['operation'] ?? ''),
         (int) ($body['quantity'] ?? -1),
         array_key_exists('min_stock_level', $body) ? (int) $body['min_stock_level'] : null,
-        (int) ($actor['id'] ?? 0)
+        (int) ($actor['id'] ?? 0),
+        Authorization::productOrigins($actor)
     );
     JsonResponse::send(['success' => true, 'data' => $result]);
 } catch (\RuntimeException $exception) {

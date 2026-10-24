@@ -167,7 +167,7 @@ try {
     $companyQuery = Database::connection()->prepare('SELECT name FROM entreprises WHERE entreprise_id = ? LIMIT 1');
     $companyQuery->bind_param('i', $enterpriseId);
     $companyQuery->execute();
-    $companyName = (string) ($companyQuery->get_result()->fetch_assoc()['name'] ?? 'ALBA-STOCK');
+    $companyName = (string) ($companyQuery->get_result()->fetch_assoc()['name'] ?? 'ALBA-GEST');
 
     $orientation = max(array_map(static fn (array $table): int => count($table['headers']), $validatedTables)) >= 6 ? 'L' : 'P';
     $pdf = new AlbaReportPdf($orientation, 'mm', 'A4');

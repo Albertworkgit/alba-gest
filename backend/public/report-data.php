@@ -24,6 +24,7 @@ try {
     $db = Database::connection();
     $accountingService = new AccountingService($db);
     $cashMovementService = new CashMovementService($db);
+    $productOrigins = Authorization::productOrigins($user);
     $bindParams = static function (\mysqli_stmt $statement, array $values): void {
         if ($values === []) return;
         $types = '';
@@ -34,6 +35,12 @@ try {
         }
         unset($value);
         $statement->bind_param($types, ...$references);
+    };
+    $productOriginCondition = static function (string $column, array &$values) use ($productOrigins): string {
+        if ($productOrigins === null) return '';
+        if ($productOrigins === []) return ' AND 1 = 0';
+        $values = array_merge($values, $productOrigins);
+        return ' AND ' . $column . ' IN (' . implode(', ', array_fill(0, count($productOrigins), '?')) . ')';
     };
     $attachCurrencyTotals = static function (array $sales) use ($db, $enterpriseId): array {
         if ($sales === []) return $sales;
@@ -184,18 +191,13 @@ try {
     }
 
     if ($action === 'accounting-cancellation-requests' && $_SERVER['REQUEST_METHOD'] === 'GET') {
-        Authorization::requirePermission($user, 'voir_comptabilite');
-        if (($user['type'] ?? '') !== 'user' || empty($user['is_company_admin'])) {
-            JsonResponse::error('Accès réservé à l’administrateur de l’entreprise.', 403);
-        }
-        JsonResponse::send(['success' => true, 'data' => $accountingService->entryCancellationRequests($enterpriseId)]);
+        Authorization::requireRequestManagement($user, 'comptabilite');
+        $requestBranchId = !empty($user['is_branch_admin']) ? (int) $user['succursale_id'] : $branchId;
+        JsonResponse::send(['success' => true, 'data' => $accountingService->entryCancellationRequests($enterpriseId, $requestBranchId)]);
     }
 
     if ($action === 'accounting-cancellation-decision' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        Authorization::requirePermission($user, 'modifier_comptabilite');
-        if (($user['type'] ?? '') !== 'user' || empty($user['is_company_admin'])) {
-            JsonResponse::error('Seul l’administrateur de l’entreprise peut décider de cette demande.', 403);
-        }
+        Authorization::requireRequestManagement($user, 'comptabilite');
         $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
         $decision = (string) ($body['decision'] ?? '');
         if (!in_array($decision, ['APPROUVER', 'REFUSER'], true)) {
@@ -206,7 +208,8 @@ try {
             (int) ($user['id'] ?? 0),
             (int) ($body['demande_id'] ?? 0),
             $decision === 'APPROUVER',
-            (string) ($body['motif_decision'] ?? '')
+            (string) ($body['motif_decision'] ?? ''),
+            !empty($user['is_branch_admin']) ? (int) $user['succursale_id'] : $branchId
         );
         JsonResponse::send(['success' => true, 'message' => $decision === 'APPROUVER' ? 'Écriture annulée.' : 'Demande refusée.']);
     }
@@ -228,11 +231,12 @@ try {
         Authorization::requirePermission($user, 'voir_stock');
         $days = min(90, max(1, (int) ($_GET['jours'] ?? 30)));
         $sql = 'SELECT d.achat_detail_id AS lot_detail_id, d.date_expiration, d.quantity, d.quantity_out, (d.quantity - d.quantity_out) AS remaining_quantity, a.achat_id, a.purchase_no, a.succursale_id, s.name AS branch_name, p.produit_id, p.name AS product_name, p.sku, u.name AS unit_name, u.symbole AS unit_symbol, DATEDIFF(d.date_expiration, CURDATE()) AS days_remaining FROM achat_details d JOIN achats a ON a.achat_id = d.achat_id AND a.entreprise_id = d.entreprise_id JOIN produits p ON p.produit_id = d.produit_id AND p.entreprise_id = d.entreprise_id JOIN succursales s ON s.succursale_id = a.succursale_id AND s.entreprise_id = a.entreprise_id LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE d.entreprise_id = ? AND p.est_perisable = 1 AND d.date_expiration IS NOT NULL AND d.quantity > d.quantity_out AND a.movement_type = \'IN\' AND a.status = \'RECEIVED\' AND d.date_expiration <= DATE_ADD(CURDATE(), INTERVAL ? DAY)';
-        if ($branchId !== null) $sql .= ' AND a.succursale_id = ?';
+        $params = [$enterpriseId, $days];
+        if ($branchId !== null) { $sql .= ' AND a.succursale_id = ?'; $params[] = $branchId; }
+        $sql .= $productOriginCondition('p.succursale_origine_id', $params);
         $sql .= ' ORDER BY d.date_expiration ASC, p.name ASC';
         $query = $db->prepare($sql);
-        if ($branchId === null) $query->bind_param('ii', $enterpriseId, $days);
-        else $query->bind_param('iii', $enterpriseId, $days, $branchId);
+        $bindParams($query, $params);
         $query->execute();
         JsonResponse::send(['success' => true, 'data' => $query->get_result()->fetch_all(MYSQLI_ASSOC)]);
     }
@@ -244,11 +248,12 @@ try {
         $requestedBranch = Authorization::branchId($user, $requestedBranch);
         if ($productId < 1) JsonResponse::error('Produit invalide.', 422);
         $sql = 'SELECT d.achat_detail_id AS lot_detail_id, d.date_expiration, d.quantity, d.quantity_out, (d.quantity - d.quantity_out) AS remaining_quantity, a.purchase_no FROM achat_details d JOIN achats a ON a.achat_id = d.achat_id AND a.entreprise_id = d.entreprise_id JOIN produits p ON p.produit_id = d.produit_id AND p.entreprise_id = d.entreprise_id WHERE d.entreprise_id = ? AND d.produit_id = ? AND p.est_perisable = 1 AND d.date_expiration IS NOT NULL AND d.quantity > d.quantity_out AND a.movement_type = \'IN\' AND a.status = \'RECEIVED\'';
-        if ($requestedBranch !== null) $sql .= ' AND a.succursale_id = ?';
+        $params = [$enterpriseId, $productId];
+        $sql .= $productOriginCondition('p.succursale_origine_id', $params);
+        if ($requestedBranch !== null) { $sql .= ' AND a.succursale_id = ?'; $params[] = $requestedBranch; }
         $sql .= ' ORDER BY d.date_expiration ASC, d.achat_detail_id ASC';
         $query = $db->prepare($sql);
-        if ($requestedBranch === null) $query->bind_param('ii', $enterpriseId, $productId);
-        else $query->bind_param('iii', $enterpriseId, $productId, $requestedBranch);
+        $bindParams($query, $params);
         $query->execute();
         JsonResponse::send(['success' => true, 'data' => $query->get_result()->fetch_all(MYSQLI_ASSOC)]);
     }
@@ -403,18 +408,13 @@ try {
     }
 
     if ($action === 'cash-cancellation-requests' && $_SERVER['REQUEST_METHOD'] === 'GET') {
-        Authorization::requirePermission($user, 'voir_caisse');
-        if (($user['type'] ?? '') !== 'user' || empty($user['is_company_admin'])) {
-            JsonResponse::error('Accès réservé à l’administrateur de l’entreprise.', 403);
-        }
-        JsonResponse::send(['success' => true, 'data' => $cashMovementService->cancellationRequests($enterpriseId)]);
+        Authorization::requireRequestManagement($user, 'caisse');
+        $requestBranchId = !empty($user['is_branch_admin']) ? (int) $user['succursale_id'] : $branchId;
+        JsonResponse::send(['success' => true, 'data' => $cashMovementService->cancellationRequests($enterpriseId, $requestBranchId)]);
     }
 
     if ($action === 'cash-cancellation-decision' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        Authorization::requirePermission($user, 'modifier_caisse');
-        if (($user['type'] ?? '') !== 'user' || empty($user['is_company_admin'])) {
-            JsonResponse::error('Seul l’administrateur de l’entreprise peut décider de cette demande.', 403);
-        }
+        Authorization::requireRequestManagement($user, 'caisse');
         $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
         $decision = (string) ($body['decision'] ?? '');
         if (!in_array($decision, ['APPROUVER', 'REFUSER'], true)) JsonResponse::error('Choisissez une approbation ou un refus.', 422);
@@ -423,7 +423,8 @@ try {
             (int) ($user['id'] ?? 0),
             (int) ($body['demande_id'] ?? 0),
             $decision === 'APPROUVER',
-            (string) ($body['motif_decision'] ?? '')
+            (string) ($body['motif_decision'] ?? ''),
+            !empty($user['is_branch_admin']) ? (int) $user['succursale_id'] : $branchId
         );
         JsonResponse::send(['success' => true, 'message' => $decision === 'APPROUVER' ? 'Opération de caisse annulée.' : 'Demande refusée.']);
     }
@@ -449,7 +450,7 @@ try {
         Authorization::requireAnyPermission($user,['voir_ventes','creer_ventes']);
         $requested=(int)($_GET['succursale_id']??0);$targetBranch=Authorization::branchId($user,$requested>0?$requested:null);
         if($targetBranch===null){$branchQuery=$db->prepare('SELECT succursale_id FROM succursales WHERE entreprise_id=? ORDER BY est_sucursal_mere DESC,succursale_id LIMIT 1');$branchQuery->bind_param('i',$enterpriseId);$branchQuery->execute();$targetBranch=(int)($branchQuery->get_result()->fetch_assoc()['succursale_id']??0);}
-        $products=$db->prepare('SELECT p.produit_id,p.name,p.sku,p.unit_price,p.monais,p.est_perisable,p.unite_de_mesure,u.name AS unit_name,u.symbole AS unit_symbol,CASE WHEN p.est_perisable=1 THEN COALESCE(lots.available_quantity,0) ELSE COALESCE(st.quantity,0) END AS quantity FROM produits p LEFT JOIN unites_mesure u ON u.unite_mesure_id=p.unite_de_mesure AND u.entreprise_id=p.entreprise_id LEFT JOIN stocks st ON st.produit_id=p.produit_id AND st.entreprise_id=p.entreprise_id AND st.succursale_id=? LEFT JOIN (SELECT a.entreprise_id,a.succursale_id,d.produit_id,SUM(d.quantity-d.quantity_out) AS available_quantity FROM achat_details d JOIN achats a ON a.achat_id=d.achat_id AND a.entreprise_id=d.entreprise_id WHERE a.movement_type=\'IN\' AND a.status=\'RECEIVED\' AND d.date_expiration>=CURDATE() GROUP BY a.entreprise_id,a.succursale_id,d.produit_id) lots ON lots.entreprise_id=p.entreprise_id AND lots.produit_id=p.produit_id AND lots.succursale_id=? WHERE p.entreprise_id=? AND p.is_active=1 ORDER BY p.name');$products->bind_param('iii',$targetBranch,$targetBranch,$enterpriseId);$products->execute();$productRows=$products->get_result()->fetch_all(MYSQLI_ASSOC);
+        $productParams=[$targetBranch,$targetBranch,$enterpriseId];$productSql='SELECT p.produit_id,p.name,p.sku,p.unit_price,p.monais,p.est_perisable,p.unite_de_mesure,u.name AS unit_name,u.symbole AS unit_symbol,CASE WHEN p.est_perisable=1 THEN COALESCE(lots.available_quantity,0) ELSE COALESCE(st.quantity,0) END AS quantity FROM produits p LEFT JOIN unites_mesure u ON u.unite_mesure_id=p.unite_de_mesure AND u.entreprise_id=p.entreprise_id LEFT JOIN stocks st ON st.produit_id=p.produit_id AND st.entreprise_id=p.entreprise_id AND st.succursale_id=? LEFT JOIN (SELECT a.entreprise_id,a.succursale_id,d.produit_id,SUM(d.quantity-d.quantity_out) AS available_quantity FROM achat_details d JOIN achats a ON a.achat_id=d.achat_id AND a.entreprise_id=d.entreprise_id WHERE a.movement_type=\'IN\' AND a.status=\'RECEIVED\' AND d.date_expiration>=CURDATE() GROUP BY a.entreprise_id,a.succursale_id,d.produit_id) lots ON lots.entreprise_id=p.entreprise_id AND lots.produit_id=p.produit_id AND lots.succursale_id=? WHERE p.entreprise_id=? AND p.is_active=1';$productSql.=$productOriginCondition('p.succursale_origine_id',$productParams);$productSql.=' ORDER BY p.name';$products=$db->prepare($productSql);$bindParams($products,$productParams);$products->execute();$productRows=$products->get_result()->fetch_all(MYSQLI_ASSOC);
         $cash=$db->prepare("SELECT c.caisse_id,c.name,t.code AS monais,t.symbole AS currency_symbol,c.montant AS solde_courant FROM caisses c JOIN types_caisses t ON t.type_caisse_id=c.type_caisse_id AND t.entreprise_id=c.entreprise_id WHERE c.entreprise_id=? AND c.succursale_id=? AND c.statut='OUVERTE' ORDER BY c.caisse_id DESC");$cash->bind_param('ii',$enterpriseId,$targetBranch);$cash->execute();$cashRows=$cash->get_result()->fetch_all(MYSQLI_ASSOC);$clients=$db->prepare('SELECT client_id,name FROM clients WHERE entreprise_id=? ORDER BY name');$clients->bind_param('i',$enterpriseId);$clients->execute();$clientRows=$clients->get_result()->fetch_all(MYSQLI_ASSOC);$currencyQuery=$db->prepare('SELECT type_monais AS code FROM tb_monais ORDER BY type_monais');$currencyQuery->execute();$currencyRows=array_column($currencyQuery->get_result()->fetch_all(MYSQLI_ASSOC),'code');
         JsonResponse::send(['success'=>true,'data'=>['succursale_id'=>$targetBranch,'products'=>$productRows,'cashboxes'=>$cashRows,'clients'=>$clientRows,'currencies'=>$currencyRows]]);
     }
@@ -690,8 +691,11 @@ try {
         Authorization::requirePermission($user, 'voir_stock');
         $productId = (int) ($_GET['produit_id'] ?? 0);
         if ($productId < 1) JsonResponse::error('Identifiant produit invalide.', 422);
-        $productQuery = $db->prepare('SELECT p.produit_id, p.sku, p.name, p.unit_price, p.cost_price, p.monais, u.name AS unit_name, u.symbole AS unit_abbreviation FROM produits p LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE p.entreprise_id = ? AND p.produit_id = ? LIMIT 1');
-        $productQuery->bind_param('ii', $enterpriseId, $productId);
+        $productParams = [$enterpriseId, $productId];
+        $productSql = 'SELECT p.produit_id, p.sku, p.name, p.unit_price, p.cost_price, p.monais, u.name AS unit_name, u.symbole AS unit_abbreviation FROM produits p LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE p.entreprise_id = ? AND p.produit_id = ?';
+        $productSql .= $productOriginCondition('p.succursale_origine_id', $productParams) . ' LIMIT 1';
+        $productQuery = $db->prepare($productSql);
+        $bindParams($productQuery, $productParams);
         $productQuery->execute();
         $product = $productQuery->get_result()->fetch_assoc();
         if (!$product) JsonResponse::error('Produit introuvable dans votre entreprise.', 404);
@@ -780,12 +784,20 @@ try {
         $page = max(1, (int) ($_GET['page'] ?? 1));
         $perPage = min(100, max(1, (int) ($_GET['per_page'] ?? 10)));
         $offset = ($page - 1) * $perPage;
-        $countProducts = $db->prepare('SELECT COUNT(*) AS total FROM produits WHERE entreprise_id = ? AND is_active = 1');
-        $countProducts->bind_param('i', $enterpriseId);
+        $countParams = [$enterpriseId];
+        $countSql = 'SELECT COUNT(*) AS total FROM produits WHERE entreprise_id = ? AND is_active = 1';
+        $countSql .= $productOriginCondition('succursale_origine_id', $countParams);
+        $countProducts = $db->prepare($countSql);
+        $bindParams($countProducts, $countParams);
         $countProducts->execute();
         $totalProducts = (int) ($countProducts->get_result()->fetch_assoc()['total'] ?? 0);
-        $productsQuery = $db->prepare('SELECT p.produit_id, p.name, p.sku, p.est_perisable, u.name AS unit_name, u.symbole AS unit_symbol FROM produits p LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE p.entreprise_id = ? AND p.is_active = 1 ORDER BY p.name, p.produit_id LIMIT ? OFFSET ?');
-        $productsQuery->bind_param('iii', $enterpriseId, $perPage, $offset);
+        $productParams = [$enterpriseId];
+        $productSql = 'SELECT p.produit_id, p.name, p.sku, p.est_perisable, u.name AS unit_name, u.symbole AS unit_symbol FROM produits p LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE p.entreprise_id = ? AND p.is_active = 1';
+        $productSql .= $productOriginCondition('p.succursale_origine_id', $productParams) . ' ORDER BY p.name, p.produit_id LIMIT ? OFFSET ?';
+        $productParams[] = $perPage;
+        $productParams[] = $offset;
+        $productsQuery = $db->prepare($productSql);
+        $bindParams($productsQuery, $productParams);
         $productsQuery->execute();
         JsonResponse::send(['success' => true, 'data' => $productsQuery->get_result()->fetch_all(MYSQLI_ASSOC), 'pagination' => ['page' => $page, 'per_page' => $perPage, 'total' => $totalProducts, 'pages' => max(1, (int) ceil($totalProducts / $perPage))]]);
     }
@@ -806,8 +818,11 @@ try {
         }
 
         $productIdList = implode(',', $productIds);
-        $productQuery = $db->prepare('SELECT p.produit_id, p.name, p.sku, p.est_perisable, u.name AS unit_name, u.symbole AS unit_symbol FROM produits p LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE p.entreprise_id = ? AND p.produit_id IN (' . $productIdList . ') ORDER BY p.name');
-        $productQuery->bind_param('i', $enterpriseId);
+        $productParams = [$enterpriseId];
+        $productSql = 'SELECT p.produit_id, p.name, p.sku, p.est_perisable, u.name AS unit_name, u.symbole AS unit_symbol FROM produits p LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE p.entreprise_id = ? AND p.produit_id IN (' . $productIdList . ')';
+        $productSql .= $productOriginCondition('p.succursale_origine_id', $productParams) . ' ORDER BY p.name';
+        $productQuery = $db->prepare($productSql);
+        $bindParams($productQuery, $productParams);
         $productQuery->execute();
         $products = $productQuery->get_result()->fetch_all(MYSQLI_ASSOC);
         if (count($products) !== count($productIds)) JsonResponse::error('Un produit sélectionné ne correspond pas à votre entreprise.', 404);

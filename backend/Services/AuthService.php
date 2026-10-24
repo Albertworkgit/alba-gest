@@ -52,6 +52,55 @@ final class AuthService
         }
     }
 
+    public function enterpriseRegistrationNotificationEmails(): array
+    {
+        $statement = $this->db->prepare('SELECT email FROM super_admin_notification_emails ORDER BY email');
+        $statement->execute();
+        $emails = array_column($statement->get_result()->fetch_all(MYSQLI_ASSOC), 'email');
+
+        $admins = $this->db->query('SELECT email FROM super_admins WHERE is_active = 1');
+        $emails = array_merge($emails, array_column($admins->fetch_all(MYSQLI_ASSOC), 'email'));
+        $emails = array_values(array_unique(array_filter(
+            array_map(static fn ($email): string => strtolower(trim((string) $email)), $emails),
+            static fn (string $email): bool => filter_var($email, FILTER_VALIDATE_EMAIL) !== false
+        )));
+        if ($emails) return $emails;
+
+        $fallback = trim((string) getenv('ALBA_STOCK_NOTIFICATION_EMAIL'));
+        return filter_var($fallback, FILTER_VALIDATE_EMAIL) ? [$fallback] : [];
+    }
+
+    public function setEnterpriseRegistrationNotificationEmails(array $emails): void
+    {
+        $validatedEmails = [];
+        foreach ($emails as $email) {
+            if (!is_string($email)) {
+                throw new RuntimeException('Chaque destinataire doit être une adresse email valide.');
+            }
+            $email = strtolower(trim($email));
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 150) {
+                throw new RuntimeException('Chaque destinataire doit être une adresse email valide (150 caractères maximum).');
+            }
+            $validatedEmails[$email] = $email;
+        }
+        if (!$validatedEmails) throw new RuntimeException('Ajoutez au moins une adresse email destinataire.');
+
+        $this->db->begin_transaction();
+        try {
+            $this->db->query('DELETE FROM super_admin_notification_emails');
+            $statement = $this->db->prepare('INSERT INTO super_admin_notification_emails (email) VALUES (?)');
+            $email = '';
+            $statement->bind_param('s', $email);
+            foreach ($validatedEmails as $email) {
+                $statement->execute();
+            }
+            $this->db->commit();
+        } catch (\Throwable $exception) {
+            $this->db->rollback();
+            throw $exception;
+        }
+    }
+
     public function login(string $emailOrUsername, string $password): array
     {
         return $this->loginUser($emailOrUsername, $password);
@@ -649,6 +698,7 @@ final class AuthService
             'gerer_clients' => ['voir_clients', 'gerer_clients'],
             // Comptabilité : consultation des totaux de ventes et d'approvisionnements.
             'comptabilite' => ['voir_comptabilite', 'creer_comptabilite', 'modifier_comptabilite'],
+            'demandes' => ['gerer_demandes'],
         ];
         $expandedPermissions = [];
         foreach ($permissions as $permission) {
@@ -680,6 +730,7 @@ final class AuthService
             'voir_clients' => ['voir_clients'],
             'gerer_clients' => ['voir_clients', 'gerer_clients'],
             'comptabilite' => ['voir_comptabilite', 'creer_comptabilite', 'modifier_comptabilite'],
+            'demandes' => ['gerer_demandes'],
         ];
         $expanded = [];
         foreach ($permissions as $group) {

@@ -1,13 +1,20 @@
 Configure these variables in Apache, PHP-FPM, or the hosting environment:
 
 ALBA_STOCK_NOTIFICATION_EMAIL=notifications@example.com
-ALBA_STOCK_SMTP_HOST=smtp.example.com
+ALBA_STOCK_SMTP_HOST=smtp.gmail.com
 ALBA_STOCK_SMTP_PORT=587
 ALBA_STOCK_SMTP_ENCRYPTION=tls
-ALBA_STOCK_SMTP_USERNAME=notifications@example.com
-ALBA_STOCK_SMTP_PASSWORD=replace-with-a-secret
-ALBA_STOCK_SMTP_FROM=notifications@example.com
-ALBA_STOCK_SMTP_FROM_NAME=ALBA-STOCK
+ALBA_STOCK_SMTP_USERNAME=your-gmail-address@gmail.com
+ALBA_STOCK_SMTP_PASSWORD=your-16-character-google-app-password
+ALBA_STOCK_SMTP_FROM=your-gmail-address@gmail.com
+ALBA_STOCK_SMTP_FROM_NAME=ALBA-GEST
 
 Do not commit real credentials. The notification recipient is deliberately
 configured separately from super-administrator account addresses.
+
+For Gmail, use a Google app password (not your regular Google password). Enable
+2-Step Verification on the Google account before generating an app password.
+The SMTP username and From address must be the Gmail account that owns the app
+password. Active super-administrator account addresses and any additional
+addresses configured in the super-admin notification settings receive the
+registration notification.

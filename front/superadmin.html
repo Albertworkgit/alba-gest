@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Super administration | ALBA-STOCK</title>
+  <title>Super administration | ALBA-GEST</title>
   <link rel="stylesheet" href="styles.css?v=20261011-ui-polish-2">
   <link rel="stylesheet" href="crud-actions.css?v=20261011-ui-polish-2">
   <style>
@@ -13,22 +13,34 @@
   <style>
     body{margin:0;background:#f5f7f3;color:#1d2926}.admin-top{height:66px;background:#183b35;color:#fff;padding:0 4%;display:flex;justify-content:space-between;align-items:center}.admin-top strong{font:700 20px 'Space Grotesk'}.logout,.currency-submit{background:#f07f5f;color:#fff;border:0;padding:10px 14px;border-radius:6px;font-weight:700;cursor:pointer}.admin-shell{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:calc(100vh - 66px)}.admin-sidebar{background:#183b35;color:#d8e8e3;padding:28px 16px;display:flex;flex-direction:column;gap:8px}.admin-sidebar-label{margin:0 12px 10px;color:#89aaa1;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;font-weight:700}.admin-nav-item{width:100%;padding:12px;border:0;border-radius:7px;background:transparent;color:#aac3bd;text-align:left;font:600 13px 'DM Sans',sans-serif;cursor:pointer}.admin-nav-item:hover,.admin-nav-item.active{background:#2a5e54;color:#fff}.admin-nav-item span{display:inline-block;width:28px;font-size:17px}.admin-content{width:100%;max-width:1250px;margin:0 auto;padding:38px 4%}.admin-heading{margin-bottom:24px}.admin-heading h1{font:600 32px 'Space Grotesk';margin:0}.admin-heading p,.admin-panel>p{color:#73807b}.admin-view[hidden]{display:none}.admin-panel{background:#fff;border:1px solid #e6ebe7;border-radius:10px;padding:22px;margin-top:18px;overflow:auto}.admin-panel h2{margin:0;font:600 20px 'Space Grotesk'}.currency-form{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:18px 0}.currency-form label{display:flex;flex-direction:column;gap:6px;color:#51615b;font-size:12px;font-weight:700}.currency-form input{min-width:180px;padding:10px;border:1px solid #e6ebe7;border-radius:6px;font:inherit}.admin-table{width:100%;border-collapse:collapse;min-width:520px}.admin-table th,.admin-table td{padding:13px;text-align:left;border-bottom:1px solid #edf1ee;font-size:12px}.admin-table th{font-size:10px;color:#73807b;text-transform:uppercase}.status-button{border:0;border-radius:6px;padding:8px 10px;font-weight:700;font-size:11px;cursor:pointer}.activate{background:#dcefe8;color:#147c70}.deactivate{background:#fde8e4;color:#bb5149}.admin-message{position:fixed;right:20px;bottom:20px;background:#183b35;color:#fff;padding:12px 15px;border-radius:6px;display:none;z-index:5}.admin-message.visible{display:block}@media(max-width:700px){.admin-shell{grid-template-columns:1fr}.admin-sidebar{padding:12px;display:flex;flex-direction:row;overflow:auto}.admin-sidebar-label{display:none}.admin-nav-item{white-space:nowrap;width:auto}.admin-content{padding:25px 16px}.admin-heading h1{font-size:27px}}
   </style>
+  <link rel="stylesheet" href="component-polish.css?v=20261024-alba-gest-brand">
 </head>
 <body>
-  <header class="admin-top"><strong>ALBA-STOCK · Super administration</strong><button class="logout" id="logout">Se déconnecter</button></header>
+  <header class="admin-top"><strong>ALBA-GEST · Super administration</strong><button class="logout" id="logout">Se déconnecter</button></header>
   <div class="admin-shell">
     <aside class="admin-sidebar" aria-label="Menu super administrateur">
       <p class="admin-sidebar-label">Administration</p>
       <button class="admin-nav-item active" type="button" data-admin-view="enterprises"><span>▦</span>Entreprises</button>
+      <button class="admin-nav-item" type="button" data-admin-view="notifications"><span>✉</span>Notifications email</button>
       <button class="admin-nav-item" type="button" data-admin-view="super-admins"><span>♙</span>Super administrateurs</button>
       <button class="admin-nav-item" type="button" data-admin-view="modules"><span>◈</span>Droits des modules</button>
       <button class="admin-nav-item" type="button" data-admin-view="currencies"><span>¤</span>Monnaies</button>
       <button class="admin-nav-item" type="button" data-admin-view="profile"><span>♙</span>Mon profil</button>
     </aside>
     <main class="admin-content">
-      <header class="admin-heading"><h1 id="admin-page-title">Gestion des entreprises</h1><p id="admin-page-description">Activez ou désactivez les comptes inscrits sur la plateforme.</p></header>
+      <header class="admin-heading"><h1 id="admin-page-title">Gestion des entreprises</h1><p id="admin-page-description">Configurez les notifications et gérez les comptes inscrits sur la plateforme.</p></header>
       <section class="admin-view" id="admin-view-enterprises">
         <div class="admin-panel"><table class="admin-table"><thead><tr><th>Entreprise</th><th>Email</th><th>Date</th><th>Statut</th><th>Action</th><th>Succursales (actuelles / maximum)</th><th>Modules</th><th>Suppression</th></tr></thead><tbody id="enterprise-list"><tr><td colspan="8">Chargement…</td></tr></tbody></table></div>
+      </section>
+      <section class="admin-view" id="admin-view-notifications" hidden>
+        <div class="admin-panel">
+          <h2>Destinataires des demandes d’entreprise</h2>
+          <p>Les super-administrateurs actifs reçoivent automatiquement un email lorsqu’une nouvelle entreprise demande un compte. Ajoutez ci-dessous d’autres destinataires, une adresse par ligne. Il s’agit d’un email d’information, sans code OTP. La configuration SMTP reste gérée côté serveur.</p>
+          <form id="registration-notification-form" class="currency-form">
+            <label>Adresses email destinataires<textarea name="emails" id="registration-notification-emails" rows="5" maxlength="5000" autocomplete="off" required style="min-width:280px;max-width:100%;padding:10px;border:1px solid #e6ebe7;border-radius:6px;font:inherit"></textarea></label>
+            <button class="currency-submit" type="submit">Enregistrer les destinataires</button>
+          </form>
+        </div>
       </section>
       <section class="admin-view" id="admin-view-super-admins" hidden>
         <div class="admin-panel">
@@ -107,7 +119,7 @@
   </div>
   <div class="admin-message" id="admin-message" role="status"></div>
   <script src="password-toggle.js?v=20261011-ui-polish-2"></script>
-  <script src="interface-language.js"></script>
-  <script src="superadmin.js?v=9"></script>
+  <script src="interface-language.js?v=20261024-interface-navigation"></script>
+  <script src="superadmin.js?v=11"></script>
 </body>
 </html>

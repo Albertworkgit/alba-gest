@@ -42,6 +42,8 @@
     ["Centre de support", "Support center", "Kituo cha msaada", "Esika ya lisalisi", "Esika y'obuyambi"],
     ["Rechercher", "Search", "Tafuta", "Luka", "Londera"],
     ["Thème", "Theme", "Mandhari", "Motindo", "Endabika"],
+    ["Dans ce module", "In this module", "Katika moduli hii", "Na module oyo", "Mu module eri"],
+    ["Vue générale", "Overview", "Muhtasari", "Botali ya mobimba", "Okulengera hamwe"],
     ["Mode clair", "Light mode", "Mwanga", "Polele", "Omusana"],
     ["Mode sombre", "Dark mode", "Giza", "Molili", "Omwirima"],
     ["Automatique", "Automatic", "Kiotomatiki", "Na ndenge ya masini", "Eky'obwangu"],
@@ -102,9 +104,9 @@
     ["Téléphone", "Phone", "Simu", "Telefone", "Telefone"],
     ["Thème activé", "Theme enabled", "Mandhari imewashwa", "Motindo efungwami", "Endabika ekole"],
     ["Langue d’affichage", "Display language", "Lugha ya kuonyesha", "Lokota ya kolakisa", "Olulimi olw'okulaga"],
-    ["Connexion | ALBA-STOCK", "Sign in | ALBA-STOCK", "Ingia | ALBA-STOCK", "Kota | ALBA-STOCK", "Injira | ALBA-STOCK"],
-    ["Créer une entreprise | ALBA-STOCK", "Create a company | ALBA-STOCK", "Unda kampuni | ALBA-STOCK", "Sala kompanyi | ALBA-STOCK", "Kola ekitongole | ALBA-STOCK"],
-    ["Super administration | ALBA-STOCK", "Super administration | ALBA-STOCK", "Usimamizi mkuu | ALBA-STOCK", "Bokonzi monene | ALBA-STOCK", "Obulongozi obukulu | ALBA-STOCK"],
+    ["Connexion | ALBA-GEST", "Sign in | ALBA-GEST", "Ingia | ALBA-GEST", "Kota | ALBA-GEST", "Injira | ALBA-GEST"],
+    ["Créer une entreprise | ALBA-GEST", "Create a company | ALBA-GEST", "Unda kampuni | ALBA-GEST", "Sala kompanyi | ALBA-GEST", "Kola ekitongole | ALBA-GEST"],
+    ["Super administration | ALBA-GEST", "Super administration | ALBA-GEST", "Usimamizi mkuu | ALBA-GEST", "Bokonzi monene | ALBA-GEST", "Obulongozi obukulu | ALBA-GEST"],
     ["DÉMARREZ SIMPLEMENT", "GET STARTED EASILY", "ANZA KWA URAHISI", "BANDA NA LOLENGE YA PETEE", "TANDIKA MU BWANGU"],
     ["Une gestion plus claire,", "Clearer management,", "Usimamizi ulio wazi zaidi,", "Bokonzi ya polele koleka,", "Obulongozi obulengefu,"],
     ["dès aujourd’hui.", "starting today.", "kuanzia leo.", "kobanda lelo.", "okuva leero."],
@@ -119,7 +121,7 @@
     ["Votre demande a été enregistrée. Le super administrateur doit activer votre entreprise.", "Your request has been submitted. A super administrator must activate your company.", "Ombi lako limetumwa. Msimamizi mkuu lazima awashe kampuni yako.", "Bosengi na yo etindami. Mokambi monene asengeli kofungola kompanyi na yo.", "Obusabe bwo butumiddwa. Omukulu asaanidde okufungula ekitongole kyo."],
     ["Nom de l’entreprise", "Company name", "Jina la kampuni", "Kombo ya kompanyi", "Erina ly'ekitongole"],
     ["Email ou nom d’utilisateur", "Email or username", "Barua pepe au jina la mtumiaji", "Email to kombo ya mosaleli", "Email oba erina ly'omukozesa"],
-    ["ALBA-STOCK · Gestion de stock", "ALBA-STOCK · Inventory management", "ALBA-STOCK · Usimamizi wa hifadhi", "ALBA-STOCK · Bokonzi ya stock", "ALBA-STOCK · Obulongozi bwa stock"],
+    ["ALBA-GEST · Gestion de stock", "ALBA-GEST · Inventory management", "ALBA-GEST · Usimamizi wa hifadhi", "ALBA-GEST · Bokonzi ya stock", "ALBA-GEST · Obulongozi bwa stock"],
     ["NOUVEAUTÉS", "WHAT'S NEW", "HABARI MPYA", "MAKAMBO YA SIKA", "EBIPYA"],
     ["Les dernières améliorations", "Latest improvements", "Maboresho ya hivi karibuni", "Bobongisi ya sika", "Ebikyusiddwa ebipya"],
     ["Des outils conçus pour rendre votre gestion plus claire et plus fiable.", "Tools designed to make your management clearer and more reliable.", "Zana zilizoundwa kufanya usimamizi wako uwe wazi na wa kuaminika zaidi.", "Bisaleli ebongisami mpo na kosala ete bokonzi na yo ezala polele mpe ya kotyela motema.", "Ebikozesebwa okukola obulongozi bwo obulengefu era obwesigwa."],
@@ -196,6 +198,51 @@
     ["Paramètres", "Settings", "Mipangilio", "Bobongisi", "Ebitegekanisibwa"],
     ["Gestion des utilisateurs", "User management", "Usimamizi wa watumiaji", "Bokonzi ya basaleli", "Obulongozi bw'abakozesa"],
     ["Accès limité à votre succursale.", "Access limited to your branch.", "Ufikiaji umewekewa tawi lako.", "Kokota kaka na filiale na yo.", "Okuyingira kukoma ku tabi lyo."],
+    ["ALBA-GEST | Pilotage intelligent", "ALBA-GEST | Smart business management", "ALBA-GEST | Usimamizi mahiri wa biashara", "ALBA-GEST | Bokonzi ya mayele ya mombongo", "ALBA-GEST | Obulongozi bw'obusuubuzi obw'amagezi"],
+    ["Bonjour, ", "Hello, ", "Habari, ", "Mbote, ", "Mwasuze mutya, "],
+    ["voici votre activité.", "here is your business overview.", "hizi hapa shughuli zako.", "talá misala na yo.", "laba emirimo gyo."],
+    ["Indicateurs calculés depuis les données de votre entreprise.", "Metrics calculated from your company data.", "Vipimo vilivyokokotolewa kutoka data ya kampuni yako.", "Baindicateur etangami uta na ba données ya kompanyi na yo.", "Ebiraga ebibaliddwa okuva mu data y'ekitongole kyo."],
+    ["Votre stock, ", "Your inventory, ", "Hifadhi yako, ", "Stock na yo, ", "Ebintu byo, "],
+    ["toujours maîtrisé.", "always under control.", "inadhibitiwa kila wakati.", "ezali ntango nyonso na bokonzi.", "biri mu bulongozi bulungi."],
+    ["Suivez les niveaux et les alertes de vos produits.", "Track your product levels and alerts.", "Fuatilia viwango na tahadhari za bidhaa zako.", "Landela motango ya biloko mpe makebisi na yango.", "Londoola obungi bw'ebintu byo n'okulabula kwabyo."],
+    ["Vos ", "Your ", " ", " ", " "],
+    ["ventes.", "sales.", "mauzo yako.", "boteki na yo.", "eby'obutunzi byo."],
+    ["Créez des factures multi-produits avec remise et suivi des lots.", "Create multi-product invoices with discounts and batch tracking.", "Tengeneza ankara za bidhaa nyingi zenye punguzo na ufuatiliaji wa makundi.", "Sala ba facture ya biloko mingi na réduction mpe bolandi ya ba lot.", "Kola invoice ez'ebintu ebingi nga zirina ekisa n'okulondoola ebibinja."],
+    ["caisses.", "cash registers.", "makasha yako.", "bakasa na yo.", "bakasa zo."],
+    ["Ouvrez, suivez et clôturez les caisses de vos succursales.", "Open, monitor, and close your branch cash registers.", "Fungua, fuatilia na funga makasha ya matawi yako.", "Fungola, landela mpe kangá bakasa ya bafiliale na yo.", "Ggulawo, londoola era oggalewo bakasa z'amatabi go."],
+    ["COMPTABILITÉ SYSCOHADA", "SYSCOHADA ACCOUNTING", "UHASIBU WA SYSCOHADA", "MOKOMISI SYSCOHADA", "EBIBALO BYA SYSCOHADA"],
+    ["états financiers.", "financial statements.", "taarifa za fedha.", "raporo ya mosolo.", "ebibalo bya mali."],
+    ["Consultez les états à partir des écritures comptables validées.", "Review statements based on validated accounting entries.", "Angalia taarifa kulingana na maingizo ya uhasibu yaliyothibitishwa.", "Talá ba rapport oyo euti na ba écritures ya mokomisi endimami.", "Kebera ebibalo ebiva mu biwandiiko by'ebyensimbi ebikkiriziddwa."],
+    ["GESTION DES ACCÈS", "ACCESS MANAGEMENT", "USIMAMIZI WA UFIKIAJI", "BOKONZI YA KOKOTA", "OBULONGOZI BW'OKUYINGIRA"],
+    ["Les bonnes personnes, ", "The right people, ", "Watu sahihi, ", "Bato oyo babongi, ", "Abantu abatuufu, "],
+    ["les bons accès.", "the right access.", "ufikiaji sahihi.", "nzela oyo ebongi.", "n'obuyingizi obutuufu."],
+    ["Gérez les comptes utilisateurs et leurs droits d’accès.", "Manage user accounts and their access permissions.", "Simamia akaunti za watumiaji na ruhusa zao za ufikiaji.", "Tala ba compte ya basaleli mpe ndingisa na bango ya kokota.", "Ddukanya akawunti z'abakozesa n'obuyinza bwabwe obw'okuyingira."],
+    ["Succursales enregistrées dans la base de données.", "Branches registered in the database.", "Matawi yaliyosajiliwa kwenye hifadhidata.", "Bafiliale ekomami na base de données.", "Amatabi agawandiikiddwa mu database."],
+    ["Clients enregistrés dans la base de données.", "Customers registered in the database.", "Wateja waliosajiliwa kwenye hifadhidata.", "Bakiliya bakomami na base de données.", "Bakiliya abawandiikiddwa mu database."],
+    ["Examinez et traitez les demandes transmises à votre entreprise.", "Review and process requests sent to your company.", "Kagua na uchakate maombi yaliyotumwa kwa kampuni yako.", "Talá mpe salá makambo ya bansengi batindeli kompanyi na yo.", "Kebera era okole ku busabe obutumiddwa eri ekitongole kyo."],
+    ["Votre ", "Your ", " ", " ", " "],
+    ["entreprise.", "company.", "kampuni yako.", "kompanyi na yo.", "ekitongole kyo."],
+    ["Modifiez votre profil et votre mot de passe.", "Update your profile and password.", "Badilisha wasifu na nenosiri lako.", "Bongola profil na yo mpe mot de passe.", "Kyusa profili yo n'akabiri ko."],
+    ["Enregistrez les entrées et sorties de stock fournisseur.", "Record stock received from and returned to suppliers.", "Rekodi bidhaa zinazoingia kutoka kwa wasambazaji na zinazorejeshwa.", "Komá biloko oyo ekoti mpe ebimi epai ya bapesi biloko.", "Wandiika ebintu ebiyingira okuva eri abagaba n'ebiddizibwa."],
+    ["Gestion des entreprises", "Company management", "Usimamizi wa kampuni", "Bokonzi ya bakompanyi", "Obulongozi bw'ebitongole"],
+    ["Activez ou désactivez les comptes inscrits sur la plateforme.", "Activate or deactivate accounts registered on the platform.", "Washa au zima akaunti zilizosajiliwa kwenye mfumo.", "Fungola to kangá ba compte oyo bakomami na plateforme.", "Fungula oba zikiza akawunti eziwandiisiddwa ku mukutu."],
+    ["Notifications email", "Email notifications", "Arifa za barua pepe", "Mayebisi ya email", "Obubaka bwa email"],
+    ["Gérez les adresses qui reçoivent les nouvelles demandes de création d’entreprise.", "Manage the addresses that receive new company registration requests.", "Simamia anwani zinazopokea maombi mapya ya usajili wa kampuni.", "Tala ba adresse oyo bazwaka bansengi ya sika ya bokomi ya kompanyi.", "Ddukanya endagiriro ezifuna obusabe obupya obw'okuwandiisa ekitongole."],
+    ["Super administrateurs", "Super administrators", "Wasimamizi wakuu", "Bakambi minene", "Abakulira abakulu"],
+    ["Créez et consultez les comptes de super administration.", "Create and view super administrator accounts.", "Unda na uangalie akaunti za wasimamizi wakuu.", "Sala mpe tala ba compte ya bakambi minene.", "Kola era olabe akawunti z'abakulira abakulu."],
+    ["Droits des modules", "Module permissions", "Ruhusa za moduli", "Ndingisa ya ba module", "Obuyinza bw'ebitundu"],
+    ["Définissez les modules accessibles à chaque entreprise.", "Set which modules each company can access.", "Weka moduli ambazo kila kampuni inaweza kutumia.", "Poná ba module oyo kompanyi moko na moko akoki kosalela.", "Tegeka ebitundu buli kitongole bye kiyinza okukozesa."],
+    ["Monnaies disponibles", "Available currencies", "Sarafu zinazopatikana", "Ba mbongo oyo ezali", "Ssente eziriwo"],
+    ["Gérez les monnaies proposées lors de la création des produits.", "Manage the currencies offered when creating products.", "Simamia sarafu zinazotolewa wakati wa kuunda bidhaa.", "Tala ba mbongo oyo epesamaka ntango ya kosala biloko.", "Ddukanya ssente eziteekebwawo ng'ebintu bikolebwa."],
+    ["Mon profil", "My profile", "Wasifu wangu", "Profil na ngai", "Profili yange"],
+    ["Modifiez votre identité et votre mot de passe super administrateur.", "Update your super administrator identity and password.", "Badilisha utambulisho na nenosiri lako la msimamizi mkuu.", "Bongola kombo mpe mot de passe na yo ya mokambi monene.", "Kyusa erinnya lyo n'akabiri k'omukulu."],
+    ["Formulaire de connexion", "Sign-in form", "Fomu ya kuingia", "Formulaire ya kokota", "Foomu y'okuyingira"],
+    ["Votre mot de passe", "Your password", "Nenosiri lako", "Mot de passe na yo", "Akabiri ko"],
+    ["Vous n’avez pas encore d’espace ?", "Don’t have a workspace yet?", "Bado huna nafasi ya kazi?", "Ozali naino na esika te?", "Tonnafuna kifo ky'emirimo?"],
+    ["Afficher le mot de passe", "Show password", "Onyesha nenosiri", "Lakisa mot de passe", "Laga akabiri"],
+    ["Masquer le mot de passe", "Hide password", "Ficha nenosiri", "Bomba mot de passe", "Kweka akabiri"],
+    ["ACHATS", "PURCHASES", "UNUNUZI", "BOSOMBI", "OKUGULA"],
+    ["RELATION CLIENT", "CUSTOMER RELATIONS", "UHUSIANO NA WATEJA", "BOYOKANI NA BAKILIYA", "ENKOLAGANA N'ABAKILIYA"],
   ];
   const translations = Object.fromEntries(rows.map(([fr, en, sw, ln, kn]) => [
     fr,
@@ -205,17 +252,26 @@
   const sourceAttributes = new WeakMap();
   let language = localStorage.getItem('westock-language') || 'fr';
 
-  function translateText(node) {
-    const original = sourceText.get(node) ?? node.nodeValue;
-    sourceText.set(node, original);
+  function translatedValue(original) {
+    if (language === 'fr') return original;
     const key = original.trim();
-    if (!key) return;
-    const replacement = language === 'fr' ? key : translations[key]?.[language];
-    if (!replacement) {
-      if (language === 'fr' && node.nodeValue !== original) node.nodeValue = original;
-      return;
+    if (!key) return original;
+    const exactReplacement = translations[original]?.[language];
+    const replacement = exactReplacement ?? translations[key]?.[language];
+    if (replacement) return exactReplacement !== undefined ? replacement : original.replace(key, replacement);
+    const prefixedAction = original.match(/^(\s*[+＋]\s*)(.+)$/);
+    if (prefixedAction) {
+      const translatedAction = translatedValue(prefixedAction[2]);
+      if (translatedAction !== prefixedAction[2]) return `${prefixedAction[1]}${translatedAction}`;
     }
-    const translated = original.replace(key, replacement);
+    return original;
+  }
+
+  function translateText(node) {
+    const state = sourceText.get(node);
+    const original = state && node.nodeValue === state.rendered ? state.original : node.nodeValue;
+    const translated = translatedValue(original);
+    sourceText.set(node, {original, rendered: translated});
     if (node.nodeValue !== translated) node.nodeValue = translated;
   }
 
@@ -224,22 +280,24 @@
     const textNodes = [];
     while (walker.nextNode()) textNodes.push(walker.currentNode);
     textNodes.forEach(translateText);
-    for (const attribute of ['placeholder', 'title', 'aria-label']) {
-      if (!element.hasAttribute(attribute)) continue;
-      let originals = sourceAttributes.get(element);
-      if (!originals) {
-        originals = {};
-        sourceAttributes.set(element, originals);
-      }
-      const original = originals[attribute] ?? element.getAttribute(attribute);
-      originals[attribute] = original;
-      const key = original.trim();
-      const replacement = language === 'fr' ? key : translations[key]?.[language];
-      if (replacement) {
-        const translated = original.replace(key, replacement);
-        if (element.getAttribute(attribute) !== translated) element.setAttribute(attribute, translated);
-      } else if (language === 'fr' && element.getAttribute(attribute) !== original) {
-        element.setAttribute(attribute, original);
+    const attributeElements = [
+      ...(element.matches?.('[placeholder], [title], [aria-label]') ? [element] : []),
+      ...element.querySelectorAll('[placeholder], [title], [aria-label]'),
+    ];
+    for (const attributeElement of attributeElements) {
+      for (const attribute of ['placeholder', 'title', 'aria-label']) {
+        if (!attributeElement.hasAttribute(attribute)) continue;
+        let states = sourceAttributes.get(attributeElement);
+        if (!states) {
+          states = {};
+          sourceAttributes.set(attributeElement, states);
+        }
+        const state = states[attribute];
+        const current = attributeElement.getAttribute(attribute);
+        const original = state && current === state.rendered ? state.original : current;
+        const translated = translatedValue(original);
+        states[attribute] = {original, rendered: translated};
+        if (current !== translated) attributeElement.setAttribute(attribute, translated);
       }
     }
   }
@@ -253,9 +311,10 @@
       select.value = language;
     });
     translateElement(document.body);
+    const originalTitle = document.body.dataset.originalTitle || document.title;
     document.title = language === 'fr'
-      ? (document.body.dataset.originalTitle || document.title)
-      : (translations[document.body.dataset.originalTitle || document.title]?.[language] || document.title);
+      ? originalTitle
+      : translatedValue(originalTitle);
   }
 
   function addLanguageSelector() {
@@ -295,13 +354,21 @@
   const observer = new MutationObserver(records => {
     records.forEach(record => {
       if (record.type === 'characterData') translateText(record.target);
+      if (record.type === 'attributes') translateElement(record.target);
       record.addedNodes?.forEach(node => {
         if (node.nodeType === Node.TEXT_NODE) translateText(node);
         else if (node.nodeType === Node.ELEMENT_NODE) translateElement(node);
       });
     });
   });
-  observer.observe(document.body, {subtree: true, childList: true, characterData: true});
+  observer.observe(document.body, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['placeholder', 'title', 'aria-label'],
+  });
   window.setInterfaceLanguage = applyLanguage;
+  window.translateInterface = (root = document.body) => translateElement(root);
   window.getInterfaceLanguage = () => language;
 })();

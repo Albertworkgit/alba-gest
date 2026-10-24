@@ -2,8 +2,12 @@
 declare(strict_types=1);
 
 namespace AlbaStock\Services;
+
+require_once __DIR__ . '/../Core/Authorization.php';
+
 use mysqli;
 use RuntimeException;
+use AlbaStock\Core\Authorization;
 
 final class SalesService
 {
@@ -26,7 +30,7 @@ final class SalesService
             $prepared=[];$currencyTotals=[];
             foreach($lines as $line){$productId=(int)($line['produit_id']??0);$quantity=(int)($line['quantity']??0);$discountEnabled=!empty($line['discount_enabled']);$discount=(float)($discountEnabled?($line['discount_amount']??0):0);
                 if($productId<1||$quantity<1||!is_finite($discount)||$discount<0)throw new RuntimeException('Vérifiez les produits, quantités et réductions.');
-                $product=$this->db->prepare('SELECT produit_id,name,sku,unit_price,monais,est_perisable FROM produits WHERE produit_id=? AND entreprise_id=? AND is_active=1 LIMIT 1');$product->bind_param('ii',$productId,$enterprise);$product->execute();$p=$product->get_result()->fetch_assoc();if(!$p)throw new RuntimeException('Un produit choisi est introuvable ou inactif.');
+                $product=$this->db->prepare('SELECT produit_id,name,sku,unit_price,monais,est_perisable,succursale_origine_id FROM produits WHERE produit_id=? AND entreprise_id=? AND is_active=1 LIMIT 1');$product->bind_param('ii',$productId,$enterprise);$product->execute();$p=$product->get_result()->fetch_assoc();if(!$p)throw new RuntimeException('Un produit choisi est introuvable ou inactif.');if(!Authorization::canUseProductFromBranch($actor,(int)$p['succursale_origine_id']))throw new RuntimeException('Accès limité à votre succursale : ce produit n’est pas accessible.');
                 $productCurrency=(string)$p['monais'];
                 $isPerishable=(int)$p['est_perisable']===1;$stock=$this->db->prepare('SELECT quantity FROM stocks WHERE entreprise_id=? AND succursale_id=? AND produit_id=? FOR UPDATE');$stock->bind_param('iii',$enterprise,$branch,$productId);$stock->execute();$stockRow=$stock->get_result()->fetch_assoc();$before=(int)($stockRow['quantity']??0);
                 if($isPerishable){$lotStock=$this->db->prepare("SELECT COALESCE(SUM(CASE WHEN d.date_expiration>=CURDATE() THEN d.quantity-d.quantity_out ELSE 0 END),0) AS available_quantity,COALESCE(SUM(d.quantity-d.quantity_out),0) AS on_hand_quantity FROM achat_details d JOIN achats a ON a.achat_id=d.achat_id AND a.entreprise_id=d.entreprise_id WHERE d.entreprise_id=? AND d.produit_id=? AND a.succursale_id=? AND a.movement_type='IN' AND a.status='RECEIVED'");$lotStock->bind_param('iii',$enterprise,$productId,$branch);$lotStock->execute();$lotStockRow=$lotStock->get_result()->fetch_assoc()?:[];if((int)($lotStockRow['available_quantity']??0)<$quantity)throw new RuntimeException('Stock insuffisant dans les lots non expirés de '.$p['name'].'.');$before=(int)($lotStockRow['on_hand_quantity']??0);}elseif($before<$quantity)throw new RuntimeException('Stock insuffisant pour '.$p['name'].'.');

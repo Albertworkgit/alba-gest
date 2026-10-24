@@ -331,23 +331,31 @@ final class AccountingService
         }
     }
 
-    public function entryCancellationRequests(int $enterpriseId): array
+    public function entryCancellationRequests(int $enterpriseId, ?int $branchId = null): array
     {
-        $query = $this->db->prepare('SELECT r.demande_id,r.ecriture_id,r.motif,r.created_at,e.date_ecriture,e.journal_code,e.reference,e.libelle,e.monnaie,u.full_name AS demandeur FROM demandes_annulation_ecritures r JOIN ecritures_comptables e ON e.ecriture_id=r.ecriture_id AND e.entreprise_id=r.entreprise_id LEFT JOIN users u ON u.user_id=r.demandeur_id WHERE r.entreprise_id=? AND r.statut=\'EN_ATTENTE\' ORDER BY r.created_at,r.demande_id');
-        $query->bind_param('i', $enterpriseId);
+        $sql = 'SELECT r.demande_id,r.ecriture_id,r.motif,r.created_at,e.date_ecriture,e.journal_code,e.reference,e.libelle,e.monnaie,u.full_name AS demandeur FROM demandes_annulation_ecritures r JOIN ecritures_comptables e ON e.ecriture_id=r.ecriture_id AND e.entreprise_id=r.entreprise_id LEFT JOIN users u ON u.user_id=r.demandeur_id AND u.entreprise_id=r.entreprise_id WHERE r.entreprise_id=? AND r.statut=\'EN_ATTENTE\'';
+        if ($branchId !== null) $sql .= ' AND u.succursale_id=?';
+        $sql .= ' ORDER BY r.created_at,r.demande_id';
+        $query = $this->db->prepare($sql);
+        if ($branchId === null) $query->bind_param('i', $enterpriseId);
+        else $query->bind_param('ii', $enterpriseId, $branchId);
         $query->execute();
         return $query->get_result()->fetch_all(MYSQLI_ASSOC);
     }
 
-    public function decideEntryCancellation(int $enterpriseId, int $adminId, int $requestId, bool $approve, string $decisionReason = ''): void
+    public function decideEntryCancellation(int $enterpriseId, int $adminId, int $requestId, bool $approve, string $decisionReason = '', ?int $branchId = null): void
     {
         $decisionReason = trim($decisionReason);
         if ($requestId < 1 || mb_strlen($decisionReason, 'UTF-8') > 500) throw new RuntimeException('Décision ou demande invalide.');
 
         $this->db->begin_transaction();
         try {
-            $request = $this->db->prepare('SELECT ecriture_id FROM demandes_annulation_ecritures WHERE entreprise_id=? AND demande_id=? AND statut=\'EN_ATTENTE\' LIMIT 1 FOR UPDATE');
-            $request->bind_param('ii', $enterpriseId, $requestId);
+            $requestSql = 'SELECT r.ecriture_id FROM demandes_annulation_ecritures r LEFT JOIN users u ON u.user_id=r.demandeur_id AND u.entreprise_id=r.entreprise_id WHERE r.entreprise_id=? AND r.demande_id=? AND r.statut=\'EN_ATTENTE\'';
+            if ($branchId !== null) $requestSql .= ' AND u.succursale_id=?';
+            $requestSql .= ' LIMIT 1 FOR UPDATE';
+            $request = $this->db->prepare($requestSql);
+            if ($branchId === null) $request->bind_param('ii', $enterpriseId, $requestId);
+            else $request->bind_param('iii', $enterpriseId, $requestId, $branchId);
             $request->execute();
             $row = $request->get_result()->fetch_assoc();
             if (!$row) throw new RuntimeException('Cette demande est introuvable ou a déjà été traitée.');

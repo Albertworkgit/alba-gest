@@ -8,18 +8,21 @@ use RuntimeException;
 
 final class EmailNotificationService
 {
-    public function sendEnterpriseRegistration(array $registration): void
+    public function sendEnterpriseRegistration(array $registration, array $recipientEmails): void
     {
         $host = trim((string) getenv('ALBA_STOCK_SMTP_HOST'));
-        $recipient = trim((string) getenv('ALBA_STOCK_NOTIFICATION_EMAIL'));
+        $recipients = array_values(array_unique(array_filter(
+            array_map(static fn ($email): string => trim((string) $email), $recipientEmails),
+            static fn (string $email): bool => filter_var($email, FILTER_VALIDATE_EMAIL) !== false
+        )));
         $fromAddress = trim((string) getenv('ALBA_STOCK_SMTP_FROM'));
-        $fromName = trim((string) (getenv('ALBA_STOCK_SMTP_FROM_NAME') ?: 'ALBA-STOCK'));
+        $fromName = trim((string) (getenv('ALBA_STOCK_SMTP_FROM_NAME') ?: 'ALBA-GEST'));
         $username = (string) getenv('ALBA_STOCK_SMTP_USERNAME');
         $password = (string) getenv('ALBA_STOCK_SMTP_PASSWORD');
         $encryption = strtolower(trim((string) (getenv('ALBA_STOCK_SMTP_ENCRYPTION') ?: 'tls')));
         $port = filter_var(getenv('ALBA_STOCK_SMTP_PORT') ?: '587', FILTER_VALIDATE_INT);
 
-        if ($host === '' || !filter_var($recipient, FILTER_VALIDATE_EMAIL)
+        if ($host === '' || !$recipients
             || !filter_var($fromAddress, FILTER_VALIDATE_EMAIL)
             || $port === false || !in_array($encryption, ['tls', 'ssl', 'none'], true)) {
             throw new RuntimeException('La configuration SMTP ou l’adresse de notification est invalide ou incomplète.');
@@ -39,7 +42,10 @@ final class EmailNotificationService
         if ($encryption === 'ssl') $mailer->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
         $mailer->CharSet = PHPMailer::CHARSET_UTF8;
         $mailer->setFrom($fromAddress, $fromName);
-        $mailer->addAddress($recipient);
+        $mailer->addAddress(array_shift($recipients));
+        foreach ($recipients as $recipient) {
+            $mailer->addBCC($recipient);
+        }
 
         $enterpriseName = trim((string) ($registration['enterprise_name'] ?? ''));
         $contactName = trim((string) ($registration['full_name'] ?? ''));
@@ -56,7 +62,7 @@ final class EmailNotificationService
             'Téléphone : ' . ($phone !== '' ? $phone : 'Non renseigné'),
             'Adresse : ' . ($address !== '' ? $address : 'Non renseignée'),
             '',
-            'Connectez-vous à ALBA-STOCK pour examiner et activer cette demande.',
+            'Connectez-vous à ALBA-GEST pour examiner et activer cette demande.',
         ]);
         if (filter_var($contactEmail, FILTER_VALIDATE_EMAIL)) $mailer->addReplyTo($contactEmail, $contactName);
         $mailer->send();

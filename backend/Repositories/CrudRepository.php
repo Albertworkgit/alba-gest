@@ -30,49 +30,54 @@ final class CrudRepository
     }
 
     /** Retourne les lignes de l'entreprise et applique le filtre de succursale s'il existe. */
-    public function all(int $enterpriseId, ?int $branchId = null): array
+    public function all(int $enterpriseId, ?int $branchId = null, ?array $productOrigins = null): array
     {
         $sql = "SELECT * FROM `{$this->table}` WHERE entreprise_id = ?";
+        $values = [$enterpriseId];
         if ($branchId !== null) {
             $sql .= ' AND succursale_id = ?';
+            $values[] = $branchId;
         }
+        $sql .= $this->productOriginCondition($productOrigins, $values);
         $sql .= " ORDER BY `{$this->primaryKey}` DESC";
         $statement = $this->db->prepare($sql);
-        $types = $branchId === null ? 'i' : 'ii';
-        $values = $branchId === null ? [$enterpriseId] : [$enterpriseId, $branchId];
-        $this->bind($statement, $types, $values);
+        $this->bind($statement, $this->types($values), $values);
         $statement->execute();
         return $this->rows($statement);
     }
 
     /** Retourne une page de résultats et le total sans charger toute la table en mémoire. */
-    public function paginate(int $enterpriseId, ?int $branchId, int $page, int $perPage): array
+    public function paginate(int $enterpriseId, ?int $branchId, int $page, int $perPage, ?array $productOrigins = null): array
     {
         $where = ' WHERE entreprise_id = ?';
-        if ($branchId !== null) $where .= ' AND succursale_id = ?';
+        $values = [$enterpriseId];
+        if ($branchId !== null) { $where .= ' AND succursale_id = ?'; $values[] = $branchId; }
+        $where .= $this->productOriginCondition($productOrigins, $values);
         $count = $this->db->prepare("SELECT COUNT(*) AS total FROM `{$this->table}`{$where}");
-        if ($branchId === null) $count->bind_param('i', $enterpriseId);
-        else $count->bind_param('ii', $enterpriseId, $branchId);
+        $this->bind($count, $this->types($values), $values);
         $count->execute();
         $total = (int) ($count->get_result()->fetch_assoc()['total'] ?? 0);
         $offset = ($page - 1) * $perPage;
         $sql = "SELECT * FROM `{$this->table}`{$where} ORDER BY `{$this->primaryKey}` DESC LIMIT ? OFFSET ?";
         $statement = $this->db->prepare($sql);
-        if ($branchId === null) $statement->bind_param('iii', $enterpriseId, $perPage, $offset);
-        else $statement->bind_param('iiii', $enterpriseId, $branchId, $perPage, $offset);
+        $values[] = $perPage;
+        $values[] = $offset;
+        $this->bind($statement, $this->types($values), $values);
         $statement->execute();
         return ['rows' => $this->rows($statement), 'pagination' => ['page' => $page, 'per_page' => $perPage, 'total' => $total, 'pages' => max(1, (int) ceil($total / $perPage))]];
     }
 
     /** Cherche un enregistrement sans jamais sortir du périmètre de l'entreprise/succursale. */
-    public function find(int $enterpriseId, int $id, ?int $branchId = null): ?array
+    public function find(int $enterpriseId, int $id, ?int $branchId = null, ?array $productOrigins = null): ?array
     {
         $sql = "SELECT * FROM `{$this->table}` WHERE entreprise_id = ? AND `{$this->primaryKey}` = ?";
+        $values = [$enterpriseId, $id];
         if ($branchId !== null) $sql .= ' AND succursale_id = ?';
+        if ($branchId !== null) $values[] = $branchId;
+        $sql .= $this->productOriginCondition($productOrigins, $values);
         $sql .= ' LIMIT 1';
         $statement = $this->db->prepare($sql);
-        if ($branchId === null) $statement->bind_param('ii', $enterpriseId, $id);
-        else $statement->bind_param('iii', $enterpriseId, $id, $branchId);
+        $this->bind($statement, $this->types($values), $values);
         $statement->execute();
         $rows = $this->rows($statement);
         $row = $rows[0] ?? null;
@@ -95,7 +100,7 @@ final class CrudRepository
     }
 
     /** Modifie une ligne de l'entreprise et ajoute la succursale autorisée au filtre SQL. */
-    public function update(int $enterpriseId, int $id, array $data, ?int $branchId = null): bool
+    public function update(int $enterpriseId, int $id, array $data, ?int $branchId = null, ?array $productOrigins = null): bool
     {
         $data = $this->filter($data);
         if ($data === []) {
@@ -107,6 +112,7 @@ final class CrudRepository
         $values[] = $id;
         $sql = "UPDATE `{$this->table}` SET {$assignments} WHERE entreprise_id = ? AND `{$this->primaryKey}` = ?";
         if ($branchId !== null) { $sql .= ' AND succursale_id = ?'; $values[] = $branchId; }
+        $sql .= $this->productOriginCondition($productOrigins, $values);
         $statement = $this->db->prepare($sql);
         $this->bind($statement, $this->types($values), $values);
         $statement->execute();
@@ -114,13 +120,14 @@ final class CrudRepository
     }
 
     /** Supprime une ligne seulement dans le périmètre d'accès déterminé par le serveur. */
-    public function delete(int $enterpriseId, int $id, ?int $branchId = null): bool
+    public function delete(int $enterpriseId, int $id, ?int $branchId = null, ?array $productOrigins = null): bool
     {
         $sql = "DELETE FROM `{$this->table}` WHERE entreprise_id = ? AND `{$this->primaryKey}` = ?";
-        if ($branchId !== null) $sql .= ' AND succursale_id = ?';
+        $values = [$enterpriseId, $id];
+        if ($branchId !== null) { $sql .= ' AND succursale_id = ?'; $values[] = $branchId; }
+        $sql .= $this->productOriginCondition($productOrigins, $values);
         $statement = $this->db->prepare($sql);
-        if ($branchId === null) $statement->bind_param('ii', $enterpriseId, $id);
-        else $statement->bind_param('iii', $enterpriseId, $id, $branchId);
+        $this->bind($statement, $this->types($values), $values);
         $statement->execute();
         return $statement->affected_rows > 0;
     }
@@ -134,7 +141,17 @@ final class CrudRepository
                 $data[$phoneField] = PhoneNumberNormalizer::normalize((string) $data[$phoneField]);
             }
         }
+
         return $data;
+    }
+
+    private function productOriginCondition(?array $productOrigins, array &$values): string
+    {
+        if ($productOrigins === null) return '';
+        $productOrigins = array_values(array_unique(array_map('intval', $productOrigins)));
+        if ($productOrigins === []) return ' AND 1 = 0';
+        $values = array_merge($values, $productOrigins);
+        return ' AND succursale_origine_id IN (' . implode(', ', array_fill(0, count($productOrigins), '?')) . ')';
     }
 
     /** Empêche qu'un nom SQL dynamique contienne du code SQL. */

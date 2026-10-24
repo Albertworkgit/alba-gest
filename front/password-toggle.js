@@ -1,6 +1,6 @@
 (() => {
   const addToggle = input => {
-    if (!(input instanceof HTMLInputElement) || input.type !== 'password' || input.dataset.passwordToggleReady) return;
+    if (!(input instanceof HTMLInputElement) || input.type !== 'password' || input.dataset.passwordToggle === 'off' || input.dataset.passwordToggleReady) return;
     const label = input.closest('label');
     if (!label) return;
     input.dataset.passwordToggleReady = 'true';

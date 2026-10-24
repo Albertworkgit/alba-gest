@@ -65,6 +65,7 @@ const viewRoutes = Object.fromEntries(Object.entries(routes).map(([route, view])
 const themeButton = document.getElementById('theme-button');
 const themePanel = document.getElementById('theme-panel');
 const themeChoices = document.querySelectorAll('[data-theme-choice]');
+const mobilePrimaryNavigation = document.getElementById('mobile-primary-nav');
 const themeStorageKey = 'westock-theme';
 let currentViewName = 'dashboard';
 let sessionUser = null;
@@ -81,6 +82,18 @@ function loadTheme() {
 }
 
 function showToast(message = 'Action enregistrée') { toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2200); }
+function showCashConfirmation(message) {
+  const modal = document.createElement('div');
+  modal.className = 'entity-modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-labelledby', 'cash-operation-confirmation-title');
+  modal.innerHTML = `<section class="entity-dialog"><h2 id="cash-operation-confirmation-title">Opération de caisse confirmée</h2><p role="status">${escapeHtml(message)}</p><div class="entity-modal-actions"><button type="button" class="modal-submit">Continuer</button></div></section>`;
+  document.body.appendChild(modal);
+  const continueButton = modal.querySelector('button');
+  continueButton.addEventListener('click', () => modal.remove(), {once: true});
+  continueButton.focus();
+}
 function routeFromHash() {
   const hashRoute = window.location.hash.replace(/^#/, '') || '/';
   return routes[hashRoute] || 'dashboard';
@@ -144,6 +157,7 @@ function renderModuleNavigation() {
     });
   }
   navigation.hidden = false;
+  window.translateInterface?.(navigation);
 }
 function clientRowMarkup(row) {
   const actions = hasAccess('gerer_clients') ? `<button type="button" data-client-edit="${Number(row.client_id)}" aria-label="Modifier ${escapeHtml(row.name)}">Modifier</button> <button type="button" data-client-delete="${Number(row.client_id)}" aria-label="Supprimer ${escapeHtml(row.name)}">Supprimer</button>` : '\u2014';
@@ -185,11 +199,11 @@ function renderView(viewName) {
     const inbox = container.querySelector('[data-accounting-cancellation-inbox]');
     const cashInbox = container.querySelector('[data-cash-cancellation-inbox]');
     const emptyMessage = container.querySelector('[data-no-company-requests]');
-    const isCompanyAdmin = accessRequirementAllowed('company_admin', sessionUser);
-    if (inbox) inbox.hidden = !isCompanyAdmin;
-    if (cashInbox) cashInbox.hidden = !isCompanyAdmin;
-    if (emptyMessage) emptyMessage.hidden = isCompanyAdmin;
-    if (isCompanyAdmin) {
+    const canManageRequests = accessRequirementAllowed('branch_requests', sessionUser);
+    if (inbox) inbox.hidden = !canManageRequests || !hasAccess('voir_comptabilite');
+    if (cashInbox) cashInbox.hidden = !canManageRequests || !hasAccess('voir_caisse');
+    if (emptyMessage) emptyMessage.hidden = !canManageRequests;
+    if (canManageRequests) {
       loadEntryCancellationRequests();
       loadCashMovementCancellationRequests();
     }
@@ -254,6 +268,7 @@ function renderView(viewName) {
   if (viewName === 'branches' && !canSelectCompanyBranches()) action.hidden = true;
   if (viewName === 'users' && !canSelectCompanyBranches()) container.querySelector('[data-create-role]')?.setAttribute('hidden', '');
   renderModuleNavigation();
+  window.translateInterface?.();
   window.scrollTo({top: 0, behavior: 'smooth'});
 }
 const reportableViews = new Set(['dashboard', 'stock', 'sales', 'cash', 'accounting', 'procurement', 'users', 'branches', 'clients', 'branch-dashboard']);
@@ -686,13 +701,13 @@ async function cloneReportContent() {
   return clone.innerHTML;
 }
 function reportDocument(title, content, note = '', orientation = 'portrait') {
-  const enterprise = escapeHtml(sessionUser?.enterprise_name || 'ALBA-STOCK');
+  const enterprise = escapeHtml(sessionUser?.enterprise_name || 'ALBA-GEST');
   const companyDetails = [sessionUser?.enterprise_address, sessionUser?.enterprise_phone && `Tél. : ${sessionUser.enterprise_phone}`, sessionUser?.enterprise_email, sessionUser?.enterprise_rccm && `RCCM : ${sessionUser.enterprise_rccm}`, sessionUser?.enterprise_boite_postale && `BP : ${sessionUser.enterprise_boite_postale}`].filter(Boolean).map(value => `<p>${escapeHtml(value)}</p>`).join('');
   const branch = escapeHtml(currentReportBranch());
   const filters = reportFilterValues();
   const filterSummary = [filters.from && `Du ${formatReportDate(filters.from)}`, filters.to && `au ${formatReportDate(filters.to)}`, filters.search && `Recherche : ${filters.search}`].filter(Boolean).join(' · ');
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · ${enterprise}</title><style>
-    @page{size:${orientation === 'landscape' ? 'A4 landscape' : 'A4'};margin:${orientation === 'landscape' ? '8mm' : '12mm'}}*{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#1d2926;margin:0}header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #147c70;padding-bottom:12px;margin-bottom:18px}h1{font-size:21px;color:#126b5e;margin:0 0 6px}h2{font-size:15px;margin:15px 0 8px}p{margin:4px 0;color:#53635d}.report-table,.data-table{width:100%;border-collapse:collapse;margin:12px 0 18px}.report-table th,.report-table td,.data-table th,.data-table td{border:1px solid #cfd9d3;padding:7px;text-align:left;font-size:10px}.report-table th,.data-table th{background:#eaf3ee;color:#254b42}.report-total-row td{font-weight:800;background:#eaf3ee;border-top:2px solid #147c70}.panel,.stat-card{border:0;box-shadow:none;padding:0;margin:10px 0}.dashboard-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.stat-card{border:1px solid #d9e3dd;padding:10px}.stat-label{display:block;font-size:10px;color:#53635d}.stat-value{font-size:17px;font-weight:bold;margin-top:5px}.status{border:1px solid #ccd8d1;padding:2px 5px}.empty-note{padding:10px;color:#53635d}.report-note{font-size:10px;color:#73807b;margin-top:12px}.report-company-footer{text-align:center;font-size:8px;color:#73807b;margin-top:20px}.signature-row{display:flex;justify-content:space-between;gap:30px;margin-top:38px}.signature-row div{width:42%;border-top:1px solid #697972;padding-top:6px;font-size:10px}.print-controls{position:sticky;top:0;background:#fff;padding:10px;text-align:right;border-bottom:1px solid #ddd}.print-controls button{border:0;border-radius:5px;padding:9px 14px;margin-left:6px;background:#147c70;color:#fff;font-weight:bold;cursor:pointer}@media print{.print-controls{display:none}}
+    @page{size:${orientation === 'landscape' ? 'A4 landscape' : 'A4'};margin:${orientation === 'landscape' ? '8mm' : '12mm'}}*{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#1d2926;margin:0}        @page{size:${orientation === 'landscape' ? 'A4 landscape' : 'A4'};margin:${orientation === 'landscape' ? '8mm' : '12mm'}}*{box-sizing:border-box}body{font:12px Arial,sans-serif;color:#1d2926;margin:0}header{position:relative;display:flex;justify-content:center;align-items:center;text-align:center;border-bottom:2px solid #147c70;padding-bottom:12px;margin-bottom:18px}header>div{width:100%}h1{font-size:21px;color:#126b5e;margin:0 0 6px}h2{font-size:15px;margin:15px 0 8px}p{margin:4px 0;color:#53635d}.report-table,.data-table{width:100%;border-collapse:collapse;margin:12px 0 18px}.report-table th,.report-table td,.data-table th,.data-table td{border:1px solid #cfd9d3;padding:7px;text-align:left;font-size:10px}.report-table th,.data-table th{background:#eaf3ee;color:#254b42}.report-total-row td{font-weight:800;background:#eaf3ee;border-top:2px solid #147c70}.panel,.stat-card{border:0;box-shadow:none;padding:0;margin:10px 0}.dashboard-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.stat-card{border:1px solid #d9e3dd;padding:10px}.stat-label{display:block;font-size:10px;color:#53635d}.stat-value{font-size:17px;font-weight:bold;margin-top:5px}.status{border:1px solid #ccd8d1;padding:2px 5px}.empty-note{padding:10px;color:#53635d}.report-note{font-size:10px;color:#73807b;margin-top:12px}.report-company-footer{text-align:center;font-size:8px;color:#73807b;margin-top:20px}.signature-row{display:flex;justify-content:space-between;gap:30px;margin-top:38px}.signature-row div{width:42%;border-top:1px solid #697972;padding-top:6px;font-size:10px}.print-controls{position:sticky;top:0;background:#fff;padding:10px;text-align:right;border-bottom:1px solid #ddd}.print-controls button{border:0;border-radius:5px;padding:9px 14px;margin-left:6px;background:#147c70;color:#fff;font-weight:bold;cursor:pointer}@media print{.print-controls{display:none}}
   </style></head><body><div class="print-controls"><button onclick="window.print()">Imprimer / Enregistrer en PDF</button><button onclick="window.close()">Fermer</button></div><header><div><h1>${escapeHtml(title)}</h1><p class="report-company-name"><strong>${enterprise}</strong></p>${companyDetails}<p>${branch}</p>${filterSummary ? `<p>Période et filtres : ${escapeHtml(filterSummary)}</p>` : ''}</div></header><main>${content}${note ? `<p class="report-note">${escapeHtml(note)}</p>` : ''}</main><footer class="report-company-footer">${enterprise}</footer></body></html>`;
 }
 function reportPageOrientation(content) {
@@ -705,7 +720,7 @@ async function openReportPreview() {
   const title = currentReportTitle();
   const modal = document.createElement('div');
   modal.className = 'report-modal';
-  modal.innerHTML = `<section class="report-dialog"><div class="report-dialog-heading"><div><h2>Aperçu du rapport</h2><p>${escapeHtml(title)}</p></div><button type="button" data-report-close aria-label="Fermer">×</button></div><div class="report-preview"><header><h1>${escapeHtml(title)}</h1><p><strong>${escapeHtml(sessionUser?.enterprise_name || 'ALBA-STOCK')}</strong> · ${escapeHtml(currentReportBranch())}</p><p>Édité le ${new Date().toLocaleString('fr-FR')}</p></header></div><div class="report-dialog-actions"><button type="button" data-report-close>Fermer</button><button type="button" data-report-action="print">Imprimer</button><button type="button" data-report-action="pdf">Exporter en PDF</button><button type="button" data-report-action="excel">Exporter vers Excel</button></div></section>`;
+  modal.innerHTML = `<section class="report-dialog"><div class="report-dialog-heading"><div><h2>Aperçu du rapport</h2><p>${escapeHtml(title)}</p></div><button type="button" data-report-close aria-label="Fermer">×</button></div><div class="report-preview"><header><h1>${escapeHtml(title)}</h1><p><strong>${escapeHtml(sessionUser?.enterprise_name || 'ALBA-GEST')}</strong> · ${escapeHtml(currentReportBranch())}</p><p>Édité le ${new Date().toLocaleString('fr-FR')}</p></header></div><div class="report-dialog-actions"><button type="button" data-report-close>Fermer</button><button type="button" data-report-action="print">Imprimer</button><button type="button" data-report-action="pdf">Exporter en PDF</button><button type="button" data-report-action="excel">Exporter vers Excel</button></div></section>`;
   const preview=modal.querySelector('.report-preview');
   try {
     preview.insertAdjacentHTML('beforeend', await cloneReportContent());
@@ -726,7 +741,7 @@ async function reportRowsForExcel() {
   const clone = new DOMParser().parseFromString(await cloneReportContent(), 'text/html');
   clone.querySelectorAll('[hidden], .report-toolbar, .filter-bar, button, input, select, textarea').forEach(node => node.remove());
   addReportTableTotals(clone);
-  const rows = [[currentReportTitle()], [`${sessionUser?.enterprise_name || 'ALBA-STOCK'} · ${currentReportBranch()}`], [`Édité le ${new Date().toLocaleString('fr-FR')}`], []];
+  const rows = [[currentReportTitle()], [`${sessionUser?.enterprise_name || 'ALBA-GEST'} · ${currentReportBranch()}`], [`Édité le ${new Date().toLocaleString('fr-FR')}`], []];
   clone.querySelectorAll('.stat-card').forEach(card => rows.push([card.querySelector('.stat-label')?.textContent.trim() || '', card.querySelector('.stat-value')?.textContent.trim() || '']));
   clone.querySelectorAll('table').forEach((table, tableIndex) => {
     if (tableIndex) rows.push([]);
@@ -862,9 +877,15 @@ function hasAccess(permission, user = sessionUser) {
   return module === null || (Array.isArray(enabledModules) && enabledModules.includes(module));
 }
 function hasAnyAccess(...permissions) { return permissions.some(permission => hasAccess(permission)); }
+function canManageRequestsInModule(module) {
+  return Boolean((sessionUser?.is_company_admin || sessionUser?.is_branch_admin)
+    && Array.isArray(sessionUser?.modules_autorises)
+    && sessionUser.modules_autorises.includes(module));
+}
 function accessRequirementAllowed(requirement, user) {
   if (requirement === 'session') return Boolean(user);
   if (requirement === 'company_admin') return Boolean(user?.is_company_admin);
+  if (requirement === 'branch_requests') return Boolean(user?.is_company_admin || user?.is_branch_admin);
   if (requirement === '*') return permissionList(user).includes('*');
   return hasAccess(requirement, user);
 }
@@ -872,6 +893,19 @@ function applyAccessVisibility(element, user, requirement = element.dataset.acce
   const allowed = requirement.split('|').some(permission => accessRequirementAllowed(permission, user));
   element.hidden = !allowed;
   element.style.display = allowed ? '' : 'none';
+}
+function renderMobilePrimaryNavigation() {
+  if (!mobilePrimaryNavigation) return;
+  const items = [...document.querySelectorAll('.sidebar .nav-item[data-view]')]
+    .filter(item => !item.hidden && item.style.display !== 'none');
+  mobilePrimaryNavigation.replaceChildren(...items.map(item => {
+    const clone = item.cloneNode(true);
+    clone.hidden = false;
+    clone.style.display = '';
+    return clone;
+  }));
+  mobilePrimaryNavigation.hidden = !items.length;
+  window.translateInterface?.(mobilePrimaryNavigation);
 }
 function applyViewAccess(viewName, user) {
   const accessRules = {
@@ -958,6 +992,7 @@ function applyMenuAccess(user) {
       heading.style.display = 'none';
     }
   });
+  renderMobilePrimaryNavigation();
 }
 const apiUrl = resource => `../backend/public/api.php?resource=${encodeURIComponent(resource)}`;
 async function fetchStockSummary(branchId) {
@@ -1575,7 +1610,7 @@ async function openCashForm(reopenCash=null){
   hideFixedBranchChoice(form.elements.namedItem('succursale_id'));
   const syncMode=()=>{const needsBank=modeSelect.selectedOptions[0]?.dataset.modeCode==='BANK';bankLabel.hidden=!needsBank;bankSelect.required=needsBank;bankSelect.disabled=!needsBank;modal.querySelector('[data-open-cash-no-banks]').hidden=banks.length>0;submit.disabled=needsBank&&!banks.length;};
   modeSelect.addEventListener('change',syncMode);syncMode();modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());
-  form.addEventListener('submit',async event=>{event.preventDefault();const data=Object.fromEntries(new FormData(form));if(reopenCash)data.mode_paiement_id=Number(reopenCash.mode_paiement_id);data.banque_id=data.banque_id?Number(data.banque_id):null;try{const response=await fetch('../backend/public/auth.php?action=open-cash',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(data)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Ouverture impossible.');modal.remove();showToast('Caisse ouverte.');loadCashRows();}catch(error){showToast(error.message);}});
+  form.addEventListener('submit',async event=>{event.preventDefault();submit.disabled=true;const data=Object.fromEntries(new FormData(form));if(reopenCash)data.mode_paiement_id=Number(reopenCash.mode_paiement_id);data.banque_id=data.banque_id?Number(data.banque_id):null;try{const response=await fetch('../backend/public/auth.php?action=open-cash',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(data)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Ouverture impossible.');modal.remove();showCashConfirmation(reopenCash?'La caisse a été rouverte avec succès.':'La caisse a été ouverte avec succès.');loadCashRows();}catch(error){submit.disabled=false;showToast(error.message);}});
 }
 async function openCashTransferForm() {
   if (!hasAccess('modifier_caisse')) return;
@@ -1658,7 +1693,7 @@ async function openCashTransferForm() {
       const result = await readJson(response);
       if (!response.ok || !result.success) throw new Error(result.message || 'Conversion impossible.');
       modal.remove();
-      showToast(`Conversion enregistrée : ${moneyCurrencyLabel(result.data.source_amount, result.data.source_currency)} → ${moneyCurrencyLabel(result.data.converted_amount, result.data.target_currency)}.`);
+      showCashConfirmation(`Conversion enregistrée : ${moneyCurrencyLabel(result.data.source_amount, result.data.source_currency)} → ${moneyCurrencyLabel(result.data.converted_amount, result.data.target_currency)}.`);
       loadCashRows();
     } catch (error) {
       preview.textContent = error.message;
@@ -1727,9 +1762,9 @@ async function openCashMovementForm(type = 'ENTREE') {
   modal.querySelector('.modal-cancel').addEventListener('click', () => modal.remove());
   form.addEventListener('submit', async event => {
     event.preventDefault();
+    submit.disabled = true;
     const data = Object.fromEntries(new FormData(form));
     data.banque_id = Number(cashSelect.selectedOptions[0]?.dataset.bankId || data.banque_id || 0) || null;
-    const printWindow = window.open('', '_blank');
     try {
       const response = await fetch('../backend/public/auth.php?action=create-cash-movement', {
         method: 'POST',
@@ -1740,20 +1775,10 @@ async function openCashMovementForm(type = 'ENTREE') {
       const result = await readJson(response);
       if (!response.ok || !result.success) throw new Error(result.message || 'Enregistrement impossible.');
       modal.remove();
-      let successMessage = isEntry ? 'Entrée manuelle enregistrée.' : 'Sortie manuelle enregistrée.';
-      if (!printWindow) {
-        successMessage = `${isEntry ? 'Entrée' : 'Sortie'} enregistrée, mais l’impression a été bloquée. Autorisez les fenêtres contextuelles ou imprimez la pièce depuis le journal de caisse.`;
-      } else {
-        try {
-          await printCashMovementReceipt(Number(result.data.mouvement_id), printWindow);
-        } catch (error) {
-          successMessage = `${isEntry ? 'Entrée' : 'Sortie'} enregistrée, mais l’impression de la pièce a échoué : ${error.message}`;
-        }
-      }
-      showToast(successMessage);
+      showCashConfirmation(isEntry ? 'Entrée manuelle enregistrée avec succès.' : 'Sortie manuelle enregistrée avec succès.');
       loadCashRows();
     } catch (error) {
-      if (printWindow && !printWindow.closed) printWindow.close();
+      submit.disabled = false;
       showToast(error.message);
     }
   });
@@ -1876,7 +1901,7 @@ async function openCashDebtForm(debt = null) {
       const result = await readJson(response);
       if (!response.ok || !result.success) throw new Error(result.message || 'Enregistrement impossible.');
       modal.remove();
-      showToast(isPayment ? 'Remboursement de dette enregistré.' : 'Dette enregistrée et sortie débitée de la caisse.');
+      showCashConfirmation(isPayment ? 'Remboursement de dette enregistré avec succès.' : 'Dette enregistrée et sortie débitée de la caisse.');
       loadCashRows();
     } catch (error) {
       submit.disabled = false;
@@ -1911,7 +1936,7 @@ function cashMovementReceiptMarkup(movement, compact = false) {
   const debtConversion = movement.dette_montant_impute
     ? `<p><strong>Montant imputé à la dette :</strong> ${moneyCurrencyLabel(movement.dette_montant_impute, movement.dette_monais)} · <strong>Taux appliqué :</strong> ${Number(movement.dette_taux_change).toFixed(6)}</p>`
     : '';
-  return `<section class="${compact ? 'cash-receipt-card' : ''}"><h2>${isOut ? 'BON DE SORTIE DE CAISSE' : 'REÇU D’ENTRÉE EN CAISSE'}</h2><p class="receipt-company-name"><strong>${escapeHtml(movement.enterprise_name || sessionUser?.enterprise_name || 'ALBA-STOCK')}</strong></p><p><strong>Pièce n° :</strong> ${Number(movement.mouvement_id)}</p><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason || '—')}</p><h2>Montant ${isOut ? 'sorti' : 'reçu'} : ${moneyCurrencyLabel(movement.amount, movement.monais)}</h2>${debtConversion}<p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p>${signatures}</section>`;
+  return `<section class="${compact ? 'cash-receipt-card' : ''}"><h2>${isOut ? 'BON DE SORTIE DE CAISSE' : 'REÇU D’ENTRÉE EN CAISSE'}</h2><p class="receipt-company-name"><strong>${escapeHtml(movement.enterprise_name || sessionUser?.enterprise_name || 'ALBA-GEST')}</strong></p><p><strong>Pièce n° :</strong> ${Number(movement.mouvement_id)}</p><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason || '—')}</p><h2>Montant ${isOut ? 'sorti' : 'reçu'} : ${moneyCurrencyLabel(movement.amount, movement.monais)}</h2>${debtConversion}<p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p>${signatures}</section>`;
 }
 async function printCashMovementReceipt(movementId, printWindow) {
   if (movementId < 1) throw new Error('Identifiant du mouvement invalide.');
@@ -1963,7 +1988,7 @@ async function printSelectedCashMovementReceipts() {
   try {
     const movements = await Promise.all(movementIds.map(mouvement_id => fetchReportData('cash-movement-receipt', {mouvement_id})));
     const companyDetails = [movements[0].enterprise_name, movements[0].enterprise_email, movements[0].enterprise_phone, movements[0].enterprise_address, movements[0].rccm ? `RCCM : ${movements[0].rccm}` : '', movements[0].boite_postale ? `BP : ${movements[0].boite_postale}` : ''].filter(Boolean).map(escapeHtml).join(' · ');
-    const content = `<div class="cash-receipt-sheet"><div class="cash-receipt-sheet-heading"><h2>Pièces de caisse (${movements.length})</h2><p>${companyDetails || escapeHtml(sessionUser?.enterprise_name || 'ALBA-STOCK')}</p></div><div class="cash-receipt-grid-viewport"><div class="cash-receipt-grid">${movements.map(movement => cashMovementReceiptMarkup(movement, true)).join('')}</div></div></div>`;
+    const content = `<div class="cash-receipt-sheet"><div class="cash-receipt-sheet-heading"><h2>Pièces de caisse (${movements.length})</h2><p>${companyDetails || escapeHtml(sessionUser?.enterprise_name || 'ALBA-GEST')}</p></div><div class="cash-receipt-grid-viewport"><div class="cash-receipt-grid">${movements.map(movement => cashMovementReceiptMarkup(movement, true)).join('')}</div></div></div>`;
     printReportInWindow(printWindow, `Pièces de caisse (${movements.length})`, content, '', 'landscape');
     movementIds.forEach(id => selectedCashMovementReceipts.delete(id));
     document.querySelectorAll('[data-cash-print-select]').forEach(input => { input.checked = false; });
@@ -2082,7 +2107,7 @@ function updateRequestsBadge() {
 }
 async function loadEntryCancellationRequests() {
   const rows = document.getElementById('accounting-cancellation-rows');
-  if (!rows || !sessionUser?.is_company_admin) return;
+  if (!rows || !canManageRequestsInModule('comptabilite')) return;
   try {
     const requests = await fetchReportData('accounting-cancellation-requests');
     accountingCancellationCount = requests.length;
@@ -2094,7 +2119,7 @@ async function loadEntryCancellationRequests() {
 }
 async function loadCashMovementCancellationRequests() {
   const rows = document.getElementById('cash-cancellation-rows');
-  if (!rows || !sessionUser?.is_company_admin) return;
+  if (!rows || !canManageRequestsInModule('caisse')) return;
   try {
     const requests = await fetchReportData('cash-cancellation-requests');
     cashCancellationCount = requests.length;
@@ -2121,7 +2146,7 @@ function openEntryCancellationRequest(entryId) {
       if (!response.ok || !result.success) throw new Error(result.message || 'Envoi de la demande impossible.');
       modal.remove();
       await loadAccountingEntryRows();
-      if (sessionUser?.is_company_admin) await loadEntryCancellationRequests();
+      if (sessionUser?.is_company_admin || sessionUser?.is_branch_admin) await loadEntryCancellationRequests();
       showToast('Demande d’annulation envoyée à l’administrateur.');
     } catch (error) {
       showToast(error.message);
@@ -2147,7 +2172,7 @@ function openCashMovementCancellationRequest(movementId) {
       if (!response.ok || !result.success) throw new Error(result.message || 'Envoi de la demande impossible.');
       modal.remove();
       await loadCashRows();
-      if (sessionUser?.is_company_admin) await loadCashMovementCancellationRequests();
+      if (sessionUser?.is_company_admin || sessionUser?.is_branch_admin) await loadCashMovementCancellationRequests();
       showToast('Demande d’annulation envoyée à l’administrateur.');
     } catch (error) {
       showToast(error.message);
@@ -2635,7 +2660,7 @@ async function openPaymentEntry({title,amount,currency,branchId,referenceTitle,s
     form.addEventListener('submit',async event=>{event.preventDefault();const payload=Object.fromEntries(new FormData(form));payload.mode_paiement_id=Number(payload.mode_paiement_id);payload.caisse_id=payload.caisse_id?Number(payload.caisse_id):null;payload.banque_id=Number(cashSelect.selectedOptions[0]?.dataset.bankId||payload.banque_id||0)||null;payload.amount=Number(payload.amount);try{await submit(payload);modal.remove();}catch(error){showToast(error.message);}});
   }catch(error){showToast(error.message);}
 }
-async function openSupplierPayment(button){const amount=Number(button.dataset.supplierDue),currency=button.dataset.supplierCurrency;await openPaymentEntry({title:'Paiement fournisseur',amount,currency,branchId:Number(button.dataset.supplierBranch),referenceTitle:`Approvisionnement ${button.dataset.supplierRef}`,submit:async payload=>{payload.achat_id=Number(button.dataset.supplierPayment);const response=await fetch('../backend/public/auth.php?action=pay-supplier',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(payload)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Paiement impossible.');showToast('Paiement fournisseur enregistré.');loadAccountingData();if(currentViewName==='cash')loadCashRows();}});}
+async function openSupplierPayment(button){const amount=Number(button.dataset.supplierDue),currency=button.dataset.supplierCurrency;await openPaymentEntry({title:'Paiement fournisseur',amount,currency,branchId:Number(button.dataset.supplierBranch),referenceTitle:`Approvisionnement ${button.dataset.supplierRef}`,submit:async payload=>{payload.achat_id=Number(button.dataset.supplierPayment);const response=await fetch('../backend/public/auth.php?action=pay-supplier',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(payload)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Paiement impossible.');showCashConfirmation('Paiement fournisseur enregistré avec succès.');loadAccountingData();if(currentViewName==='cash')loadCashRows();}});}
 async function loadBranchDashboard() {
   const target = document.getElementById('branch-product-count'); if (!target) return;
   try {
@@ -2869,11 +2894,11 @@ function openEntityForm(type, entity = null) {
   const definitions = {
     product: {title: 'Créer un produit', endpoint: '../backend/public/api.php?resource=produits', fields: '<label>Référence du produit<input name="sku" required></label><label>Nom du produit<input name="name" required></label><label>Catégorie<select name="category_id" id="product-category"><option value="">Sans catégorie</option></select></label><label>Prix de vente<input name="unit_price" type="number" min="0" step="0.01" required></label><label>Prix d’achat<input name="cost_price" type="number" min="0" step="0.01" value="0" required></label><label>Seuil d’alerte du stock<input name="min_stock_level" type="number" min="0" step="1" value="5" required><small>Une alerte s’affiche lorsque le stock atteint ce niveau.</small></label><label>Unit&eacute; de mesure<select name="unite_de_mesure" id="product-unit" required><option value="">Chargement...</option></select></label><label>Monnaie du prix<select name="monais" id="product-currency" required><option value="">Chargement des monnaies…</option></select></label><label><span>Produit périssable</span><input name="est_perisable" type="checkbox" value="1" id="perishable-field"></label><label class="full">Description<textarea name="description"></textarea></label>'},
     unit: {title: 'Enregistrer une unit&eacute; de mesure', endpoint: '../backend/public/api.php?resource=unites_mesure', fields: '<label>Unit&eacute; de mesure<input name="name" required maxlength="50" placeholder="Ex. Kilogramme"></label><label>Symbole<input name="symbole" required maxlength="15" placeholder="Ex. kg"></label>'},
-    branch: {title:'Créer une succursale', endpoint:'../backend/public/api.php?resource=succursales', fields:'<label>Nom de la succursale<input name="name" required maxlength="100"></label><label>Code unique<input name="code" required maxlength="20" placeholder="Ex. MAG-01"></label><label class="full"><span>Définir comme succursale mère</span><input name="est_sucursal_mere" type="checkbox" value="1"></label><label class="full">Adresse<textarea name="address"></textarea></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"></label>'},
+    branch: {title:'Créer une succursale', endpoint:'../backend/public/api.php?resource=succursales', fields:'<label>Nom de la succursale<input name="name" required maxlength="100"></label><label>Code unique<input name="code" required maxlength="20" placeholder="Ex. MAG-01"></label><label class="full"><span>Définir comme succursale mère</span><input name="est_sucursal_mere" type="checkbox" value="1"></label><label class="full"><span>Partager les produits du catalogue de la succursale mère</span><input name="partager_produits_mere" type="checkbox" value="1" checked><small>Le stock reste propre à cette succursale.</small></label><label class="full">Adresse<textarea name="address"></textarea></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"></label>'},
     client: {title:'Cr\u00e9er un client', endpoint:'../backend/public/api.php?resource=clients', fields:'<label>Nom du client<input name="name" required maxlength="100"></label><label>Adresse \u00e9lectronique<input name="email" type="email" maxlength="100"></label><label>T\u00e9l\u00e9phone<input name="phone" maxlength="20"></label><label class="full">Adresse<textarea name="address"></textarea></label>'},
     supplier: {title:'Créer un fournisseur', endpoint:'../backend/public/api.php?resource=fournisseurs', fields:'<label>Nom du fournisseur<input name="name" required maxlength="100"></label><label>Personne de contact<input name="contact_name" maxlength="100"></label><label>Adresse électronique<input name="email" type="email" maxlength="100"></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"><small>Un numéro qui commence par 0 sera enregistré avec +243 à la place du premier 0.</small></label><label class="full">Adresse<textarea name="address"></textarea></label>'},
     user: {title: 'Créer un utilisateur', endpoint: '../backend/public/auth.php?action=create-user', fields: '<label>Nom complet<input name="full_name" required></label><label>Nom d’utilisateur<input name="username" required></label><label>Adresse électronique<input name="email" type="email" required></label><label>Mot de passe<input name="password" type="password" minlength="4" data-password-feedback required></label><label>Rôle d’accès<select name="role_id" id="user-role" required><option value="">Chargement des rôles…</option></select></label><label>Succursale<select name="succursale_id" id="user-branch"><option value="">Entreprise mère (sans succursale)</option></select></label><label class="full"><span>Compte actif</span><input name="is_active" type="checkbox" value="1" checked></label>'},
-    role: {title: 'Créer un rôle', endpoint: '../backend/public/auth.php?action=create-role', fields: '<label>Nom du rôle<input name="role_name" placeholder="Ex. Responsable stock" required></label><label class="full">Description<textarea name="description"></textarea></label><fieldset class="full" style="border:1px solid #e6ebe7;border-radius:7px;padding:12px"><legend>Droits d’accès</legend><label><input type="checkbox" name="permissions" value="vente"> Accès aux ventes</label><label><input type="checkbox" name="permissions" value="caisse"> Accès à la caisse</label><label><input type="checkbox" name="permissions" value="stock"> Accès au stock et aux produits</label><label><input type="checkbox" name="permissions" value="approvisionnement"> Accès aux approvisionnements</label><label><input type="checkbox" name="permissions" value="clients"> Gestion des clients</label><label><input type="checkbox" name="permissions" value="comptabilite"> Accès à la comptabilité</label></fieldset>'},
+    role: {title: 'Créer un rôle', endpoint: '../backend/public/auth.php?action=create-role', fields: '<label>Nom du rôle<input name="role_name" placeholder="Ex. Responsable stock" required></label><label class="full">Description<textarea name="description"></textarea></label><fieldset class="full" style="border:1px solid #e6ebe7;border-radius:7px;padding:12px"><legend>Droits d’accès</legend><label><input type="checkbox" name="permissions" value="vente"> Accès aux ventes</label><label><input type="checkbox" name="permissions" value="caisse"> Accès à la caisse</label><label><input type="checkbox" name="permissions" value="stock"> Accès au stock et aux produits</label><label><input type="checkbox" name="permissions" value="approvisionnement"> Accès aux approvisionnements</label><label><input type="checkbox" name="permissions" value="clients"> Gestion des clients</label><label><input type="checkbox" name="permissions" value="comptabilite"> Accès à la comptabilité</label><label><input type="checkbox" name="permissions" value="demandes"> Gestion des demandes dans la succursale</label></fieldset>'},
     category: {title: 'Créer une catégorie', endpoint: '../backend/public/api.php?resource=categories', fields: '<label>Nom de la catégorie<input name="name" required maxlength="100"></label><label class="full">Description<textarea name="description"></textarea></label>'},
     purchase: {title: 'Créer un approvisionnement', endpoint: '../backend/public/auth.php?action=create-purchase', fields: '<label id="purchase-reference-label">Référence<input name="purchase_no" required maxlength="50"></label><label>Opération<select name="movement_type" id="purchase-operation"><option value="IN">Entrée — augmenter le stock</option><option value="OUT">Sortie — diminuer le stock</option></select></label><div id="purchase-supplier-fields" class="full"><label>Rechercher un fournisseur<input type="search" id="purchase-supplier-search" placeholder="Nom ou contact"></label><label>Fournisseur<select name="fournisseur_id" id="purchase-supplier" required><option value="">Chargement…</option></select></label><button type="button" class="text-button full" id="purchase-add-supplier">+ Créer un fournisseur</button><div class="full" id="purchase-new-supplier" hidden><label>Nom du fournisseur<input id="new-supplier-name" maxlength="100"></label><label>Personne de contact<input id="new-supplier-contact" maxlength="100"></label><label>Adresse électronique<input id="new-supplier-email" type="email" maxlength="100"></label><label>Téléphone<input id="new-supplier-phone" maxlength="20"></label><label class="full">Adresse<textarea id="new-supplier-address"></textarea></label><button type="button" class="modal-submit" id="purchase-save-supplier">Enregistrer le fournisseur</button></div></div><label id="purchase-reason-field" hidden class="full">Motif de sortie<input name="motif_sortie" maxlength="255" placeholder="Ex. Vente, casse, transfert..."></label><label>Rechercher un produit<input type="search" id="purchase-product-search" placeholder="Nom ou référence du produit"></label><label>Produit<select name="produit_id" id="purchase-product" required><option value="">Chargement…</option></select></label><label>Quantité<input name="quantity" type="number" min="1" step="1" required></label><label id="purchase-cost-choice" class="full"><input type="checkbox" id="purchase-use-product-cost" name="use_product_cost" checked> Utiliser le cout enregistre dans la fiche du produit</label><label id="purchase-custom-cost-field" hidden>Autre cout unitaire<input name="unit_cost" type="number" min="0" step="0.01" value="0"></label><label>Traitement<select name="status"><option value="PENDING" selected>En attente — aucun mouvement de stock</option><option value="RECEIVED">Valider et appliquer au stock</option><option value="CANCELLED">Annuler sans mouvement</option></select></label>'}
   };
@@ -3066,7 +3091,8 @@ function openEntityForm(type, entity = null) {
       approvisionnement: ['voir_stock', 'voir_succursales', 'voir_fournisseurs', 'creer_fournisseurs', 'voir_approvisionnements', 'creer_approvisionnements'],
       voir_clients: ['voir_clients'],
       gerer_clients: ['voir_clients', 'gerer_clients'],
-      comptabilite: ['voir_comptabilite', 'creer_comptabilite', 'modifier_comptabilite']
+      comptabilite: ['voir_comptabilite', 'creer_comptabilite', 'modifier_comptabilite'],
+      demandes: ['gerer_demandes']
     };
     Object.entries(groupRights).forEach(([group, rights]) => {
       const checkbox = form.querySelector(`input[name="permissions"][value="${group}"]`);
@@ -3210,7 +3236,10 @@ function openEntityForm(type, entity = null) {
     }
     if (type === 'role') data.permissions = formData.getAll('permissions');
     if (type === 'user') { data.succursale_id = data.succursale_id || null; data.is_active = form.elements.namedItem('is_active').checked ? 1 : 0; }
-    if (type === 'branch') data.est_sucursal_mere = form.elements.namedItem('est_sucursal_mere').checked ? 1 : 0;
+    if (type === 'branch') {
+      data.est_sucursal_mere = form.elements.namedItem('est_sucursal_mere').checked ? 1 : 0;
+      data.partager_produits_mere = form.elements.namedItem('partager_produits_mere').checked ? 1 : 0;
+    }
     if (type === 'product') { data.est_perisable = data.est_perisable ? 1 : 0; data.category_id = data.category_id || null; delete data.fournisseur_id; data.unite_de_mesure = Number(data.unite_de_mesure); }
     const submitButton = form.querySelector('button[type="submit"], button:not([type])');
     const submitLabel = submitButton?.innerHTML;
@@ -3243,6 +3272,10 @@ function openEntityForm(type, entity = null) {
   });
 }
 document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', () => { navigate(item.dataset.view); document.getElementById('sidebar').classList.remove('open'); }));
+mobilePrimaryNavigation?.addEventListener('click', event => {
+  const item = event.target.closest('.nav-item[data-view]');
+  if (item) navigate(item.dataset.view);
+});
 function openWorkspaceSearch() {
   const backdrop = document.createElement('div');
   backdrop.className = 'workspace-search-backdrop';
@@ -3639,7 +3672,7 @@ function printReportInWindow(printWindow, title, content, note = '', orientation
   if (orientation === 'landscape') documentHtml = documentHtml.replace('</style>', '@media print{.stock-card-report .dashboard-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.stock-card-report .stat-card{margin:0}.stock-card-report .report-table th,.stock-card-report .report-table td{padding:4px;font-size:9px}.stock-card-report .report-table{table-layout:fixed}.stock-card-report .report-table th,.stock-card-report .report-table td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.stock-card-page{display:flex;flex-direction:column;break-after:page;page-break-after:always;min-height:184mm;break-inside:avoid}.stock-card-page--first{min-height:126mm}.stock-card-page:last-child{break-after:auto;page-break-after:auto}.stock-page-footer{margin-top:auto;break-inside:avoid}.stock-page-footer p{margin:3px 0;padding:4px;background:#eaf3ee}.stock-carryover{padding:5px;background:#fff6dc}}</style>');
   const logo = companyLogoMarkup();
   if (logo) documentHtml = documentHtml.replace('<header>', `<header>${logo}`);
-  documentHtml = documentHtml.replace('</style>', '.report-company-logo{width:76px;height:76px;object-fit:contain;flex:0 0 76px}.company-stamp-image{display:block;width:150px;height:90px;object-fit:contain;margin:10px 0 0}.stamp-signature{min-height:120px}</style>');
+  documentHtml = documentHtml.replace('</style>', '.report-company-logo{position:absolute;left:0;top:0;width:76px;height:76px;object-fit:contain}.company-stamp-image{display:block;width:150px;height:90px;object-fit:contain;margin:10px 0 0}.stamp-signature{min-height:120px}</style>');
   printWindow.document.write(documentHtml);
   printWindow.document.close();
   // Certains navigateurs n’émettent pas load après l’écriture d’un document neuf.
@@ -3686,7 +3719,7 @@ async function printPurchaseVoucher(button) {
   }
 }
 async function startSalePayment({saleId,amount,currency,branchId,invoice}){
-  await openPaymentEntry({title:'Payer la facture',amount,currency,branchId,referenceTitle:`Facture ${invoice}`,isInbound:true,submit:async payload=>{payload.vente_id=saleId;payload.monais=currency;payload.source='CASH';const response=await fetch('../backend/public/auth.php?action=collect-sale-payment',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(payload)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Validation du paiement impossible.');showToast(result.message||'Paiement de vente enregistré.');loadSalesRows();loadCashRows();loadPendingSales();}});
+  await openPaymentEntry({title:'Payer la facture',amount,currency,branchId,referenceTitle:`Facture ${invoice}`,isInbound:true,submit:async payload=>{payload.vente_id=saleId;payload.monais=currency;payload.source='CASH';const response=await fetch('../backend/public/auth.php?action=collect-sale-payment',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(payload)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Validation du paiement impossible.');showCashConfirmation(result.message||'Paiement de vente enregistré.');loadSalesRows();loadCashRows();loadPendingSales();}});
 }
 async function confirmSalePayment(button){
   const saleId=Number(button.dataset.salePayCash),branchId=Number(button.dataset.saleBranch),invoice=button.dataset.saleInvoiceNo||'';
@@ -3994,11 +4027,11 @@ document.addEventListener('click', async event => {
   }
   const cashReopenButton=event.target.closest('[data-cash-reopen]');
   if(cashReopenButton){openCashForm({name:cashReopenButton.dataset.cashName,succursale_id:Number(cashReopenButton.dataset.cashBranch),monais:cashReopenButton.dataset.cashCurrency,mode_paiement_id:Number(cashReopenButton.dataset.cashMode),banque_id:Number(cashReopenButton.dataset.cashBank||0)});return;}
-  const cashDeleteButton=event.target.closest('[data-cash-delete]');if(cashDeleteButton){if(!window.confirm('Supprimer cette caisse clôturée ? Les caisses avec des opérations ne peuvent pas être supprimées.'))return;try{const response=await fetch('../backend/public/auth.php?action=delete-cash',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({caisse_id:Number(cashDeleteButton.dataset.cashDelete)})});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Suppression impossible.');showToast('Caisse supprimée.');loadCashRows();}catch(error){showToast(error.message);}return;}
+  const cashDeleteButton=event.target.closest('[data-cash-delete]');if(cashDeleteButton){if(!window.confirm('Supprimer cette caisse clôturée ? Les caisses avec des opérations ne peuvent pas être supprimées.'))return;try{const response=await fetch('../backend/public/auth.php?action=delete-cash',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({caisse_id:Number(cashDeleteButton.dataset.cashDelete)})});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Suppression impossible.');showCashConfirmation('Caisse supprimée avec succès.');loadCashRows();}catch(error){showToast(error.message);}return;}
   const saleCancelButton=event.target.closest('[data-sale-cancel]');
   if(saleCancelButton){if(!window.confirm('Annuler cette vente ? Le stock sera rétabli et les éventuels paiements régularisés.'))return;try{const response=await fetch('../backend/public/auth.php?action=cancel-sale',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({vente_id:Number(saleCancelButton.dataset.saleCancel)})});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Annulation impossible.');showToast('Vente annulée et stock rétabli.');loadSalesRows();loadPendingSales();loadCashRows();loadStock();}catch(error){showToast(error.message);}return;}
   const cashCloseButton=event.target.closest('[data-cash-close]');
-  if(cashCloseButton){const amount=window.prompt('Saisissez le solde compté à la clôture :','0');if(amount===null)return;const closing=Number(amount.replace(',','.'));if(!Number.isFinite(closing)||closing<0){showToast('Saisissez un montant valide.');return;}try{const response=await fetch('../backend/public/auth.php?action=close-cash',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({caisse_id:Number(cashCloseButton.dataset.cashClose),solde_fermeture:closing})});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Clôture impossible.');showToast('Caisse clôturée.');loadCashRows();}catch(error){showToast(error.message);}return;}
+  if(cashCloseButton){const amount=window.prompt('Saisissez le solde compté à la clôture :','0');if(amount===null)return;const closing=Number(amount.replace(',','.'));if(!Number.isFinite(closing)||closing<0){showToast('Saisissez un montant valide.');return;}try{const response=await fetch('../backend/public/auth.php?action=close-cash',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({caisse_id:Number(cashCloseButton.dataset.cashClose),solde_fermeture:closing})});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Clôture impossible.');showCashConfirmation('Caisse clôturée avec succès.');loadCashRows();}catch(error){showToast(error.message);}return;}
   const cancelPurchaseButton = event.target.closest('[data-purchase-cancel]');
   const validatePurchaseButton = event.target.closest('[data-purchase-validate]');
   if (cancelPurchaseButton || validatePurchaseButton) {
@@ -4254,6 +4287,7 @@ document.getElementById('mobile-menu').addEventListener('click', event => {
   event.currentTarget.setAttribute('aria-label', isOpen ? 'Fermer le menu' : 'Ouvrir le menu');
 });
 window.addEventListener('interface-language-change', async event => {
+  renderMobilePrimaryNavigation();
   if (!sessionUser) return;
   try {
     const response = await fetch('../backend/public/auth.php?action=preferred-language', {

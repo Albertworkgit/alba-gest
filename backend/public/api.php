@@ -46,6 +46,15 @@ try {
     $method = $_SERVER['REQUEST_METHOD'];
     $id = isset($_GET['id']) ? (int) $_GET['id'] : null;
     $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
+    $productOriginScope = null;
+    $productWritableOrigins = null;
+    if ($resource === 'produits') $productOriginScope = Authorization::productOrigins($authenticatedUser);
+    if ($resource === 'produits' && !Authorization::canSeeAllBranches($authenticatedUser)) {
+        $productWritableOrigins = [(int) $authenticatedUser['succursale_id']];
+    }
+    if ($resource === 'succursales' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
+        $body['partager_produits_mere'] = !empty($body['partager_produits_mere']) ? 1 : 0;
+    }
 
     // Les unités sont un référentiel de l'entreprise, administré par son compte propriétaire.
     if ($resource === 'unites_mesure' && $method !== 'GET'
@@ -140,6 +149,16 @@ try {
     }
     if ($resource === 'produits' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
         if ($method === 'POST') {
+            $originBranchId = Authorization::canSeeAllBranches($authenticatedUser)
+                ? (int) ($authenticatedUser['main_branch_id'] ?? 0)
+                : (int) ($authenticatedUser['succursale_id'] ?? 0);
+            if ($originBranchId < 1) $originBranchId = (int) ($authenticatedUser['succursale_id'] ?? 0);
+            if ($originBranchId < 1) JsonResponse::error('Une succursale doit exister pour créer un produit.', 422);
+            $body['succursale_origine_id'] = $originBranchId;
+        } else {
+            unset($body['succursale_origine_id']);
+        }
+        if ($method === 'POST') {
             $threshold = filter_var($body['min_stock_level'] ?? 5, FILTER_VALIDATE_INT);
             if ($threshold === false || $threshold < 0) JsonResponse::error('Le seuil d’alerte doit être un entier positif ou nul.', 422);
             $body['min_stock_level'] = $threshold;
@@ -180,14 +199,15 @@ try {
     if ($method === 'GET' && !$id && isset($_GET['page'])) {
         $page = max(1, (int) $_GET['page']);
         $perPage = min(100, max(1, (int) ($_GET['per_page'] ?? 10)));
-        $pageResult = $repository->paginate($enterpriseId, in_array($resource, $branchScopedResources, true) ? $branchId : null, $page, $perPage);
+        $pageResult = $repository->paginate($enterpriseId, in_array($resource, $branchScopedResources, true) ? $branchId : null, $page, $perPage, $productOriginScope);
         JsonResponse::send(['success' => true, 'data' => $pageResult['rows'], 'pagination' => $pageResult['pagination']]);
     }
+    $repositoryBranchId = in_array($resource, $branchScopedResources, true) ? $branchId : null;
     $result = match ($method) {
-        'GET' => $id ? $repository->find($enterpriseId, $id, in_array($resource, $branchScopedResources, true) ? $branchId : null) : $repository->all($enterpriseId, $branchId),
+        'GET' => $id ? $repository->find($enterpriseId, $id, $repositoryBranchId, $productOriginScope) : $repository->all($enterpriseId, $repositoryBranchId, $productOriginScope),
         'POST' => ['id' => $repository->create($enterpriseId, $body)],
-        'PUT', 'PATCH' => $id ? ['updated' => $repository->update($enterpriseId, $id, $body, in_array($resource, $branchScopedResources, true) ? $branchId : null)] : JsonResponse::error('Identifiant requis.', 422),
-        'DELETE' => $id ? ['deleted' => $repository->delete($enterpriseId, $id, in_array($resource, $branchScopedResources, true) ? $branchId : null)] : JsonResponse::error('Identifiant requis.', 422),
+        'PUT', 'PATCH' => $id ? ['updated' => $repository->update($enterpriseId, $id, $body, $repositoryBranchId, $resource === 'produits' ? $productWritableOrigins : $productOriginScope)] : JsonResponse::error('Identifiant requis.', 422),
+        'DELETE' => $id ? ['deleted' => $repository->delete($enterpriseId, $id, $repositoryBranchId, $resource === 'produits' ? $productWritableOrigins : $productOriginScope)] : JsonResponse::error('Identifiant requis.', 422),
         default => JsonResponse::error('Méthode HTTP non supportée.', 405),
     };
     if ($resource === 'produits' && $method === 'POST') {

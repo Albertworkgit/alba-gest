@@ -1,14 +1,14 @@
-ALBA-STOCK - GUIDE D'UTILISATION
+ALBA-GEST - GUIDE D'UTILISATION
 ================================
 
 Version du guide : 14 octobre 2026
-Application : ALBA-STOCK, gestion de stock, ventes, caisse et comptabilite
+Application : ALBA-GEST, gestion de stock, ventes, caisse et comptabilite
 
 
 1. PRESENTATION
 ---------------
 
-ALBA-STOCK est une application web multi-entreprise. Chaque entreprise gere ses
+ALBA-GEST est une application web multi-entreprise. Chaque entreprise gere ses
 succursales, utilisateurs, articles, niveaux de stock, approvisionnements,
 ventes, paiements, caisses et ecritures comptables. Les acces aux modules et aux
 succursales dependent des droits du compte connecte.

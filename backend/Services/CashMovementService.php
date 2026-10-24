@@ -55,23 +55,31 @@ final class CashMovementService
         }
     }
 
-    public function cancellationRequests(int $enterpriseId): array
+    public function cancellationRequests(int $enterpriseId, ?int $branchId = null): array
     {
-        $query = $this->db->prepare('SELECT r.demande_id,r.mouvement_id,r.motif,r.created_at,m.movement_date,m.type,m.amount,m.reason,c.name AS cash_name,t.code AS currency,u.full_name AS demandeur FROM demandes_annulation_mouvements_caisse r JOIN mouvements_caisse m ON m.mouvement_id=r.mouvement_id AND m.entreprise_id=r.entreprise_id JOIN caisses c ON c.caisse_id=m.caisse_id AND c.entreprise_id=m.entreprise_id JOIN types_caisses t ON t.type_caisse_id=c.type_caisse_id AND t.entreprise_id=c.entreprise_id LEFT JOIN users u ON u.user_id=r.demandeur_id WHERE r.entreprise_id=? AND r.statut=\'EN_ATTENTE\' ORDER BY r.created_at,r.demande_id');
-        $query->bind_param('i', $enterpriseId);
+        $sql = 'SELECT r.demande_id,r.mouvement_id,r.motif,r.created_at,m.movement_date,m.type,m.amount,m.reason,c.name AS cash_name,t.code AS currency,u.full_name AS demandeur FROM demandes_annulation_mouvements_caisse r JOIN mouvements_caisse m ON m.mouvement_id=r.mouvement_id AND m.entreprise_id=r.entreprise_id JOIN caisses c ON c.caisse_id=m.caisse_id AND c.entreprise_id=m.entreprise_id JOIN types_caisses t ON t.type_caisse_id=c.type_caisse_id AND t.entreprise_id=c.entreprise_id LEFT JOIN users u ON u.user_id=r.demandeur_id WHERE r.entreprise_id=? AND r.statut=\'EN_ATTENTE\'';
+        if ($branchId !== null) $sql .= ' AND c.succursale_id=?';
+        $sql .= ' ORDER BY r.created_at,r.demande_id';
+        $query = $this->db->prepare($sql);
+        if ($branchId === null) $query->bind_param('i', $enterpriseId);
+        else $query->bind_param('ii', $enterpriseId, $branchId);
         $query->execute();
         return $query->get_result()->fetch_all(MYSQLI_ASSOC);
     }
 
-    public function decideCancellation(int $enterpriseId, int $adminId, int $requestId, bool $approve, string $decisionReason = ''): void
+    public function decideCancellation(int $enterpriseId, int $adminId, int $requestId, bool $approve, string $decisionReason = '', ?int $branchId = null): void
     {
         $decisionReason = trim($decisionReason);
         if ($requestId < 1 || mb_strlen($decisionReason, 'UTF-8') > 500) throw new RuntimeException('Décision ou demande invalide.');
 
         $this->db->begin_transaction();
         try {
-            $request = $this->db->prepare('SELECT mouvement_id FROM demandes_annulation_mouvements_caisse WHERE entreprise_id=? AND demande_id=? AND statut=\'EN_ATTENTE\' LIMIT 1 FOR UPDATE');
-            $request->bind_param('ii', $enterpriseId, $requestId);
+            $requestSql = 'SELECT r.mouvement_id FROM demandes_annulation_mouvements_caisse r JOIN mouvements_caisse m ON m.mouvement_id=r.mouvement_id AND m.entreprise_id=r.entreprise_id JOIN caisses c ON c.caisse_id=m.caisse_id AND c.entreprise_id=m.entreprise_id WHERE r.entreprise_id=? AND r.demande_id=? AND r.statut=\'EN_ATTENTE\'';
+            if ($branchId !== null) $requestSql .= ' AND c.succursale_id=?';
+            $requestSql .= ' LIMIT 1 FOR UPDATE';
+            $request = $this->db->prepare($requestSql);
+            if ($branchId === null) $request->bind_param('ii', $enterpriseId, $requestId);
+            else $request->bind_param('iii', $enterpriseId, $requestId, $branchId);
             $request->execute();
             $requestRow = $request->get_result()->fetch_assoc();
             if (!$requestRow) throw new RuntimeException('Cette demande est introuvable ou a déjà été traitée.');

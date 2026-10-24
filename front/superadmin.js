@@ -1,4 +1,5 @@
 const enterpriseList = document.getElementById('enterprise-list');
+const registrationNotificationForm = document.getElementById('registration-notification-form');
 const superAdminList = document.getElementById('super-admin-list');
 const superAdminForm = document.getElementById('super-admin-form');
 const superAdminPagination = document.getElementById('super-admin-pagination');
@@ -22,6 +23,7 @@ let currentSuperAdminId = 0;
 function setAdminView(viewName, updateAddress = true) {
   const views = {
     enterprises: ['Gestion des entreprises', 'Activez ou désactivez les comptes inscrits sur la plateforme.'],
+    notifications: ['Notifications email', 'Gérez les adresses qui reçoivent les nouvelles demandes de création d’entreprise.'],
     'super-admins': ['Super administrateurs', 'Créez et consultez les comptes de super administration.'],
     modules: ['Droits des modules', 'Définissez les modules accessibles à chaque entreprise.'],
     currencies: ['Monnaies disponibles', 'Gérez les monnaies proposées lors de la création des produits.'],
@@ -142,6 +144,30 @@ function notify(text) {
   message.classList.add('visible');
   setTimeout(() => message.classList.remove('visible'), 3000);
 }
+
+async function loadRegistrationNotificationEmail() {
+  const result = await requestJson('../backend/public/auth.php?action=super-admin-registration-notification');
+  document.getElementById('registration-notification-emails').value = (result.data.emails || []).join('\n');
+}
+
+registrationNotificationForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const submitButton = registrationNotificationForm.querySelector('[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    const emails = new FormData(registrationNotificationForm).get('emails').split(/[\s,;]+/).filter(Boolean);
+    await requestJson('../backend/public/auth.php?action=super-admin-registration-notification', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({emails})
+    });
+    notify('Destinataires de notification mis à jour.');
+  } catch (error) {
+    notify(error.message);
+  } finally {
+    submitButton.disabled = false;
+  }
+});
 
 // Lit une réponse JSON et transforme les erreurs API en erreurs JavaScript lisibles.
 async function requestJson(url, options = {}) {
@@ -401,6 +427,7 @@ if (savedCurrency) {
 
 // Charge les deux listes au démarrage de la page d'administration.
 loadEnterprises().catch(error => { enterpriseList.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`; });
+loadRegistrationNotificationEmail().catch(error => notify(error.message));
 loadAdminProfile().then(() => loadSuperAdmins()).catch(error => {
   superAdminList.innerHTML = `<tr><td colspan="5">${escapeHtml(error.message)}</td></tr>`;
   notify(error.message);

@@ -3,8 +3,11 @@ declare(strict_types=1);
 
 namespace AlbaStock\Services;
 
+require_once __DIR__ . '/../Core/Authorization.php';
+
 use mysqli;
 use RuntimeException;
+use AlbaStock\Core\Authorization;
 
 final class ProcurementService
 {
@@ -73,11 +76,14 @@ final class ProcurementService
         if (!$ownership || !$ownership['branch_ok'] || !$ownership['product_ok']) {
             throw new RuntimeException('Une ressource ne correspond pas à votre entreprise.');
         }
-        $product = $this->db->prepare('SELECT est_perisable, cost_price, monais FROM produits WHERE produit_id = ? AND entreprise_id = ? AND is_active = 1 LIMIT 1');
+        $product = $this->db->prepare('SELECT est_perisable, cost_price, monais, succursale_origine_id FROM produits WHERE produit_id = ? AND entreprise_id = ? AND is_active = 1 LIMIT 1');
         $product->bind_param('ii', $productId, $enterpriseId);
         $product->execute();
         $productRow = $product->get_result()->fetch_assoc();
         if (!$productRow) throw new RuntimeException('Produit introuvable ou inactif.');
+        if (!Authorization::canUseProductFromBranch($actor, (int) $productRow['succursale_origine_id'])) {
+            throw new RuntimeException('Accès limité à votre succursale : ce produit n’est pas accessible.');
+        }
         $isPerishable = (int) $productRow['est_perisable'] === 1;
         if ($isPerishable && $movementType === 'IN') {
             $validExpiration = preg_match('/^\d{4}-\d{2}-\d{2}$/', $expirationDate) === 1
@@ -232,4 +238,3 @@ final class ProcurementService
         } catch (\Throwable $e) { $this->db->rollback(); throw $e; }
     }
 }
-

@@ -98,6 +98,30 @@ try {
         JsonResponse::send(['success' => true, 'data' => $service->enterprises()]);
     }
 
+    if ($action === 'super-admin-registration-notification' && $method === 'GET') {
+        $session = Session::current();
+        if (!$session || $session['type'] !== 'super_admin') {
+            JsonResponse::error('Accès réservé au super administrateur.', 403);
+        }
+        JsonResponse::send(['success' => true, 'data' => [
+            'emails' => $service->enterpriseRegistrationNotificationEmails(),
+        ]]);
+    }
+
+    if ($action === 'super-admin-registration-notification' && $method === 'PUT') {
+        $session = Session::current();
+        if (!$session || $session['type'] !== 'super_admin') {
+            JsonResponse::error('Accès réservé au super administrateur.', 403);
+        }
+        $body = json_decode((string) file_get_contents('php://input'), true);
+        if (!is_array($body)) JsonResponse::error('Corps JSON invalide.', 400);
+        if (!isset($body['emails']) || !is_array($body['emails'])) {
+            JsonResponse::error('La liste des adresses email est invalide.', 422);
+        }
+        $service->setEnterpriseRegistrationNotificationEmails($body['emails']);
+        JsonResponse::send(['success' => true, 'message' => 'Adresses de notification mises à jour.']);
+    }
+
     if ($action === 'super-admin-enterprise-branch-limit' && $method === 'PUT') {
         $session = Session::current();
         if (!$session || $session['type'] !== 'super_admin') JsonResponse::error('Accès réservé au super administrateur.', 403);
@@ -440,7 +464,7 @@ try {
                 throw new RuntimeException('La bibliothèque d’envoi email est absente. Exécutez composer install.');
             }
             require_once __DIR__ . '/../../vendor/autoload.php';
-            (new EmailNotificationService())->sendEnterpriseRegistration($body);
+            (new EmailNotificationService())->sendEnterpriseRegistration($body, $service->enterpriseRegistrationNotificationEmails());
             $notificationSent = true;
         } catch (Throwable $exception) {
             $notificationError = $exception->getMessage();

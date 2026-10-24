@@ -3,27 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Connexion | ALBA-STOCK</title>
+  <title>Connexion | ALBA-GEST</title>
   <link rel="stylesheet" href="styles.css?v=20261011-ui-polish-5">
+  <link rel="stylesheet" href="component-polish.css?v=20261024-alba-gest-brand">
+  <link rel="stylesheet" href="src/login.css?v=20261024-alba-gest-eye-comfort">
 </head>
 <body class="auth-page">
-  <main class="auth-simple-layout">
-    <header class="auth-simple-header">
-      <a class="auth-simple-brand" href="index.html" aria-label="ALBA-STOCK"><span class="auth-brand-mark">A</span><span>ALBA-STOCK<span class="brand-dot">.</span></span></a>
-      <div class="auth-simple-heading"><h1>Connexion</h1><p>Accédez à votre espace de gestion.</p></div>
-    </header>
-    <section class="auth-simple-card" aria-label="Formulaire de connexion">
-      <div class="login-error" id="login-error" role="alert"></div>
-      <form id="login-form">
-        <label class="login-field">Email ou nom d’utilisateur<span class="auth-input-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M4.8 20c.7-3.2 3.3-5 7.2-5s6.5 1.8 7.2 5"/></svg></span><input name="login" autocomplete="username" placeholder="Votre identifiant" required></label>
-        <label class="login-field">Mot de passe<span class="auth-input-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4.5" y="10" width="15" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></svg></span><input name="password" type="password" autocomplete="current-password" placeholder="Votre mot de passe" required></label>
-        <button class="login-submit" type="submit">Se connecter <span aria-hidden="true">→</span></button>
-      </form>
-    </section>
-    <p class="auth-simple-footer">Vous n’avez pas encore d’espace ? <a href="register.html">Créer une entreprise</a></p>
-  </main>
-  <script src="password-toggle.js?v=20261011-ui-polish-4"></script>
-  <script src="interface-language.js"></script>
-  <script src="login.js"></script>
+  <div id="login-root"></div>
+  <script type="module" src="build/login.js?v=20261024-alba-gest-eye-comfort"></script>
 </body>
 </html>

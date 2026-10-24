@@ -3,37 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Créer une entreprise | ALBA-STOCK</title>
-  <link rel="stylesheet" href="styles.css?v=20261011-ui-polish-3">
+  <title>Créer une entreprise | ALBA-GEST</title>
+  <link rel="stylesheet" href="styles.css?v=20261024-mobile-workspace-identity">
+  <link rel="stylesheet" href="component-polish.css?v=20261024-alba-gest-brand">
+  <link rel="stylesheet" href="src/register.css?v=20261024-company-form-parity">
 </head>
 <body class="auth-page">
-  <main class="auth-layout register-layout">
-    <section class="auth-showcase">
-      <a class="auth-brand" href="login.html"><span class="auth-brand-mark">A</span><span>ALBA-STOCK<span class="brand-dot">.</span></span></a>
-      <div class="auth-showcase-copy"><span class="auth-eyebrow">DÉMARREZ SIMPLEMENT</span><h1>Une gestion plus claire,<br><em>dès aujourd’hui.</em></h1><p>Créez l’espace de votre entreprise et centralisez le suivi de vos activités dans un outil unique.</p></div>
-      <div class="auth-feature-list"><div><span>01</span><p><strong>Votre espace professionnel</strong><small>Un environnement dédié à votre entreprise et à votre équipe.</small></p></div><div><span>02</span><p><strong>Activation accompagnée</strong><small>Votre demande est examinée avant l’ouverture de l’accès.</small></p></div></div>
-      <p class="auth-copyright">ALBERT WORK · Solution de gestion</p>
-    </section>
-    <section class="register-card">
-      <div class="register-brand"><span>A</span>ALBA-STOCK</div>
-      <h1>Créer votre entreprise</h1>
-      <p>Renseignez vos informations pour envoyer une demande d’accès.</p>
-      <div class="register-message" id="register-message"></div>
-      <form id="register-form"><div class="register-grid">
-        <label class="register-field full">Nom de l'entreprise<input name="enterprise_name" autocomplete="organization" required></label>
-        <label class="register-field">Téléphone de l'entreprise<input name="phone" type="tel" autocomplete="tel"></label>
-        <label class="register-field">Adresse de l'entreprise<input name="address" autocomplete="street-address"></label>
-        <label class="register-field">Nom complet<input name="full_name" autocomplete="name" required></label>
-        <label class="register-field">Nom utilisateur<input name="username" autocomplete="username" required></label>
-        <label class="register-field">Email<input name="email" type="email" autocomplete="email" required></label>
-        <label class="register-field">Mot de passe<input name="password" type="password" minlength="6" autocomplete="new-password" data-password-feedback required></label>
-      </div><button class="register-submit">Envoyer la demande <span aria-hidden="true">→</span></button></form>
-      <p class="auth-form-footer">Vous avez déjà un compte ? <a href="login.html">Se connecter</a></p>
-    </section>
-  </main>
-  <script src="password-toggle.js?v=20261011-ui-polish-2"></script>
-  <script src="password-feedback.js"></script>
-  <script src="interface-language.js"></script>
-  <script src="register.js"></script>
+  <div id="register-root"></div>
+  <script type="module" src="build/register.js?v=20261024-simple-login"></script>
 </body>
 </html>

@@ -1,0 +1,223 @@
+body.auth-page:has(.register-layout) {
+  background:
+    radial-gradient(ellipse at 12% 12%, #e5f0e9 0, transparent 35%),
+    radial-gradient(ellipse at 95% 92%, #f7e9df 0, transparent 30%),
+    #f5f7f3;
+}
+
+.register-layout {
+  width: min(1120px, 100%);
+  min-height: 650px;
+  border-color: #e4ebe6;
+  border-radius: 22px;
+  box-shadow: 0 30px 90px #183b351c;
+}
+
+.register-layout .auth-showcase {
+  background:
+    radial-gradient(ellipse at 51% 48%, #3d746760 0, transparent 42%),
+    radial-gradient(ellipse at 0 100%, #147c7060 0, transparent 38%),
+    linear-gradient(145deg, #183b35 4%, #1d5147 60%, #147c70 100%);
+}
+
+.register-layout .auth-showcase-copy h1 {
+  max-width: 500px;
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: -1.4px;
+}
+
+.register-layout .auth-feature-list > div {
+  border-color: #ffffff24;
+}
+
+.register-layout .auth-showcase-copy h1 em {
+  color: #8bd0bd;
+}
+
+.register-layout .auth-eyebrow {
+  color: #f7ad88;
+}
+
+.register-layout .auth-brand-mark,
+.register-brand > span {
+  background: linear-gradient(145deg, #f3a17f, #f07f5f);
+  box-shadow: 0 7px 16px #f07f5f30;
+  color: #fff;
+}
+
+.register-card {
+  padding: 24px;
+  background: #fff;
+}
+
+.register-card h1 {
+  margin: 0 0 5px;
+  color: #1d2926;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 20px;
+  letter-spacing: -0.4px;
+}
+
+.register-card > p:not(.auth-form-footer) {
+  margin: 0 0 18px;
+  color: #73807b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.register-grid {
+  gap: 12px;
+}
+
+.register-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  color: #73807b;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.register-field input {
+  min-height: 40px;
+  margin-top: 0;
+  padding: 10px;
+  border: 1px solid #e6ebe7;
+  border-radius: 6px;
+  background: #fff;
+  color: #1d2926;
+  font: inherit;
+}
+
+.register-field input:focus {
+  border-color: #67a997;
+  background: #fff;
+  box-shadow: 0 0 0 3px #147c701a;
+}
+
+.register-submit {
+  min-height: 42px;
+  margin-top: 18px;
+  padding: 10px 13px;
+  border-radius: 6px;
+  background: #147c70;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.register-submit:hover:not(:disabled) {
+  background: #11695f;
+}
+
+.register-submit:disabled {
+  cursor: wait;
+  opacity: 0.78;
+}
+
+.register-message.success {
+  border-radius: 8px;
+}
+
+.register-message.error {
+  border-radius: 8px;
+}
+
+.register-card .auth-form-footer a {
+  color: #147c70;
+}
+
+@keyframes register-showcase-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes register-form-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.register-layout .auth-showcase {
+  animation: register-showcase-enter 650ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.register-layout .register-card {
+  animation: register-form-enter 650ms 100ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+.register-field {
+  animation: register-form-enter 430ms both;
+}
+
+.register-field:nth-child(1) { animation-delay: 140ms; }
+.register-field:nth-child(2) { animation-delay: 190ms; }
+.register-field:nth-child(3) { animation-delay: 240ms; }
+.register-field:nth-child(4) { animation-delay: 290ms; }
+.register-field:nth-child(5) { animation-delay: 340ms; }
+.register-field:nth-child(6) { animation-delay: 390ms; }
+.register-field:nth-child(7) { animation-delay: 440ms; }
+
+.register-field input,
+.register-submit,
+.register-card .auth-form-footer a {
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease,
+    color 180ms ease;
+}
+
+.register-field input:focus {
+  transform: translateY(-1px);
+}
+
+.register-submit:active:not(:disabled) {
+  transform: translateY(1px) scale(0.99);
+}
+
+.register-message.visible {
+  animation: register-form-enter 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .register-layout .auth-showcase,
+  .register-layout .register-card,
+  .register-field,
+  .register-message.visible {
+    animation: none;
+  }
+
+  .register-field input,
+  .register-submit,
+  .register-card .auth-form-footer a {
+    transition: none;
+  }
+}
+
+@media (max-width: 700px) {
+  body.auth-page:has(.register-layout) {
+    padding: 14px;
+  }
+
+  .register-layout {
+    min-height: 0;
+    border-radius: 16px;
+  }
+
+  .register-layout .auth-showcase {
+    min-height: 300px;
+  }
+}

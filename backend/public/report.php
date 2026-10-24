@@ -30,7 +30,7 @@ $db = Database::connection();
 $companyQuery = $db->prepare('SELECT name, logo FROM entreprises WHERE entreprise_id = ? LIMIT 1');
 $companyQuery->bind_param('i', $enterpriseId);
 $companyQuery->execute();
-$company = $companyQuery->get_result()->fetch_assoc() ?: ['name' => 'ALBA-STOCK', 'logo' => null];
+$company = $companyQuery->get_result()->fetch_assoc() ?: ['name' => 'ALBA-GEST', 'logo' => null];
 $companyName = htmlspecialchars((string) $company['name'], ENT_QUOTES, 'UTF-8');
 $logoUrl = !empty($company['logo']) ? '../../' . ltrim((string) $company['logo'], '/') : '';
 $rows = (new ReportService($db))->sales($enterpriseId, $branchId);
