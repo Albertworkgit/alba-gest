@@ -224,6 +224,254 @@ a:focus-visible {
   }
 }
 
+#view-container .panel:not(.stock-products-workspace) {
+  border-color: #e2ebe6;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgb(29 41 38 / 4%);
+}
+
+#view-container .panel-header {
+  margin-bottom: 18px;
+  padding: 13px 15px;
+  border-radius: 7px;
+  background: #edf8f0;
+}
+
+#view-container .filter-bar {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-bottom: 18px;
+  padding: 10px;
+  border: 1px solid #e2ebe6;
+  border-radius: 9px;
+  background: #f8fbf8;
+}
+
+#view-container .filter-bar .search-field,
+#view-container .filter-bar .select-field {
+  min-height: 40px;
+  border-color: #d8e5dd;
+  border-radius: 7px;
+  background: #fff;
+}
+
+#view-container .data-table:not(.stock-product-cards) {
+  border-collapse: separate;
+  border-spacing: 0 4px;
+}
+
+#view-container .data-table:not(.stock-product-cards) tbody td {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  border-top: 1px solid #e4ebe6;
+  border-bottom: 1px solid #e4ebe6;
+  background: #fff;
+}
+
+#view-container .data-table:not(.stock-product-cards) tbody td:first-child {
+  border-left: 1px solid #e4ebe6;
+  border-radius: 7px 0 0 7px;
+}
+
+#view-container .data-table:not(.stock-product-cards) tbody td:last-child {
+  border-right: 1px solid #e4ebe6;
+  border-radius: 0 7px 7px 0;
+}
+
+#view-container .data-table:not(.stock-product-cards) tbody tr:hover > td {
+  background: #f7faf7;
+}
+
+.dark-theme #view-container .panel-header {
+  background: #203a2d;
+}
+
+.dark-theme #view-container .filter-bar {
+  border-color: var(--line);
+  background: #202e2b;
+}
+
+.dark-theme #view-container .filter-bar .search-field,
+.dark-theme #view-container .filter-bar .select-field {
+  border-color: var(--line);
+  background: #182321;
+  color: var(--ink);
+}
+
+.dark-theme #view-container .data-table:not(.stock-product-cards) tbody td {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.dark-theme #view-container .data-table:not(.stock-product-cards) tbody tr:hover > td {
+  background: #294b41;
+}
+
+.page-heading {
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 22px;
+  padding: 15px 17px;
+  border: 1px solid #dcebe1;
+  border-radius: 8px;
+  background: #edf8f0;
+}
+
+.page-heading .kicker,
+.page-heading h1 em {
+  color: #198754;
+}
+
+#view-container .dashboard-grid > .stat-card,
+#view-container .section-grid > .panel,
+#view-container .table-panel {
+  border-color: #e2ebe6;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgb(29 41 38 / 4%);
+}
+
+#view-container .dashboard-grid > .stat-card {
+  border-top: 2px solid #35a46a;
+}
+
+#view-container .dashboard-grid > .stat-card:hover {
+  border-color: #b5d9c7;
+  border-top-color: #198754;
+  box-shadow: 0 6px 16px rgb(29 41 38 / 8%);
+}
+
+#view-container .stat-value,
+#view-container .trend-up {
+  color: #187348;
+}
+
+#view-container .primary-button,
+#view-container .cash-create,
+#view-container .role-create-action,
+#view-container .user-create-action,
+#view-container .modal-submit {
+  border-color: #ed8063;
+  background: #ed8063;
+  box-shadow: 0 4px 12px rgb(237 128 99 / 22%);
+  color: #fff;
+}
+
+#view-container .primary-button:hover:not(:disabled),
+#view-container .cash-create:hover:not(:disabled),
+#view-container .role-create-action:hover:not(:disabled),
+#view-container .user-create-action:hover:not(:disabled),
+#view-container .modal-submit:hover:not(:disabled) {
+  border-color: #da7055;
+  background: #da7055;
+}
+
+#view-container .text-button {
+  color: #146f45;
+}
+
+#view-container input:not([type="checkbox"]):not([type="radio"]):not([type="search"]),
+#view-container select,
+#view-container textarea {
+  border-color: #d8e5dd;
+  border-radius: 7px;
+}
+
+#view-container input:not([type="checkbox"]):not([type="radio"]):focus,
+#view-container select:focus,
+#view-container textarea:focus {
+  border-color: #67ad83;
+  box-shadow: 0 0 0 3px rgb(25 135 84 / 12%);
+  outline: 0;
+}
+
+#view-container .status.success {
+  background: #e8f5ed;
+  color: #176b45;
+}
+
+#view-container .list-pagination button {
+  border-color: #cfe3d6;
+  border-radius: 7px;
+  background: #f6fbf8;
+  color: #165f44;
+}
+
+#view-container .list-pagination button:hover:not(:disabled) {
+  border-color: #8ebcaf;
+  background: #e9f5ef;
+}
+
+.dark-theme .page-heading {
+  border-color: #354742;
+  background: #203a2d;
+}
+
+.dark-theme .page-heading .kicker,
+.dark-theme .page-heading h1 em {
+  color: #a8dfbd;
+}
+
+.dark-theme #view-container .dashboard-grid > .stat-card,
+.dark-theme #view-container .section-grid > .panel,
+.dark-theme #view-container .table-panel {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.dark-theme #view-container .stat-value,
+.dark-theme #view-container .trend-up {
+  color: #a8dfbd;
+}
+
+.dark-theme #view-container .primary-button,
+.dark-theme #view-container .cash-create,
+.dark-theme #view-container .role-create-action,
+.dark-theme #view-container .user-create-action,
+.dark-theme #view-container .modal-submit {
+  border-color: #ed8063;
+  background: #ed8063;
+  color: #fff;
+}
+
+.dark-theme #view-container input:not([type="checkbox"]):not([type="radio"]):not([type="search"]),
+.dark-theme #view-container select,
+.dark-theme #view-container textarea {
+  border-color: var(--line);
+  background: #182321;
+  color: var(--ink);
+}
+
+.dark-theme #view-container .status.success {
+  background: #294b36;
+  color: #a8dfbd;
+}
+
+.dark-theme #view-container .list-pagination button {
+  border-color: #416e50;
+  background: #202e2b;
+  color: #a8dfbd;
+}
+
+@media (max-width: 600px) {
+  .page-heading {
+    align-items: stretch;
+    flex-direction: column;
+    margin-bottom: 18px;
+    padding: 13px;
+  }
+
+  #view-container .filter-bar > .search-field,
+  #view-container .filter-bar > .select-field,
+  #view-container .filter-bar > button {
+    width: 100%;
+  }
+
+  #view-container .page-heading .primary-button {
+    width: 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -249,6 +497,7 @@ a:focus-visible {
   .support-card:hover,
   button:not(:disabled):active,
   .nav-item:active,
-  .admin-nav-item:active,
+  .admin-nav-item:active {
+    transform: none;
   }
 }

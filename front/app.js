@@ -118,7 +118,7 @@ function renderModuleNavigation() {
   const navigation = document.getElementById('module-section-nav');
   if (!navigation) return;
   navigation.replaceChildren();
-  const panels = [...container.querySelectorAll('.panel')].filter(panel => {
+  const panels = [...container.querySelectorAll('.panel, [data-stock-section-panel]')].filter(panel => {
     if (!panel.hidden) return true;
     if (currentViewName !== 'stock' || !panel.hasAttribute('data-stock-section-panel')) return false;
     const section = panel.dataset.stockSectionPanel;
@@ -811,6 +811,60 @@ function configureStockWorkspace() {
   const productPanel = document.getElementById('stock-rows')?.closest('section');
   const categoryPanel = document.getElementById('category-admin-panel');
   if (!productPanel || !categoryPanel) return;
+  productPanel.classList.remove('panel');
+  productPanel.classList.add('stock-products-workspace');
+  const stockRows = document.getElementById('stock-rows');
+  const stockTable = stockRows.closest('table');
+  const stockTableWrap = stockTable?.parentElement;
+  const productHeader = productPanel.querySelector('.panel-header');
+  if (stockTable && stockTableWrap && productHeader) {
+    stockTable.classList.add('stock-product-cards');
+    stockTable.querySelector('thead')?.setAttribute('hidden', '');
+    const categoryFilter = document.createElement('select');
+    categoryFilter.className = 'select-field stock-category-filter';
+    categoryFilter.id = 'stock-category-filter';
+    categoryFilter.setAttribute('aria-label', 'Filtrer par catégorie');
+    categoryFilter.innerHTML = '<option value="">Toutes les catégories</option>';
+    productPanel.querySelector('.filter-bar')?.insertBefore(categoryFilter, document.getElementById('stock-branch'));
+    const statusFilters = document.createElement('div');
+    statusFilters.className = 'stock-status-filters';
+    statusFilters.setAttribute('aria-label', 'Filtrer par état du stock');
+    statusFilters.innerHTML = '<button type="button" class="active" data-stock-filter="all">Tous</button><button type="button" data-stock-filter="available">En stock</button><button type="button" data-stock-filter="low">Stock bas</button><button type="button" data-stock-filter="empty">Rupture</button>';
+    productHeader.after(statusFilters);
+    const browser = document.createElement('div');
+    browser.className = 'stock-browser-grid';
+    const productList = document.createElement('div');
+    productList.className = 'stock-product-list';
+    const details = document.createElement('aside');
+    details.className = 'stock-product-details';
+    details.id = 'stock-product-details';
+    details.setAttribute('aria-live', 'polite');
+    details.innerHTML = '<p class="kicker">SÉLECTION</p><h2>Fiche produit</h2><p class="stock-details-empty">Sélectionnez un produit pour consulter son stock.</p>';
+    stockTableWrap.before(browser);
+    productList.append(stockTableWrap);
+    browser.append(productList, details);
+    statusFilters.addEventListener('click', event => {
+      const button = event.target.closest('[data-stock-filter]');
+      if (!button) return;
+      stockStateFilter = button.dataset.stockFilter;
+      statusFilters.querySelectorAll('[data-stock-filter]').forEach(option => option.classList.toggle('active', option === button));
+      renderStockRows();
+    });
+    productList.addEventListener('click', event => {
+      const selectButton = event.target.closest('[data-select-stock-product]');
+      if (selectButton) {
+        selectedStockProductId = Number(selectButton.dataset.selectStockProduct);
+        renderStockRows();
+        return;
+      }
+      if (event.target.closest('button, a')) return;
+      const card = event.target.closest('[data-stock-product-id]');
+      if (!card) return;
+      selectedStockProductId = Number(card.dataset.stockProductId);
+      renderStockRows();
+    });
+    categoryFilter.addEventListener('change', renderStockRows);
+  }
   productPanel.dataset.stockSectionPanel = 'products';
   categoryPanel.dataset.stockSectionPanel = 'categories';
   categoryPanel.hidden = true;
@@ -1085,6 +1139,8 @@ function showPagination(body, key, info, onPage, loadReportRows = null) {
   controls.innerHTML = `<span>Page ${page} sur ${pages} · ${total.toLocaleString('fr-FR')} résultat${total === 1 ? '' : 's'}</span><div><label class="pagination-size">Lignes par page<select data-page-size-key="${key}">${PAGE_SIZE_OPTIONS.map(size => `<option value="${size}"${PAGE_SIZE === size ? ' selected' : ''}>${size}</option>`).join('')}</select></label><button type="button" data-page-key="${key}" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>&#8249; Précédent</button><button type="button" data-page-key="${key}" data-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>Suivant &#8250;</button></div>`;
 }
 let stockData = {products:[], stocks:[], categories:[], branches:[], units:[], summary:[]};
+let selectedStockProductId = null;
+let stockStateFilter = 'all';
 let unitManagerModal = null;
 let refreshUnitManager = null;
 let roleData = [];
@@ -2769,9 +2825,11 @@ async function loadStock(page = 1) {
     const categories = categoryPage.rows;
     const products = [...new Map(stockPage.rows.map(row => [Number(row.produit_id), row])).values()];
     stockData = {products, stocks:stockPage.rows, categories, branches:branchOptions, units, summary:summary.branches};
+    const categoryFilter = document.getElementById('stock-category-filter');
+    if (categoryFilter) categoryFilter.innerHTML = '<option value="">Toutes les catégories</option>' + categories.map(category => `<option value="${Number(category.category_id)}">${escapeHtml(category.name)}</option>`).join('');
     renderCategoryRows();
     const branchSelect = document.getElementById('stock-branch');
-    branchSelect.hidden = true;
+    branchSelect.hidden = branchOptions.length < 2;
     branchSelect.innerHTML = '<option value="">Toutes les succursales</option>' + branchOptions.map(branch => `<option value="${Number(branch.succursale_id)}">${escapeHtml(branch.name)}</option>`).join('');
     branchSelect.value = activeBranchId || (isBranchScoped ? String(sessionUser.succursale_id) : '');
     document.getElementById('stock-search').oninput = renderStockRows;
@@ -2814,22 +2872,46 @@ function renderStockRows() {
   const search = document.getElementById('stock-search').value.trim().toLocaleLowerCase();
   const unitNames = Object.fromEntries((stockData.units || []).map(unit => [unit.unite_mesure_id, unit.symbole || unit.name]));
   const stocks = stockData.stocks.filter(stock => !branchId || stock.stock_id === null || Number(stock.succursale_id) === Number(branchId));
-  const products = stockData.products.filter(product => Number(product.is_active ?? 1) === 1 && `${product.name} ${product.sku}`.toLocaleLowerCase().includes(search));
-  document.getElementById('stock-count').textContent = `${products.length} produit${products.length > 1 ? 's' : ''} référencé${products.length > 1 ? 's' : ''}`;
-  if (!products.length) { rows.innerHTML = '<tr><td colspan="9">Aucun produit. Utilisez Â« Créer un produit Â» pour commencer.</td></tr>'; return; }
-  rows.innerHTML = products.map(product => renderStockProductRow(product, stocks.filter(stock => Number(stock.produit_id) === Number(product.produit_id)), unitNames[product.unite_de_mesure])).join('');
+  const categoryId = document.getElementById('stock-category-filter')?.value || '';
+  const products = stockData.products.filter(product => Number(product.is_active ?? 1) === 1 && `${product.name} ${product.sku}`.toLocaleLowerCase().includes(search) && (!categoryId || Number(product.category_id) === Number(categoryId)));
+  const filteredProducts = products.filter(product => {
+    const productStocks = stocks.filter(stock => Number(stock.produit_id) === Number(product.produit_id));
+    const quantity = productStocks.reduce((sum, stock) => sum + Number(stock.quantity || 0), 0);
+    const threshold = productStocks.reduce((sum, stock) => sum + Number(stock.min_stock_level || 0), 0);
+    return stockStateFilter === 'all' || (stockStateFilter === 'empty' && quantity === 0) || (stockStateFilter === 'low' && quantity > 0 && quantity <= threshold) || (stockStateFilter === 'available' && quantity > threshold);
+  });
+  document.getElementById('stock-count').textContent = `${filteredProducts.length} produit${filteredProducts.length > 1 ? 's' : ''} référencé${filteredProducts.length > 1 ? 's' : ''}`;
+  if (!filteredProducts.length) {
+    rows.innerHTML = '<tr class="stock-empty-row"><td colspan="4">Aucun produit ne correspond à ces filtres.</td></tr>';
+    document.getElementById('stock-product-details').innerHTML = '<p class="kicker">SÉLECTION</p><h2>Fiche produit</h2><p class="stock-details-empty">Aucun produit à afficher avec ces filtres.</p>';
+    return;
+  }
+  if (!filteredProducts.some(product => Number(product.produit_id) === selectedStockProductId)) selectedStockProductId = Number(filteredProducts[0].produit_id);
+  rows.innerHTML = filteredProducts.map(product => renderStockProductRow(product, stocks.filter(stock => Number(stock.produit_id) === Number(product.produit_id)), unitNames[product.unite_de_mesure])).join('');
+  renderSelectedStockProduct(filteredProducts.find(product => Number(product.produit_id) === selectedStockProductId), stocks, unitNames);
   renderCategoryRows();
 }
 function renderStockProductRow(product, productStocks, unitOverride = '') {
   const quantity = productStocks.reduce((sum, stock) => sum + Number(stock.quantity || 0), 0);
   const threshold = productStocks.reduce((sum, stock) => sum + Number(stock.min_stock_level || 0), 0);
   const status = quantity === 0 ? ['Rupture','danger'] : quantity <= threshold ? ['Stock bas','warning'] : ['En stock','success'];
-  const cardButton = hasAccess('voir_stock') ? `<button class="text-button" data-stock-card="${Number(product.produit_id)}">Afficher fiche de stock</button>` : '';
-  const adjustButton = hasAccess('modifier_stock') ? `<button class="text-button" data-stock-edit="${Number(product.produit_id)}">Ajuster</button>` : '';
-  const editButton = hasAccess('modifier_produit') ? `<button class="text-button" data-product-edit="${Number(product.produit_id)}">Modifier</button>` : '';
-  const deleteButton = hasAccess('supprimer_produit') ? `<button class="text-button" data-product-delete="${Number(product.produit_id)}">Supprimer</button>` : '';
   const unit = unitOverride || product.unit_abbreviation || product.unit_name || '';
-  return `<tr><td>${escapeHtml(product.sku)}</td><td>${escapeHtml(product.name)}</td><td>${escapeHtml(product.category_name || '—')}</td><td>${Number(product.unit_price || 0).toFixed(2)} ${escapeHtml(product.monais || '')}</td><td>${escapeHtml(unit)}</td><td>${quantity.toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${threshold.toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td><span class="status ${status[1]}">${status[0]}</span></td><td>${cardButton} ${adjustButton} ${editButton} ${deleteButton}</td></tr>`;
+  const isSelected = Number(product.produit_id) === selectedStockProductId;
+  return `<tr class="stock-product-card${isSelected ? ' selected' : ''}" data-stock-product-id="${Number(product.produit_id)}"><td class="stock-card-identity"><span class="stock-card-sku">${escapeHtml(product.sku)}</span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.category_name || 'Sans catégorie')}</small></td><td class="stock-card-quantity"><strong>${quantity.toLocaleString('fr-FR')} <small>${escapeHtml(unit)}</small></strong><span class="status ${status[1]}">${status[0]}</span></td><td class="stock-card-price"><span>Prix de vente</span><strong>${Number(product.unit_price || 0).toFixed(2)} ${escapeHtml(product.monais || '')}</strong></td><td class="stock-card-open"><button type="button" class="stock-card-select" data-select-stock-product="${Number(product.produit_id)}" aria-label="Afficher les détails de ${escapeHtml(product.name)}">Détails <span aria-hidden="true">›</span></button></td></tr>`;
+}
+function renderSelectedStockProduct(product, stocks, unitNames) {
+  const details = document.getElementById('stock-product-details');
+  if (!details || !product) return;
+  const productStocks = stocks.filter(stock => Number(stock.produit_id) === Number(product.produit_id));
+  const quantity = productStocks.reduce((sum, stock) => sum + Number(stock.quantity || 0), 0);
+  const threshold = productStocks.reduce((sum, stock) => sum + Number(stock.min_stock_level || 0), 0);
+  const status = quantity === 0 ? ['Rupture', 'danger'] : quantity <= threshold ? ['Stock bas', 'warning'] : ['En stock', 'success'];
+  const unit = unitNames[product.unite_de_mesure] || product.unit_abbreviation || product.unit_name || '';
+  const stockCardButton = hasAccess('voir_stock') ? `<button type="button" class="stock-detail-action" data-stock-card="${Number(product.produit_id)}">Fiche de stock</button>` : '';
+  const adjustButton = hasAccess('modifier_stock') ? `<button type="button" class="stock-detail-action stock-detail-primary" data-stock-edit="${Number(product.produit_id)}">Ajuster le stock</button>` : '';
+  const editButton = hasAccess('modifier_produit') ? `<button type="button" class="stock-detail-action" data-product-edit="${Number(product.produit_id)}">Modifier le produit</button>` : '';
+  const deleteButton = hasAccess('supprimer_produit') ? `<button type="button" class="stock-detail-action stock-detail-danger" data-product-delete="${Number(product.produit_id)}">Supprimer</button>` : '';
+  details.innerHTML = `<p class="kicker">PRODUIT SÉLECTIONNÉ</p><div class="stock-detail-heading"><span class="stock-detail-mark" aria-hidden="true">▦</span><div><h2>${escapeHtml(product.name)}</h2><p>${escapeHtml(product.sku)} · ${escapeHtml(product.category_name || 'Sans catégorie')}</p></div></div><div class="stock-detail-status"><span class="status ${status[1]}">${status[0]}</span><span>Seuil : ${threshold.toLocaleString('fr-FR')} ${escapeHtml(unit)}</span></div><div class="stock-detail-quantity"><span>Quantité disponible</span><strong>${quantity.toLocaleString('fr-FR')} <small>${escapeHtml(unit)}</small></strong></div><dl class="stock-detail-facts"><div><dt>Prix de vente</dt><dd>${Number(product.unit_price || 0).toFixed(2)} ${escapeHtml(product.monais || '')}</dd></div><div><dt>Prix d’achat</dt><dd>${Number(product.cost_price || 0).toFixed(2)} ${escapeHtml(product.monais || '')}</dd></div><div><dt>Unité de mesure</dt><dd>${escapeHtml(product.unit_name || unit || '—')}</dd></div></dl>${product.description ? `<p class="stock-detail-description">${escapeHtml(product.description)}</p>` : ''}<div class="stock-detail-actions">${adjustButton}${stockCardButton}${editButton}${deleteButton}</div>`;
 }
 async function allStockProductRows() {
   const branchId = document.getElementById('stock-branch')?.value || '';
@@ -3048,11 +3130,12 @@ function openEntityForm(type, entity = null) {
     const productSearch = modal.querySelector('#purchase-product-search');
     const supplierSelect = modal.querySelector('#purchase-supplier');
     const productSelect = modal.querySelector('#purchase-product');
-    supplierSearch.setAttribute('list', 'purchase-supplier-options');
     productSearch.setAttribute('list', 'purchase-product-options');
     productSearch.required = true;
-    supplierSearch.closest('label').firstChild.textContent = 'Fournisseur (facultatif)';
-    supplierSearch.closest('label').insertAdjacentHTML('beforeend', '<datalist id="purchase-supplier-options"></datalist><input type="hidden" name="fournisseur_id" id="purchase-supplier">');
+    const supplierLabel = supplierSearch.closest('label');
+    supplierLabel.firstChild.textContent = 'Fournisseur (facultatif)';
+    supplierLabel.insertAdjacentHTML('beforeend', '<input type="hidden" name="fournisseur_id" id="purchase-supplier">');
+    supplierLabel.insertAdjacentHTML('afterend', '<div class="supplier-suggestions" id="purchase-supplier-options" hidden></div>');
     productSearch.closest('label').insertAdjacentHTML('beforeend', '<datalist id="purchase-product-options"></datalist><input type="hidden" name="produit_id" id="purchase-product">');
     supplierSelect.closest('label').remove();
     productSelect.closest('label').remove();
@@ -3139,19 +3222,13 @@ function openEntityForm(type, entity = null) {
     Promise.all([apiGet('produits'), suppliersRequest, apiGet('unites_mesure')]).then(([products, suppliers, units]) => {
         let availableSuppliers = suppliers;
       const normalizeSearch = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim();
-      const supplierLabels = new Map();
       const productLabels = new Map();
-      const supplierLabel = row => `${row.name}${row.contact_name ? ` — ${row.contact_name}` : ''} (#${Number(row.fournisseur_id)})`;
       const productLabel = row => { const unit = units.find(item => Number(item.unite_mesure_id) === Number(row.unite_de_mesure)); return `${row.name}${row.sku ? ` - ${row.sku}` : ''}${unit ? ` - ${unit.symbole || unit.name}` : ''}${row.monais ? ` - ${row.monais}` : ''}`; };
       const fillSuppliers = (term = '') => {
         const query = normalizeSearch(term);
-        const matches = availableSuppliers.filter(row => normalizeSearch(`${row.name} ${row.contact_name || ''} ${row.email || ''} ${row.phone || ''} ${supplierLabel(row)}`).includes(query));
-        supplierLabels.clear();
-        supplierOptions.innerHTML = matches.map(row => {
-          const label = supplierLabel(row);
-          supplierLabels.set(label, row);
-          return `<option value="${escapeHtml(label)}"></option>`;
-        }).join('');
+        const matches = query ? availableSuppliers.filter(row => normalizeSearch(`${row.name} ${row.contact_name || ''} ${row.email || ''} ${row.phone || ''}`).includes(query)) : [];
+        supplierOptions.hidden = matches.length === 0;
+        supplierOptions.innerHTML = matches.map(row => `<button type="button" class="supplier-suggestion" data-supplier-option="${Number(row.fournisseur_id)}"><strong>${escapeHtml(row.name)}</strong><span>${escapeHtml(row.contact_name || row.phone || row.email || 'Fournisseur')}</span></button>`).join('');
       };
       const fillProducts = (term = '') => {
         const query = normalizeSearch(term);
@@ -3174,9 +3251,20 @@ function openEntityForm(type, entity = null) {
       fillSuppliers();
       fillProducts();
       supplierSearch.addEventListener('input', event => {
+        supplierSelect.value = '';
         fillSuppliers(event.target.value);
-        const selected = supplierLabels.get(event.target.value);
-        supplierSelect.value = selected ? String(selected.fournisseur_id) : '';
+      });
+      supplierOptions.addEventListener('click', event => {
+        const option = event.target.closest('[data-supplier-option]');
+        if (!option) return;
+        const selected = availableSuppliers.find(row => Number(row.fournisseur_id) === Number(option.dataset.supplierOption));
+        if (!selected) return;
+        supplierSearch.value = selected.name;
+        supplierSelect.value = String(selected.fournisseur_id);
+        supplierOptions.hidden = true;
+      });
+      supplierSearch.addEventListener('keydown', event => {
+        if (event.key === 'Escape') supplierOptions.hidden = true;
       });
       const syncSelectedPurchaseProduct = event => {
         fillProducts(event.target.value);

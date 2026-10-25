@@ -8,11 +8,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=20261024-mobile-workspace-identity">
-  <link rel="stylesheet" href="stock-navigation.css?v=20261011-ui-polish-2">
+  <link rel="stylesheet" href="stock-navigation.css?v=20261025-module-surfaces">
   <link rel="stylesheet" href="reports.css?v=20261016-responsive-toolbar">
   <link rel="stylesheet" href="charts.css?v=20261017-sales-bar-levels">
   <link rel="stylesheet" href="crud-actions.css?v=20261020-service-sales-v2">
-  <link rel="stylesheet" href="component-polish.css?v=20261024-alba-gest-brand">
+  <link rel="stylesheet" href="component-polish.css?v=20261025-stock-compact-coral">
   <style>
     .app-footer{display:flex;justify-content:center;align-items:center;gap:6px;color:#95a09b;font-size:11px;padding:30px 0 5px}
     .app-footer strong{color:#147c70;font-weight:700}
@@ -23,6 +23,20 @@
     .cash-actions{display:flex;gap:8px;flex-wrap:wrap}.cash-actions button{padding:8px 12px;border-radius:6px;font-size:11px;font-weight:700}.cash-open{background:#dcefe8;color:#147c70}.cash-close{background:#fde8e4;color:#bb5149}.cash-create{background:#147c70;color:#fff}.dark-theme{--ink:#e5eeea;--muted:#9db2aa;--line:#354742;--surface:#263633;--canvas:#182321}.dark-theme body{background:var(--canvas);color:var(--ink)}.dark-theme .main-content{background:var(--canvas)}.dark-theme .breadcrumbs{color:#91aaa1}.dark-theme .breadcrumbs strong{color:#e5eeea}.dark-theme .panel,.dark-theme .stat-card{box-shadow:none}.dark-theme .search-field,.dark-theme .select-field,.dark-theme .form-field input,.dark-theme .form-field select,.dark-theme .form-field textarea{background:#202e2b;color:var(--ink);border-color:var(--line)}.dark-theme .data-table td{border-color:var(--line)}.dark-theme .data-table th{color:#91aaa1}.dark-theme .progress{background:#354742}.dark-theme .chart-area{background:linear-gradient(to bottom,transparent 24%,#354742 25%,transparent 26%,transparent 49%,#354742 50%,transparent 51%,transparent 74%,#354742 75%,transparent 76%)}.dark-theme .text-button{color:#72c8b4}.dark-theme .page-heading h1 em{color:#72c8b4}.dark-theme .support-card{background:#244d45}
     @media(max-width:720px){.brand{font-size:18px;gap:7px;padding-left:8px;padding-right:8px}.brand-mark{width:27px;height:27px;font-size:15px}.brand-copy small{font-size:7px;margin-top:4px}.top-actions{gap:5px}.theme-button{padding:6px;width:32px;justify-content:center}.theme-button span{display:none}.theme-panel{right:-5px}.top-avatar{width:29px;height:29px}.breadcrumbs span{display:none}.breadcrumbs{font-size:11px}.page-heading h1{max-width:100%;overflow-wrap:anywhere}}
     @media(max-width:720px){.sidebar{overflow-y:auto;overscroll-behavior:contain;padding-bottom:24px}.sidebar-bottom{margin-top:28px}.nav-list{padding-bottom:4px}.support-card{margin-top:8px}}
+    :root{--teal:#198754;--teal-dark:#146f45;--mint:#e8f5ed;--coral:#ed8063;--focus-ring:0 0 0 3px rgb(25 135 84 / 12%)}
+    .primary-button,.login-submit,.register-submit,.admin-submit,.modal-submit,.cash-create,.role-create-action,.user-create-action{background:#ed8063!important;box-shadow:0 4px 12px rgb(237 128 99 / 22%)}
+    .primary-button:hover,.login-submit:hover,.register-submit:hover,.admin-submit:hover,.modal-submit:hover,.cash-create:hover,.role-create-action:hover,.user-create-action:hover{background:#da7055!important}
+    .brand-mark,.auth-brand-mark,.register-brand span{background:var(--coral)!important}
+    .nav-item.active,.admin-nav-item.active,.admin-nav-item:hover{box-shadow:inset 3px 0 #198754}
+    .text-button,.theme-option:hover,.theme-option.selected,.auth-form-footer a,.auth-simple-footer a{color:#146f45}
+    .theme-option:hover,.theme-option.selected{background:#e8f5ed}
+    .cash-open,.cash-action-in,.cash-submit-in,.user-action-edit,.purchase-voucher-button,.movement-report-button,.report-toolbar button,.report-dialog-actions button,button[data-product-edit],button[data-category-edit],button[data-branch-edit],button[data-user-edit],button[data-role-edit],button[data-supplier-edit],button[data-client-edit],button[data-stock-edit]{border-color:#b9dfc8;background:#e8f5ed;color:#176b45}
+    .cash-open:hover,.cash-action-in:hover,.cash-submit-in:hover,.user-action-edit:hover,.purchase-voucher-button:hover:not(:disabled),.movement-report-button:hover,.report-toolbar button:hover,.report-dialog-actions button:hover,button[data-product-edit]:hover,button[data-category-edit]:hover,button[data-branch-edit]:hover,button[data-user-edit]:hover,button[data-role-edit]:hover,button[data-supplier-edit]:hover,button[data-client-edit]:hover,button[data-stock-edit]:hover{border-color:#83c1a0;background:#d9efdf}
+    .report-toolbar button[data-report-action="print"],.report-dialog-actions button[data-report-action="print"]{border-color:#198754;background:#198754;color:#fff}
+    .stock-section-tabs [data-stock-section].active{border-color:#198754;background:#198754}
+    .dark-theme .text-button,.dark-theme .theme-option:hover,.dark-theme .theme-option.selected{color:#a8dfbd}
+    .dark-theme .theme-option:hover,.dark-theme .theme-option.selected{background:#294b36}
+    .dark-theme .cash-open,.dark-theme .cash-action-in,.dark-theme .cash-submit-in,.dark-theme .user-action-edit,.dark-theme .purchase-voucher-button,.dark-theme .movement-report-button,.dark-theme .report-toolbar button,.dark-theme .report-dialog-actions button,.dark-theme button[data-product-edit],.dark-theme button[data-category-edit],.dark-theme button[data-branch-edit],.dark-theme button[data-user-edit],.dark-theme button[data-role-edit],.dark-theme button[data-supplier-edit],.dark-theme button[data-client-edit],.dark-theme button[data-stock-edit]{border-color:#416e50;background:#294b36;color:#a8dfbd}
   </style>
 </head>
 <body>

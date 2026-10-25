@@ -65,7 +65,13 @@ function LoginPage() {
               />
             </label>
             <button className="login-submit" type="submit">
-              Se connecter <span aria-hidden="true">→</span>
+              Se connecter
+              <span aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M14 4h5a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-5" />
+                  <path d="M3 12h12m-5-5 5 5-5 5" />
+                </svg>
+              </span>
             </button>
           </form>
           <p className="auth-login-register">
