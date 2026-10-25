@@ -960,6 +960,7 @@ function renderMobilePrimaryNavigation() {
     return clone;
   }));
   mobilePrimaryNavigation.hidden = !items.length;
+  mobilePrimaryNavigation.scrollLeft = 0;
   window.translateInterface?.(mobilePrimaryNavigation);
 }
 function applyViewAccess(viewName, user) {
@@ -1984,6 +1985,7 @@ function cashDebtReminderMessage(debt) {
 }
 function cashMovementReceiptMarkup(movement, compact = false) {
   const isOut = movement.type === 'SORTIE';
+  const isDebtRepayment = movement.dette_operation === 'REMBOURSEMENT' && Number(movement.dette_id) > 0;
   const bankDetails = movement.bank_name
     ? `<p><strong>Banque :</strong> ${escapeHtml(movement.bank_name)}${movement.bank_reference ? ` · <strong>Référence bancaire :</strong> ${escapeHtml(movement.bank_reference)}` : ''}</p>`
     : '';
@@ -1993,12 +1995,44 @@ function cashMovementReceiptMarkup(movement, compact = false) {
   const debtConversion = movement.dette_montant_impute
     ? `<p><strong>Montant imputé à la dette :</strong> ${moneyCurrencyLabel(movement.dette_montant_impute, movement.dette_monais)} · <strong>Taux appliqué :</strong> ${Number(movement.dette_taux_change).toFixed(6)}</p>`
     : '';
-  return `<section class="cash-movement-voucher cash-movement-voucher--${isOut?'out':'in'}${compact?' cash-receipt-card':''}"><div class="cash-movement-heading"><div class="cash-movement-company">${companyLogoMarkup()}<div><h1>${isOut ? 'BON DE SORTIE DE CAISSE' : 'REÇU D’ENTRÉE EN CAISSE'}</h1><p>${escapeHtml(movement.enterprise_name || sessionUser?.enterprise_name || 'ALBA-GEST')}</p></div></div><strong>N° ${Number(movement.mouvement_id)}</strong></div><div class="cash-movement-details"><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason || '—')}</p>${debtConversion}<p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p></div><div class="cash-movement-amount">Montant ${isOut ? 'sorti' : 'reçu'} : ${moneyCurrencyLabel(movement.amount, movement.monais)}</div>${signatures}</section>`;
+  const debtDetails = isDebtRepayment
+    ? `<p><strong>Dette N° :</strong> ${Number(movement.dette_id)}</p><p><strong>Payé par :</strong> ${escapeHtml(movement.dette_beneficiaire || '—')}</p>${movement.dette_description ? `<p><strong>Description de la dette :</strong> ${escapeHtml(movement.dette_description)}</p>` : ''}`
+    : '';
+  const heading = isOut ? 'BON DE SORTIE DE CAISSE' : isDebtRepayment ? 'REÇU DE PAIEMENT' : 'REÇU D’ENTRÉE EN CAISSE';
+  return `<section class="cash-movement-voucher cash-movement-voucher--${isOut?'out':'in'}${compact?' cash-receipt-card':''}"><div class="cash-movement-heading"><div class="cash-movement-company">${companyLogoMarkup()}<div><h1>${heading}</h1><p>${escapeHtml(movement.enterprise_name || sessionUser?.enterprise_name || 'ALBA-GEST')}</p></div></div><strong>N° ${Number(movement.mouvement_id)}</strong></div><div class="cash-movement-details"><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}${debtDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason || '—')}</p>${debtConversion}<p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p></div><div class="cash-movement-amount">Montant ${isOut ? 'sorti' : 'reçu'} : ${moneyCurrencyLabel(movement.amount, movement.monais)}</div>${signatures}</section>`;
 }
 async function printCashMovementReceipt(movementId, printWindow) {
   if (movementId < 1) throw new Error('Identifiant du mouvement invalide.');
   if (!printWindow || printWindow.closed) throw new Error('La fenêtre d’impression est indisponible.');
   const movement = await fetchReportData('cash-movement-receipt', {mouvement_id: movementId});
+  if (movement.type === 'ENTREE' && Number(movement.reference_id) > 0 && /^Paiement vente\b/i.test(String(movement.reason || ''))) {
+    const saleData = await fetchReportData('sale-receipt', {vente_id:Number(movement.reference_id)});
+    const payments = (saleData.payments || []).filter(payment =>
+      payment.payment_type === 'PAYMENT' &&
+      Number(payment.cash_id) === Number(movement.cash_id) &&
+      String(payment.monais || '').trim().toUpperCase() === String(movement.monais || '').trim().toUpperCase() &&
+      Math.abs(Number(payment.amount) - Number(movement.amount)) < 0.01
+    );
+    const movementTime = new Date(String(movement.movement_date || '').replace(' ', 'T')).getTime();
+    const payment = payments.sort((left, right) => {
+      const leftTime = new Date(String(left.payment_date || '').replace(' ', 'T')).getTime();
+      const rightTime = new Date(String(right.payment_date || '').replace(' ', 'T')).getTime();
+      return Math.abs(leftTime - movementTime) - Math.abs(rightTime - movementTime);
+    })[0];
+    if (!payment) throw new Error('Le paiement associé à ce mouvement de caisse est introuvable.');
+    const receiptButton = {dataset:{
+      salePaymentReceipt:String(movement.reference_id),
+      salePaymentId:String(payment.paiement_id),
+      salePaymentAmount:String(payment.amount),
+      salePaymentCurrency:String(payment.monais || ''),
+      salePaymentDate:String(payment.payment_date || movement.movement_date || ''),
+      salePaymentMode:String(payment.payment_mode || movement.payment_mode || 'Caisse'),
+      salePaymentReference:String(payment.reference || movement.bank_reference || ''),
+      salePaymentNumber:String(payment.paiement_id),
+    }};
+    await printSalePaymentReceipt(receiptButton, printWindow, saleData);
+    return;
+  }
   const companyDetails = [
     movement.enterprise_email,
     movement.enterprise_phone,
@@ -2006,7 +2040,8 @@ async function printCashMovementReceipt(movementId, printWindow) {
     movement.rccm ? `RCCM : ${movement.rccm}` : '',
     movement.boite_postale ? `BP : ${movement.boite_postale}` : ''
   ].filter(Boolean).map(escapeHtml).join(' · ');
-  const title = movement.type === 'SORTIE' ? 'Bon de sortie de caisse' : 'Reçu d’entrée en caisse';
+  const isDebtRepayment = movement.dette_operation === 'REMBOURSEMENT' && Number(movement.dette_id) > 0;
+  const title = movement.type === 'SORTIE' ? 'Bon de sortie de caisse' : isDebtRepayment ? 'Reçu de paiement' : 'Reçu d’entrée de caisse';
   printReportInWindow(printWindow, `${title} n° ${Number(movement.mouvement_id)}`, cashMovementReceiptMarkup(movement), companyDetails, 'portrait', true);
 }
 function syncSelectedCashPrintButton() {
@@ -4052,13 +4087,14 @@ async function printSaleInvoice(button){
     printReportInWindow(printWindow,`Facture ${sale.invoice_no}`,content);
   }catch(error){printWindow.close();showToast(`Impression de la facture impossible : ${error.message}`);}
 }
-async function printSalePaymentReceipt(button){
-  const printWindow=window.open('','_blank');if(!printWindow){showToast('Autorisez les fenêtres contextuelles pour imprimer le reçu.');return;}
+async function printSalePaymentReceipt(button, existingPrintWindow = null, existingSaleData = null){
+  const ownsPrintWindow=!existingPrintWindow;
+  const printWindow=existingPrintWindow||window.open('','_blank');if(!printWindow){showToast('Autorisez les fenêtres contextuelles pour imprimer le reçu.');return;}
   try{
     const saleId=Number(button.dataset.salePaymentReceipt);
     const amount=Number(button.dataset.salePaymentAmount);
     if(saleId<1||amount<=0)throw new Error('Les informations de ce paiement sont invalides.');
-    const data=await fetchReportData('sale-receipt',{vente_id:saleId});
+    const data=existingSaleData||await fetchReportData('sale-receipt',{vente_id:saleId});
     const sale=data.sale;
     const currency=button.dataset.salePaymentCurrency||sale.monais||'';
     const currencyBalances=saleCurrencyBalances(sale);
@@ -4084,22 +4120,33 @@ async function printSalePaymentReceipt(button){
       : currentPaid-selectedAmountApplied;
     const balanceBefore=Math.max(0,invoiceTotal-Math.max(0,paidBefore));
     const balanceAfter=Math.max(0,balanceBefore-selectedAmountApplied);
-    const receiptNumber=button.dataset.salePaymentNumber||`${sale.invoice_no}-${String(button.dataset.salePaymentDate||'').replace(/\D/g,'')}`;
     const reference=button.dataset.salePaymentReference;
     const paymentMode=selectedPayment?.payment_mode||button.dataset.salePaymentMode||'—';
     const paymentDate=selectedPayment?.payment_date||button.dataset.salePaymentDate||new Date().toISOString();
+    const receiptDateCode=String(paymentDate).slice(0,10).replace(/\D/g,'');
+    const paymentId=Number(selectedPayment?.paiement_id||button.dataset.salePaymentId||button.dataset.salePaymentNumber);
+    const receiptNumber=paymentId
+      ? `PAY-${receiptDateCode}-${String(paymentId).padStart(4,'0')}`
+      : `${sale.invoice_no}-${receiptDateCode}`;
+    const receiptDate=new Date(String(paymentDate).replace(' ','T'));
+    const receiptDateLabel=Number.isNaN(receiptDate.getTime())
+      ? dateLabel(paymentDate)
+      : `${receiptDate.toLocaleDateString('fr-FR')} à ${receiptDate.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`;
     const paymentLocation=selectedPayment?.cash_name
       ? {label:'Caisse',name:selectedPayment.cash_name}
       : selectedPayment?.bank_name
         ? {label:'Banque',name:selectedPayment.bank_name}
         : {label:'Succursale',name:sale.branch_name||'—'};
-    const paymentDetails=`<p><strong>${escapeHtml(paymentLocation.label)} :</strong> ${escapeHtml(paymentLocation.name)}</p><p><strong>Mode :</strong> ${escapeHtml(paymentMode)}</p><p><strong>Vente N° :</strong> ${escapeHtml(sale.invoice_no)}</p><p><strong>Motif :</strong> Paiement vente crédit N°${escapeHtml(sale.invoice_no)}</p>`;
     const receivedAmount=moneyCurrencyLabel(Number(selectedPayment?.amount??amount),currency);
     const stamp=sessionUser?.enterprise_cachet?`<img src="${escapeHtml(companyImageUrl(sessionUser.enterprise_cachet))}" alt="Cachet ${escapeHtml(sessionUser.enterprise_name||'entreprise')}">`:'';
     const generatedAt=new Date().toLocaleString('fr-FR');
+    const paymentDetails=`<p><strong>Date :</strong> ${escapeHtml(receiptDateLabel)}</p><p><strong>${escapeHtml(paymentLocation.label)} :</strong> ${escapeHtml(paymentLocation.name)}</p><p><strong>Mode :</strong> ${escapeHtml(paymentMode)}</p><p><strong>Vente N° :</strong> ${escapeHtml(sale.invoice_no)}</p><p><strong>Motif :</strong> Paiement vente crédit N°${escapeHtml(sale.invoice_no)}</p>`;
     const content=`<article class="sale-invoice sale-invoice--payment sale-invoice--payment-receipt">${saleDocumentHeaderMarkup(sale,'REÇU DE PAIEMENT',receiptNumber,'ENCAISSEMENT',paymentDate,paymentDetails,'Payé par','Détails du reçu',false)}<section class="sale-payment-confirmation"><h2>✓ Paiement reçu</h2><p>Nous accusons réception de la somme de</p><strong>${escapeHtml(receivedAmount)}</strong><p>Mode de paiement : ${escapeHtml(paymentMode)}</p></section><section class="sale-payment-balance"><div class="sale-payment-balance-row"><span>Montant total de la vente :</span><strong>${escapeHtml(moneyCurrencyLabel(invoiceTotal,selectedInvoiceCurrency))}</strong></div><div class="sale-payment-balance-row"><span>Montant restant avant ce paiement :</span><strong>${escapeHtml(moneyCurrencyLabel(balanceBefore,selectedInvoiceCurrency))}</strong></div><div class="sale-payment-balance-row sale-payment-balance-row--paid"><span>Montant de ce paiement :</span><strong>${escapeHtml(moneyCurrencyLabel(selectedAmountApplied,selectedInvoiceCurrency))}</strong></div><div class="sale-payment-balance-row sale-payment-balance-row--after"><span>Montant restant après ce paiement :</span><strong>${escapeHtml(moneyCurrencyLabel(balanceAfter,selectedInvoiceCurrency))}</strong></div></section><section class="sale-payment-notes"><h3>Notes et références</h3><p>Motif : Paiement vente crédit N°${escapeHtml(sale.invoice_no)}</p>${reference?`<p>Référence : ${escapeHtml(reference)}</p>`:''}${conversionSummary||''}</section><section class="sale-payment-signatures"><div>Le client<div class="sale-payment-signature-line sale-payment-signature-line--client"></div>Signature</div><div class="sale-payment-company-signature">Pour l’entreprise<div class="sale-payment-stamp-slot">${stamp}</div><div class="sale-payment-signature-line"></div>Signature et cachet</div></section><p class="sale-payment-generated">Merci pour votre confiance !<small>Reçu généré le ${escapeHtml(generatedAt)}</small></p></article>`;
     printReportInWindow(printWindow,`Reçu de paiement ${sale.invoice_no}`,content);
-  }catch(error){printWindow.close();showToast(`Impression du reçu impossible : ${error.message}`);}
+  }catch(error){
+    if(ownsPrintWindow){printWindow.close();showToast(`Impression du reçu impossible : ${error.message}`);}
+    else throw error;
+  }
 }
 async function printSaleReceipt(button){
   const printWindow=window.open('','_blank');if(!printWindow){showToast('Autorisez les fenêtres contextuelles pour imprimer le reçu.');return;}

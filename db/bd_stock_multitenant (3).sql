@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Hôte : 127.0.0.1
--- Généré le : dim. 25 oct. 2026 à 15:20
+-- Généré le : dim. 25 oct. 2026 à 16:47
 -- Version du serveur : 10.4.32-MariaDB
 -- Version de PHP : 8.2.12
 
@@ -167,7 +167,7 @@ CREATE TABLE `caisses` (
 INSERT INTO `caisses` (`caisse_id`, `entreprise_id`, `succursale_id`, `type_caisse_id`, `mode_paiement_id`, `banque_id`, `user_id`, `name`, `date_ouverture`, `date_fermeture`, `solde_ouverture`, `montant`, `solde_fermeture`, `statut`, `created_at`) VALUES
 (11, 9, 8, 14, 1, NULL, 13, 'Caisse fc', '2026-10-09 17:23:22', NULL, 0.00, 168000.00, 0.00, 'OUVERTE', '2026-10-09 15:23:22'),
 (16, 12, 12, 19, 1, NULL, 19, 'Caisse $', '2026-10-12 17:23:32', NULL, 0.00, 1142.00, 0.00, 'OUVERTE', '2026-10-12 15:23:32'),
-(19, 13, 13, 22, 1, NULL, 20, 'caisse $', '2026-10-20 16:09:39', NULL, 0.00, 10.00, 0.00, 'OUVERTE', '2026-10-20 14:09:39'),
+(19, 13, 13, 22, 1, NULL, 20, 'caisse $', '2026-10-20 16:09:39', NULL, 0.00, 25.00, 0.00, 'OUVERTE', '2026-10-20 14:09:39'),
 (20, 13, 14, 22, 1, NULL, 22, 'Caisse $', '2026-10-22 20:29:45', NULL, 0.00, 0.00, 0.00, 'OUVERTE', '2026-10-22 18:29:45'),
 (21, 13, 14, 21, 1, NULL, 22, 'Caisse fc', '2026-10-22 20:30:01', NULL, 0.00, 0.00, 0.00, 'OUVERTE', '2026-10-22 18:30:01'),
 (22, 13, 14, 22, 3, 3, 23, 'BANQUE COOPEC', '2026-10-23 22:32:37', NULL, 0.00, 900.00, 0.00, 'OUVERTE', '2026-10-23 20:32:37');
@@ -503,7 +503,9 @@ INSERT INTO `mouvements_caisse` (`mouvement_id`, `entreprise_id`, `caisse_id`, `
 (76, 13, 22, 23, 3, 3, 'ZEJ2', 'ENTREE', 100.00, 'DEPOS', NULL, NULL, NULL, '2026-10-23 22:33:56'),
 (77, 13, 22, 23, 3, 3, 'DD', 'SORTIE', 100.00, 'RETRAIT', NULL, NULL, NULL, '2026-10-23 22:35:23'),
 (78, 13, 22, 23, 3, 3, 'D', 'SORTIE', 100.00, 'ZJ', NULL, NULL, NULL, '2026-10-23 22:36:18'),
-(79, 13, 19, 20, 1, NULL, NULL, 'ENTREE', 10.00, 's', NULL, NULL, NULL, '2026-10-24 13:01:24');
+(79, 13, 19, 20, 1, NULL, NULL, 'ENTREE', 10.00, 's', NULL, NULL, NULL, '2026-10-24 13:01:24'),
+(80, 13, 19, 20, 1, NULL, NULL, 'ENTREE', 10.00, 'Entre', NULL, NULL, NULL, '2026-10-25 16:28:29'),
+(81, 13, 19, 20, 1, NULL, NULL, 'ENTREE', 5.00, 'Enter', NULL, NULL, NULL, '2026-10-25 16:29:31');
 
 -- --------------------------------------------------------
 
@@ -1546,7 +1548,7 @@ ALTER TABLE `modes_paiement`
 -- AUTO_INCREMENT pour la table `mouvements_caisse`
 --
 ALTER TABLE `mouvements_caisse`
-  MODIFY `mouvement_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=80;
+  MODIFY `mouvement_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=82;
 
 --
 -- AUTO_INCREMENT pour la table `mouvements_stock`
