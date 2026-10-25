@@ -35,7 +35,9 @@ final class CrudRepository
         $sql = "SELECT * FROM `{$this->table}` WHERE entreprise_id = ?";
         $values = [$enterpriseId];
         if ($branchId !== null) {
-            $sql .= ' AND succursale_id = ?';
+            $sql .= $this->table === 'fournisseurs'
+                ? ' AND (succursale_id = ? OR succursale_id IS NULL)'
+                : ' AND succursale_id = ?';
             $values[] = $branchId;
         }
         $sql .= $this->productOriginCondition($productOrigins, $values);
@@ -51,7 +53,12 @@ final class CrudRepository
     {
         $where = ' WHERE entreprise_id = ?';
         $values = [$enterpriseId];
-        if ($branchId !== null) { $where .= ' AND succursale_id = ?'; $values[] = $branchId; }
+        if ($branchId !== null) {
+            $where .= $this->table === 'fournisseurs'
+                ? ' AND (succursale_id = ? OR succursale_id IS NULL)'
+                : ' AND succursale_id = ?';
+            $values[] = $branchId;
+        }
         $where .= $this->productOriginCondition($productOrigins, $values);
         $count = $this->db->prepare("SELECT COUNT(*) AS total FROM `{$this->table}`{$where}");
         $this->bind($count, $this->types($values), $values);

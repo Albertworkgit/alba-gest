@@ -453,6 +453,68 @@ a:focus-visible {
   color: #a8dfbd;
 }
 
+#view-container .panel:not(.stock-products-workspace),
+#view-container .dashboard-grid > .stat-card,
+#view-container .section-grid > .panel,
+#view-container .table-panel {
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+#view-container .panel-header {
+  border-radius: 8px;
+  background: #edf8f0;
+}
+
+#view-container .data-table th {
+  color: #176b45;
+}
+
+#view-container .primary-button,
+#view-container .cash-create,
+#view-container .role-create-action,
+#view-container .user-create-action,
+.page-heading .primary-button,
+.entity-dialog .modal-submit {
+  border-color: #198754 !important;
+  background: #198754 !important;
+  box-shadow: 0 4px 12px rgb(25 135 84 / 18%) !important;
+  color: #fff !important;
+}
+
+#view-container .primary-button:hover:not(:disabled),
+#view-container .cash-create:hover:not(:disabled),
+#view-container .role-create-action:hover:not(:disabled),
+#view-container .user-create-action:hover:not(:disabled),
+.page-heading .primary-button:hover:not(:disabled),
+.entity-dialog .modal-submit:hover:not(:disabled) {
+  border-color: #146f45 !important;
+  background: #146f45 !important;
+}
+
+#view-container[data-view-name="dashboard"] .dashboard-grid > .stat-card {
+  animation: dashboard-card-enter 620ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+#view-container[data-view-name="dashboard"] .dashboard-grid > .stat-card:nth-child(2) { animation-delay: 70ms; }
+#view-container[data-view-name="dashboard"] .dashboard-grid > .stat-card:nth-child(3) { animation-delay: 140ms; }
+#view-container[data-view-name="dashboard"] .dashboard-grid > .stat-card:nth-child(4) { animation-delay: 210ms; }
+#view-container[data-view-name="dashboard"] .section-grid,
+#view-container[data-view-name="dashboard"] .release-notes-panel,
+#view-container[data-view-name="dashboard"] .table-panel {
+  animation: dashboard-section-enter 620ms 180ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
+@keyframes dashboard-card-enter {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes dashboard-section-enter {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @media (max-width: 600px) {
   .page-heading {
     align-items: stretch;
@@ -497,7 +559,11 @@ a:focus-visible {
   .support-card:hover,
   button:not(:disabled):active,
   .nav-item:active,
-  .admin-nav-item:active {
+  .admin-nav-item:active,
+  #view-container[data-view-name="dashboard"] .dashboard-grid > .stat-card,
+  #view-container[data-view-name="dashboard"] .section-grid,
+  #view-container[data-view-name="dashboard"] .release-notes-panel,
+  #view-container[data-view-name="dashboard"] .table-panel {
     transform: none;
   }
 }

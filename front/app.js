@@ -172,6 +172,7 @@ function branchRowMarkup(row) {
 function renderView(viewName) {
   const view = views[viewName] || views.dashboard;
   currentViewName = viewName;
+  container.dataset.viewName = viewName;
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === viewName));
   kicker.textContent = view.kicker; title.innerHTML = view.title; description.textContent = view.description; breadcrumb.textContent = view.label; action.innerHTML = view.action; action.hidden = !view.action || (viewName === 'branches' && !canSelectCompanyBranches()); action.classList.toggle('user-create-action', viewName === 'users');
   container.innerHTML = view.html;
@@ -1987,12 +1988,12 @@ function cashMovementReceiptMarkup(movement, compact = false) {
     ? `<p><strong>Banque :</strong> ${escapeHtml(movement.bank_name)}${movement.bank_reference ? ` · <strong>Référence bancaire :</strong> ${escapeHtml(movement.bank_reference)}` : ''}</p>`
     : '';
   const signatures = isOut
-    ? '<div class="signature-row"><div>Signature du bénéficiaire</div><div>Signature et cachet du caissier</div></div>'
-    : '<div class="signature-row"><div>Signature du déposant</div><div>Signature et cachet du caissier</div></div>';
+    ? `<div class="signature-row"><div>Signature du bénéficiaire</div><div>Signature et cachet du caissier${sessionUser?.enterprise_cachet?`<img class="cash-voucher-stamp" src="${escapeHtml(companyImageUrl(sessionUser.enterprise_cachet))}" alt="Cachet de l’entreprise">`:''}</div></div>`
+    : `<div class="signature-row"><div>Signature du déposant</div><div>Signature et cachet du caissier${sessionUser?.enterprise_cachet?`<img class="cash-voucher-stamp" src="${escapeHtml(companyImageUrl(sessionUser.enterprise_cachet))}" alt="Cachet de l’entreprise">`:''}</div></div>`;
   const debtConversion = movement.dette_montant_impute
     ? `<p><strong>Montant imputé à la dette :</strong> ${moneyCurrencyLabel(movement.dette_montant_impute, movement.dette_monais)} · <strong>Taux appliqué :</strong> ${Number(movement.dette_taux_change).toFixed(6)}</p>`
     : '';
-  return `<section class="${compact ? 'cash-receipt-card' : ''}"><h2>${isOut ? 'BON DE SORTIE DE CAISSE' : 'REÇU D’ENTRÉE EN CAISSE'}</h2><p class="receipt-company-name"><strong>${escapeHtml(movement.enterprise_name || sessionUser?.enterprise_name || 'ALBA-GEST')}</strong></p><p><strong>Pièce n° :</strong> ${Number(movement.mouvement_id)}</p><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason || '—')}</p><h2>Montant ${isOut ? 'sorti' : 'reçu'} : ${moneyCurrencyLabel(movement.amount, movement.monais)}</h2>${debtConversion}<p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p>${signatures}</section>`;
+  return `<section class="cash-movement-voucher cash-movement-voucher--${isOut?'out':'in'}${compact?' cash-receipt-card':''}"><div class="cash-movement-heading"><div class="cash-movement-company">${companyLogoMarkup()}<div><h1>${isOut ? 'BON DE SORTIE DE CAISSE' : 'REÇU D’ENTRÉE EN CAISSE'}</h1><p>${escapeHtml(movement.enterprise_name || sessionUser?.enterprise_name || 'ALBA-GEST')}</p></div></div><strong>N° ${Number(movement.mouvement_id)}</strong></div><div class="cash-movement-details"><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason || '—')}</p>${debtConversion}<p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p></div><div class="cash-movement-amount">Montant ${isOut ? 'sorti' : 'reçu'} : ${moneyCurrencyLabel(movement.amount, movement.monais)}</div>${signatures}</section>`;
 }
 async function printCashMovementReceipt(movementId, printWindow) {
   if (movementId < 1) throw new Error('Identifiant du mouvement invalide.');
@@ -3118,7 +3119,12 @@ function openEntityForm(type, entity = null) {
       // Le style explicite garantit que le champ reste masqué malgré les styles des formulaires.
       customCost.style.display = showCustomCost ? '' : 'none';
       customCost.querySelector('input').required = showCustomCost;
-      if (outgoing) { supplierSearchInput.value = ''; modal.querySelector('#purchase-supplier').value = ''; }
+      if (outgoing) {
+        supplierSearchInput.value = '';
+        modal.querySelector('#purchase-supplier').value = '';
+        modal.querySelector('#purchase-supplier-options')?.setAttribute('hidden', '');
+        supplierSearchInput.setAttribute('aria-expanded', 'false');
+      }
     };
     operation.addEventListener('change', syncPurchaseFields);
     operation.addEventListener('change', refreshPerishableFields);
@@ -3135,7 +3141,10 @@ function openEntityForm(type, entity = null) {
     const supplierLabel = supplierSearch.closest('label');
     supplierLabel.firstChild.textContent = 'Fournisseur (facultatif)';
     supplierLabel.insertAdjacentHTML('beforeend', '<input type="hidden" name="fournisseur_id" id="purchase-supplier">');
-    supplierLabel.insertAdjacentHTML('afterend', '<div class="supplier-suggestions" id="purchase-supplier-options" hidden></div>');
+    supplierSearch.setAttribute('aria-autocomplete', 'list');
+    supplierSearch.setAttribute('aria-controls', 'purchase-supplier-options');
+    supplierSearch.setAttribute('aria-expanded', 'false');
+    supplierLabel.insertAdjacentHTML('afterend', '<div class="supplier-suggestions full" id="purchase-supplier-options" role="listbox" hidden></div>');
     productSearch.closest('label').insertAdjacentHTML('beforeend', '<datalist id="purchase-product-options"></datalist><input type="hidden" name="produit_id" id="purchase-product">');
     supplierSelect.closest('label').remove();
     productSelect.closest('label').remove();
@@ -3227,8 +3236,11 @@ function openEntityForm(type, entity = null) {
       const fillSuppliers = (term = '') => {
         const query = normalizeSearch(term);
         const matches = query ? availableSuppliers.filter(row => normalizeSearch(`${row.name} ${row.contact_name || ''} ${row.email || ''} ${row.phone || ''}`).includes(query)) : [];
-        supplierOptions.hidden = matches.length === 0;
-        supplierOptions.innerHTML = matches.map(row => `<button type="button" class="supplier-suggestion" data-supplier-option="${Number(row.fournisseur_id)}"><strong>${escapeHtml(row.name)}</strong><span>${escapeHtml(row.contact_name || row.phone || row.email || 'Fournisseur')}</span></button>`).join('');
+        supplierOptions.hidden = !query;
+        supplierSearch.setAttribute('aria-expanded', String(Boolean(query)));
+        supplierOptions.innerHTML = matches.length
+          ? matches.map(row => `<button type="button" class="supplier-suggestion" role="option" aria-selected="false" data-supplier-option="${Number(row.fournisseur_id)}"><strong>${escapeHtml(row.name)}</strong><span>${escapeHtml(row.contact_name || row.phone || row.email || 'Fournisseur')}</span></button>`).join('')
+          : query ? '<p class="supplier-suggestion-empty">Aucun fournisseur trouvé pour cette succursale.</p>' : '';
       };
       const fillProducts = (term = '') => {
         const query = normalizeSearch(term);
@@ -3245,10 +3257,10 @@ function openEntityForm(type, entity = null) {
         supplierSelect.value = '';
         try {
           availableSuppliers = await apiGet('fournisseurs', event.target.value);
-          fillSuppliers();
+          fillSuppliers(supplierSearch.value);
         } catch (error) { showToast(error.message); }
       });
-      fillSuppliers();
+      fillSuppliers(supplierSearch.value);
       fillProducts();
       supplierSearch.addEventListener('input', event => {
         supplierSelect.value = '';
@@ -3262,9 +3274,13 @@ function openEntityForm(type, entity = null) {
         supplierSearch.value = selected.name;
         supplierSelect.value = String(selected.fournisseur_id);
         supplierOptions.hidden = true;
+        supplierSearch.setAttribute('aria-expanded', 'false');
       });
       supplierSearch.addEventListener('keydown', event => {
-        if (event.key === 'Escape') supplierOptions.hidden = true;
+        if (event.key === 'Escape') {
+          supplierOptions.hidden = true;
+          supplierSearch.setAttribute('aria-expanded', 'false');
+        }
       });
       const syncSelectedPurchaseProduct = event => {
         fillProducts(event.target.value);
@@ -3756,7 +3772,173 @@ function printReportInWindow(printWindow, title, content, note = '', orientation
     documentHtml = documentHtml.replace('<body>', '<body class="cash-receipt-print">');
   }
   if (centerContent) documentHtml = documentHtml.replace('</style>', 'header{flex-direction:column;align-items:center;text-align:center}header>div,.report-meta{width:100%;text-align:center}main{text-align:center}main h2{margin-left:auto;margin-right:auto}</style>');
+  documentHtml = documentHtml.replace('</style>', '@media print{.report-table th,.data-table th,.report-total-row td{print-color-adjust:exact;-webkit-print-color-adjust:exact}}</style>');
+  if (content.includes('sale-invoice')) {
+    documentHtml = documentHtml.replace('<body>', '<body class="sale-invoice-print">');
+    documentHtml = documentHtml.replace('</style>', `
+      body.sale-invoice-print>header,body.sale-invoice-print>.report-company-footer{display:none}
+      body.sale-invoice-print>main{margin:0}
+      .sale-invoice{color:#1d2926;font:12px Arial,sans-serif}
+      .sale-invoice-header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:20px;margin:0;padding:0 0 15px;border-bottom:3px solid #3c70c7;text-align:left}
+      .sale-invoice--payment .sale-invoice-header{border-color:#198754}
+      .sale-invoice--sale-receipt .sale-invoice-header{border-color:#7960a8}
+      .sale-invoice-header>div{width:auto}
+      .sale-invoice-company{display:flex;align-items:center;gap:14px;min-width:0;text-align:left}
+      .sale-invoice-company .report-company-logo{position:static;width:78px;height:78px;flex:0 0 78px;object-fit:contain}
+      .sale-invoice-company-copy{min-width:0}
+      .sale-invoice-company-copy h2{margin:0 0 5px;color:#1d2926;font-size:20px}
+      .sale-invoice-company-copy p{margin:3px 0;color:#53635d;font-size:10px}
+      .sale-invoice-heading{text-align:right}
+      .sale-invoice-heading h1{margin:0;color:#2148ae;font-size:27px;letter-spacing:1px}
+      .sale-invoice--payment .sale-invoice-heading h1{color:#147c70}
+      .sale-invoice--sale-receipt .sale-invoice-heading h1{color:#7960a8}
+      .sale-invoice-number{margin:5px 0;color:#53635d;font-size:11px}
+      .sale-invoice-status{display:inline-block;padding:5px 9px;border-radius:4px;background:#fce8ec;color:#a63246;font-size:9px;font-weight:bold;text-transform:uppercase}
+      .sale-invoice-meta{display:grid;grid-template-columns:1.2fr 1fr;gap:12px;margin:17px 0}
+      .sale-invoice-meta-card{min-height:78px;padding:12px 14px;border:1px solid #e0e6ef;border-radius:0;background:#f4f6f8}
+      .sale-invoice-meta-card:nth-child(2){background:#edf5fc}
+      .sale-invoice--payment .sale-invoice-meta-card:nth-child(2){background:#effbf6}
+      .sale-invoice--sale-receipt .sale-invoice-meta-card:nth-child(2){background:#f5f1fb}
+      .sale-invoice-meta-card h3{margin:0 0 9px;color:#2148ae;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+      .sale-invoice--payment .sale-invoice-meta-card h3{color:#147c70}
+      .sale-invoice--sale-receipt .sale-invoice-meta-card h3{color:#7960a8}
+      .sale-invoice-meta-card p{margin:4px 0;color:#53635d;font-size:10px}
+      .sale-invoice-meta-card strong{color:#1d2926}
+      .sale-invoice-table-title{margin-top:16px;padding:8px 10px;background:#e5eeff;color:#2148ae;font-size:10px;font-weight:bold;text-transform:uppercase}
+      .sale-invoice--payment .sale-invoice-table-title{background:#e7f5ee;color:#147c70}
+      .sale-invoice--sale-receipt .sale-invoice-table-title{background:#efe9f8;color:#66518f}
+      .sale-invoice-table{width:100%;margin:0;border-collapse:collapse}
+      .sale-invoice-table th{padding:9px 8px;border:0;background:#2148ae;color:#fff;font-size:9px;text-align:left;text-transform:uppercase}
+      .sale-invoice--payment .sale-invoice-table th{background:#198754}
+      .sale-invoice--sale-receipt .sale-invoice-table th{background:#7960a8}
+      .sale-invoice-table td{padding:9px 8px;border:0;border-bottom:1px solid #e6ebe7;font-size:10px;vertical-align:top}
+      .sale-invoice-table tbody tr:nth-child(even) td{background:#fcf8fa}
+      .sale-invoice-table td small{display:block;margin-top:3px;color:#73807b;font-size:8px}
+      .sale-invoice-table td:nth-child(3),.sale-invoice-table td:nth-child(n+4){text-align:right;white-space:nowrap}
+      .sale-invoice-section-title{margin:14px 0 5px;color:#2148ae;font-size:11px;text-transform:uppercase}
+      .sale-invoice--payment .sale-invoice-section-title{color:#147c70}
+      .sale-invoice--sale-receipt .sale-invoice-section-title{color:#7960a8}
+      .sale-invoice-summary{display:flex;justify-content:flex-end;margin:15px 0}
+      .sale-invoice-totals{width:min(350px,100%);border:0;border-radius:0;overflow:hidden}
+      .sale-invoice-total{display:flex;justify-content:space-between;gap:12px;padding:8px 11px;border-bottom:1px solid #e6ebe7;color:#53635d;font-size:10px}
+      .sale-invoice-total:last-child{border-bottom:0}
+      .sale-invoice-total strong{color:#1d2926}
+      .sale-invoice-total--amount{background:#2148ae;color:#fff;font-size:13px}
+      .sale-invoice-total--amount strong{color:#fff}
+      .sale-invoice--payment .sale-invoice-total--amount{background:#198754}
+      .sale-invoice--sale-receipt .sale-invoice-total--amount{background:#7960a8}
+      .sale-invoice-total--paid{background:#effbf6;color:#147c70}
+      .sale-invoice-total--paid strong{color:#147c70}
+      .sale-invoice-total--due{background:#fff1f3;color:#a63246;font-size:12px}
+      .sale-invoice-total--due strong{color:#a63246}
+      .sale-invoice-signature{display:flex;justify-content:flex-end;margin-top:25px}
+      .sale-invoice-signature>div{width:210px;min-height:64px;border-top:1px solid #9aa9a1;padding-top:6px;color:#53635d;font-size:9px;text-align:center}
+      .sale-invoice-signature img{display:block;width:105px;height:58px;margin:3px auto 0;object-fit:contain}
+      .sale-invoice-generated{margin-top:16px;padding-top:8px;border-top:1px solid #dce5df;color:#73807b;font-size:8px;text-align:center}
+      .sale-invoice-received{margin:14px 0;padding:11px 13px;background:#2148ae;color:#fff;text-align:right;font-size:13px;font-weight:bold}
+      .sale-invoice-received strong{margin-left:12px;font-weight:400}
+      .sale-payment-confirmation{margin:14px 0;padding:14px;border:2px solid #42a77b;border-radius:5px;background:#ddf8e9;color:#176b4d;text-align:center}
+      .sale-payment-confirmation h2{margin:0 0 7px;font-size:16px}
+      .sale-payment-confirmation p{margin:5px 0;color:#53635d}
+      .sale-payment-confirmation strong{display:block;margin:7px 0;font-size:22px}
+      .sale-invoice--payment-receipt .sale-invoice-meta{grid-template-columns:1fr 1fr;margin:14px 0}
+      .sale-invoice--payment-receipt .sale-invoice-meta-card{min-height:118px;border:0;border-radius:0}
+      .sale-invoice--payment-receipt .sale-invoice-meta-card:first-child{background:#f4f5f6}
+      .sale-invoice--payment-receipt .sale-invoice-meta-card:nth-child(2){background:#ddf8e9}
+      .sale-invoice--payment-receipt .sale-invoice-meta-card h3{padding-bottom:7px;border-bottom:1px solid #dce5df;color:#16734f}
+      .sale-invoice--payment-receipt .sale-invoice-status{background:#ddf8e9;color:#16734f}
+      .sale-payment-balance{width:min(460px,100%);margin:14px auto}
+      .sale-payment-balance-row{display:flex;justify-content:space-between;gap:12px;padding:8px;border-bottom:1px solid #e6ebe7;color:#68736e;font-size:10px}
+      .sale-payment-balance-row strong{color:#26332d;white-space:nowrap}
+      .sale-payment-balance-row--paid{background:#087f5b;color:#fff}
+      .sale-payment-balance-row--paid strong{color:#fff}
+      .sale-payment-balance-row--after{font-size:12px;font-weight:bold}
+      .sale-payment-balance-row--after strong{color:#a63246}
+      .sale-payment-notes{margin:14px 0;padding:11px;background:#fffafd}
+      .sale-payment-notes h3{margin:0 0 8px;color:#16734f;font-size:11px}
+      .sale-payment-notes p{margin:4px 0;color:#53635d;font-size:10px}
+      .sale-payment-signatures{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin:20px 0 8px}
+      .sale-payment-signatures>div{min-height:86px;padding-top:5px;color:#53635d;font-size:10px;text-align:center}
+      .sale-payment-stamp-slot{display:flex;height:60px;align-items:center;justify-content:center}
+      .sale-payment-company-signature img{display:block;width:105px;height:58px;object-fit:contain}
+      .sale-payment-signature-line{width:58%;margin:3px auto 5px;border-top:1px solid #77827c}
+      .sale-payment-signature-line--client{margin-top:34px}
+      .sale-payment-generated{margin-top:14px;padding-top:9px;border-top:1px solid #dce5df;color:#16734f;font-size:9px;text-align:center}
+      .sale-payment-generated small{display:block;margin-top:3px;color:#73807b;font-style:italic}
+      @media print{.sale-invoice{print-color-adjust:exact;-webkit-print-color-adjust:exact}.sale-invoice-table tr{break-inside:avoid;page-break-inside:avoid}}
+      @media print{.sale-payment-confirmation,.sale-payment-balance-row--paid{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+      @media(max-width:600px){.sale-invoice-header{grid-template-columns:1fr}.sale-invoice-heading{text-align:left}.sale-invoice-meta,.sale-invoice--payment-receipt .sale-invoice-meta{grid-template-columns:1fr}.sale-payment-signatures{gap:12px}}
+      </style>`);
+  }
+  if (content.includes('purchase-voucher')) {
+    documentHtml = documentHtml.replace('<body>', '<body class="purchase-voucher-print">');
+    documentHtml = documentHtml.replace('</style>', `
+      body.purchase-voucher-print>header,body.purchase-voucher-print>.report-company-footer{display:none}
+      body.purchase-voucher-print>main{margin:0}
+      .purchase-voucher{font:12px Arial,sans-serif}
+      .purchase-voucher-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 0 12px;border-bottom:3px solid #198754}
+      .purchase-voucher--in .purchase-voucher-heading{border-color:#b7791f}
+      .purchase-voucher--in .purchase-voucher-heading h1{color:#9a5b13}
+      .purchase-voucher--out .purchase-voucher-heading{border-color:#b4534b}
+      .purchase-voucher--out .purchase-voucher-heading h1{color:#a5413b}
+      .purchase-voucher-heading>div{width:auto}
+      .purchase-voucher-company{display:flex;align-items:center;gap:12px}
+      .purchase-voucher-company .report-company-logo{position:static;width:68px;height:68px;flex:0 0 68px;object-fit:contain}
+      .purchase-voucher-heading h1{margin:0;color:#176b45;font-size:22px}
+      .purchase-voucher-heading h2{margin:0 0 4px;color:#1d2926;font-size:16px}
+      .purchase-voucher-heading p{margin:4px 0;color:#53635d;font-size:10px}
+      .purchase-voucher-reference{color:#176b45;font-weight:bold}
+      .purchase-voucher-meta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+      .purchase-voucher-meta>div{padding:10px 12px;border-left:3px solid #198754;background:#edf8f0}
+      .purchase-voucher--in .purchase-voucher-meta>div{border-left-color:#b7791f;background:#fff5e6}
+      .purchase-voucher--out .purchase-voucher-meta>div{border-left-color:#b4534b;background:#fff4f1}
+      .purchase-voucher-meta strong{display:block;margin-bottom:5px;color:#176b45;font-size:10px;text-transform:uppercase}
+      .purchase-voucher--in .purchase-voucher-meta strong{color:#9a5b13}
+      .purchase-voucher--out .purchase-voucher-meta strong{color:#a5413b}
+      .purchase-voucher-meta p{margin:3px 0;font-size:10px}
+      .purchase-voucher .purchase-voucher-table{margin:10px 0}
+      .purchase-voucher .purchase-voucher-table th{background:#176b45;color:#fff}
+      .purchase-voucher--in .purchase-voucher-table th{background:#9a5b13}
+      .purchase-voucher--out .purchase-voucher-table th{background:#a5413b}
+      .purchase-voucher-total{margin:12px 0;padding:10px 12px;background:#edf8f0;color:#176b45;font-size:15px;font-weight:bold;text-align:right}
+      .purchase-voucher--in .purchase-voucher-total{background:#fff0d6;color:#9a5b13}
+      .purchase-voucher--out .purchase-voucher-total{background:#fff0ed;color:#a5413b}
+      .purchase-voucher-subheading{margin:15px 0 5px;color:#176b45;font-size:12px}
+      .purchase-voucher .signature-row{align-items:flex-start;margin-top:26px}
+      .purchase-voucher .signature-row>div{display:flex;min-height:112px;flex-direction:column;align-items:center;text-align:center}
+      .purchase-voucher .stamp-signature{box-sizing:border-box;min-width:210px;justify-content:flex-start}
+      .purchase-voucher .company-stamp-image{width:76px;height:62px;flex:0 0 62px;margin:5px auto 0;object-fit:contain}
+      @media print{.purchase-voucher{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+      </style>`);
+  }
+  if (content.includes('cash-movement-voucher')) {
+    documentHtml = documentHtml.replace('<body>', '<body class="cash-movement-print">');
+    documentHtml = documentHtml.replace('</style>', `
+      body.cash-movement-print>header,body.cash-movement-print>.report-company-footer{display:none}
+      body.cash-movement-print>main{margin:0}
+      .cash-movement-voucher{padding:4px 0;font:12px Arial,sans-serif}
+      .cash-movement-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 0 13px;border-bottom:3px solid #198754}
+      .cash-movement-company{display:flex;align-items:center;gap:10px}
+      .cash-movement-company .report-company-logo{position:static;width:58px;height:58px;flex:0 0 58px;object-fit:contain}
+      .cash-movement-heading h1{margin:0;color:#176b45;font-size:21px}
+      .cash-movement-heading p{margin:5px 0 0;color:#53635d;font-size:10px}
+      .cash-movement-voucher--in .cash-movement-heading{border-color:#16808a}
+      .cash-movement-voucher--in .cash-movement-heading h1{color:#176b73}
+      .cash-movement-voucher--in .cash-movement-amount{background:#e9f5f6;color:#176b73}
+      .cash-movement-voucher--out .cash-movement-heading{border-color:#c5534b}
+      .cash-movement-voucher--out .cash-movement-heading h1{color:#a5413b}
+      .cash-movement-amount{margin:16px 0;padding:14px;background:#e8f5ed;color:#176b45;font-size:18px;font-weight:bold;text-align:center}
+      .cash-movement-voucher--out .cash-movement-amount{background:#fff0ed;color:#a5413b}
+      .cash-movement-details{margin:14px 0}
+      .cash-movement-details p{padding:7px 9px;border-bottom:1px solid #e6ebe7}
+      .cash-movement-voucher .signature-row{margin-top:36px}
+      .cash-voucher-stamp{display:block;width:90px;height:52px;margin:4px auto 0;object-fit:contain}
+      .cash-receipt-card .cash-voucher-stamp{width:45px;height:25px}
+      @media print{.cash-movement-voucher{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
+      </style>`);
+  }
   if (content.includes('cash-receipt-sheet')) documentHtml = documentHtml.replace('</style>', '@page{size:A4 landscape;margin:5mm}body.cash-receipt-print>header,body.cash-receipt-print>.report-company-footer{display:none}body.cash-receipt-print>main{margin:0;padding:0}.cash-receipt-sheet{height:198mm;width:100%;display:flex;flex-direction:column;overflow:hidden}.cash-receipt-sheet-heading{flex:0 0 auto;text-align:center;margin:0 0 2mm}.cash-receipt-sheet-heading h2{font-size:12px;margin:0 0 2px}.cash-receipt-sheet-heading p{font-size:8px;margin:0}.cash-receipt-grid-viewport{flex:1 1 auto;min-height:0;overflow:hidden;position:relative}.cash-receipt-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:2mm;transform-origin:top left}.cash-receipt-card{border:1px solid #9aa9a1;padding:2mm;break-inside:avoid;page-break-inside:avoid}.cash-receipt-card h2{font-size:10px;margin:1mm 0}.cash-receipt-card p{font-size:8px;margin:1mm 0}.cash-receipt-card .signature-row{margin-top:4mm;gap:2mm}.cash-receipt-card .signature-row div{font-size:7px;padding-top:1mm}</style>');
+  if (content.includes('cash-receipt-sheet')) documentHtml = documentHtml.replace('</style>', '.cash-receipt-card .cash-movement-heading{gap:4px;padding-bottom:3px}.cash-receipt-card .cash-movement-heading h1{font-size:9px}.cash-receipt-card .cash-movement-heading p,.cash-receipt-card .cash-movement-heading strong{font-size:7px}.cash-receipt-card .cash-movement-details{margin:2px 0}.cash-receipt-card .cash-movement-details p{padding:1px 0;font-size:7px}.cash-receipt-card .cash-movement-amount{margin:3px 0;padding:3px;font-size:8px}.cash-movement-voucher.cash-receipt-card .signature-row{margin-top:4px}</style>');
   if (orientation === 'landscape') documentHtml = documentHtml.replace('</style>', '@media print{.stock-card-report .dashboard-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.stock-card-report .stat-card{margin:0}.stock-card-report .report-table th,.stock-card-report .report-table td{padding:4px;font-size:9px}.stock-card-report .report-table{table-layout:fixed}.stock-card-report .report-table th,.stock-card-report .report-table td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.stock-card-page{display:flex;flex-direction:column;break-after:page;page-break-after:always;min-height:184mm;break-inside:avoid}.stock-card-page--first{min-height:126mm}.stock-card-page:last-child{break-after:auto;page-break-after:auto}.stock-page-footer{margin-top:auto;break-inside:avoid}.stock-page-footer p{margin:3px 0;padding:4px;background:#eaf3ee}.stock-carryover{padding:5px;background:#fff6dc}}</style>');
   const logo = companyLogoMarkup();
   if (logo) documentHtml = documentHtml.replace('<header>', `<header>${logo}`);
@@ -3778,12 +3960,13 @@ function purchaseVoucherMarkup(data) {
   }).join('');
   const perishableHeaders = perishable ? '<th>Expiration du lot</th><th>Quantité sortie</th><th>Solde du lot</th>' : '';
   const detailColumnCount = perishable ? 8 : 5;
-  const detailsHtml = `<table class="report-table"><thead><tr><th>Référence</th><th>Produit</th><th>Quantité</th>${perishableHeaders}<th>Coût unitaire</th><th>Total</th></tr></thead><tbody>${detailRows || `<tr><td colspan="${detailColumnCount}">Aucun détail disponible</td></tr>`}</tbody></table><h2>Total : ${moneyLabel(purchase.total_amount)} ${escapeHtml(details[0]?.monais || '')}</h2>${allocations.length ? `<h2>Lots consommés (expiration la plus proche en premier)</h2><table class="report-table"><thead><tr><th>Produit</th><th>Approvisionnement source</th><th>Date d’expiration</th><th>Quantité prélevée</th></tr></thead><tbody>${allocations.map(row => `<tr><td>${escapeHtml(row.product_name)} (${escapeHtml(row.sku)})</td><td>${escapeHtml(row.purchase_no)}</td><td>${escapeHtml(row.date_expiration || '—')}</td><td>${Number(row.quantity)} ${escapeHtml(row.unit_abbreviation || row.unit_name || '')}</td></tr>`).join('')}</tbody></table>` : ''}<div class="signature-row"><div class="stamp-signature">Signature et cachet${stamp}</div><div>Réceptionné / validé : signature</div></div>`;
-  const party = purchase.movement_type === 'OUT'
-    ? `<p><strong>Succursale :</strong> ${escapeHtml(purchase.branch_name)} | <strong>Motif de sortie :</strong> ${escapeHtml(purchase.motif_sortie || '-')}</p>`
-    : `<p><strong>Succursale :</strong> ${escapeHtml(purchase.branch_name)} | <strong>Fournisseur :</strong> ${escapeHtml(purchase.supplier_name || 'Non renseigne')}</p><p><strong>Contact fournisseur :</strong> ${escapeHtml(purchase.supplier_contact || purchase.supplier_phone || '-')}</p>`;
-  const content = `<p><strong>Reference :</strong> ${escapeHtml(purchase.purchase_no)} | <strong>Date :</strong> ${escapeHtml(dateLabel(purchase.purchase_date))}</p>${party}<p><strong>Statut :</strong> ${escapeHtml(purchaseStatusLabel(purchase.status))}</p>${detailsHtml}`;
-  return {title:movement, content};
+  const detailsHtml = `<table class="report-table purchase-voucher-table" data-skip-report-totals="true"><thead><tr><th>Référence</th><th>Produit</th><th>Quantité</th>${perishableHeaders}<th>Coût unitaire</th><th>Total</th></tr></thead><tbody>${detailRows || `<tr><td colspan="${detailColumnCount}">Aucun détail disponible</td></tr>`}</tbody></table><p class="purchase-voucher-total">Total : ${moneyLabel(purchase.total_amount)} ${escapeHtml(details[0]?.monais || '')}</p>${allocations.length ? `<h2 class="purchase-voucher-subheading">Lots consommés — expiration la plus proche en premier</h2><table class="report-table purchase-voucher-table" data-skip-report-totals="true"><thead><tr><th>Produit</th><th>Approvisionnement source</th><th>Date d’expiration</th><th>Quantité prélevée</th></tr></thead><tbody>${allocations.map(row => `<tr><td>${escapeHtml(row.product_name)} (${escapeHtml(row.sku)})</td><td>${escapeHtml(row.purchase_no)}</td><td>${escapeHtml(row.date_expiration || '—')}</td><td>${Number(row.quantity)} ${escapeHtml(row.unit_abbreviation || row.unit_name || '')}</td></tr>`).join('')}</tbody></table>` : ''}<div class="signature-row"><div class="stamp-signature">Signature et cachet${stamp}</div><div>Réceptionné / validé : signature</div></div>`;
+  const contact = purchase.supplier_contact || purchase.supplier_phone || purchase.supplier_email || '—';
+  const partyDetails = purchase.movement_type === 'OUT'
+    ? `<div><strong>Motif de sortie</strong><p>${escapeHtml(purchase.motif_sortie || '—')}</p></div>`
+    : `<div><strong>Fournisseur</strong><p>${escapeHtml(purchase.supplier_name || 'Non renseigné')}</p><p>${escapeHtml(contact)}</p></div>`;
+  const content = `<article class="purchase-voucher purchase-voucher--${purchase.movement_type === 'OUT' ? 'out' : 'in'}"><header class="purchase-voucher-heading"><div class="purchase-voucher-company">${companyLogoMarkup()}<div><h2>${escapeHtml(sessionUser?.enterprise_name || 'ALBA-GEST')}</h2><p>${escapeHtml(sessionUser?.enterprise_address || '')}</p><p>${escapeHtml(sessionUser?.enterprise_phone || '')}</p></div></div><div><h1>${movement}</h1><p class="purchase-voucher-reference">N° ${escapeHtml(purchase.purchase_no)}</p><p>${escapeHtml(purchaseStatusLabel(purchase.status))}</p></div></header><section class="purchase-voucher-meta">${partyDetails}<div><strong>Détails du mouvement</strong><p><b>Date :</b> ${escapeHtml(dateLabel(purchase.purchase_date))}</p><p><b>Succursale :</b> ${escapeHtml(purchase.branch_name || '—')}</p></div></section>${detailsHtml}</article>`;
+  return {title:movement, content, orientation:perishable ? 'landscape' : 'portrait'};
 }
 async function printPurchaseVoucher(button) {
   if (button.disabled) return;
@@ -3797,7 +3980,7 @@ async function printPurchaseVoucher(button) {
   try {
     const data = await fetchReportData('purchase-voucher', {achat_id:button.dataset.purchaseVoucher});
     const voucher = purchaseVoucherMarkup(data);
-    printReportInWindow(printWindow, voucher.title, voucher.content);
+    printReportInWindow(printWindow, voucher.title, voucher.content, '', voucher.orientation);
     showToast('Bon prêt : impression lancée.');
   } catch (error) { printWindow.close(); showToast(`Impression du bon impossible : ${error.message}`); }
   finally {
@@ -3833,18 +4016,39 @@ async function viewPendingSale(button) {
     showToast(error.message);
   }
 }
+function saleDocumentHeaderMarkup(sale, title, number, status = '', documentDate = sale.sale_date, extraDetails = '', partyTitle = 'Client', detailTitle = 'Détails du document', includeSalesContext = true) {
+  const companyDetails=[sessionUser?.enterprise_address,sessionUser?.enterprise_phone&&`Tél. : ${sessionUser.enterprise_phone}`,sessionUser?.enterprise_email,sessionUser?.enterprise_rccm&&`RCCM : ${sessionUser.enterprise_rccm}`,sessionUser?.enterprise_boite_postale&&`BP : ${sessionUser.enterprise_boite_postale}`]
+    .filter(Boolean).map(value=>`<p>${escapeHtml(value)}</p>`).join('');
+  const salesContext = includeSalesContext ? `<p><strong>Succursale :</strong> ${escapeHtml(sale.branch_name||'—')}</p><p><strong>Vendeur :</strong> ${escapeHtml(sale.seller_name||sale.cashier||'—')}</p>` : '';
+  return `<header class="sale-invoice-header"><div class="sale-invoice-company">${companyLogoMarkup()}<div class="sale-invoice-company-copy"><h2>${escapeHtml(sessionUser?.enterprise_name||'ALBA-GEST')}</h2>${companyDetails}</div></div><div class="sale-invoice-heading"><h1>${escapeHtml(title)}</h1><p class="sale-invoice-number">N° ${escapeHtml(number)}</p>${status?`<span class="sale-invoice-status">${escapeHtml(status)}</span>`:''}</div></header><section class="sale-invoice-meta"><div class="sale-invoice-meta-card"><h3>${escapeHtml(partyTitle)}</h3><p><strong>${escapeHtml(sale.client_name||'Client comptoir')}</strong></p></div><div class="sale-invoice-meta-card"><h3>${escapeHtml(detailTitle)}</h3><p><strong>Date :</strong> ${escapeHtml(dateLabel(documentDate))}</p>${salesContext}${extraDetails}</div></section>`;
+}
+function saleDocumentSignatureMarkup() {
+  const stamp=sessionUser?.enterprise_cachet?`<img src="${escapeHtml(companyImageUrl(sessionUser.enterprise_cachet))}" alt="Cachet ${escapeHtml(sessionUser.enterprise_name||'entreprise')}">`:'';
+  return `<section class="sale-invoice-signature"><div>Signature et cachet${stamp}</div></section><p class="sale-invoice-generated">Document généré le ${escapeHtml(new Date().toLocaleString('fr-FR'))}</p>`;
+}
 async function printSaleInvoice(button){
   const printWindow=window.open('','_blank');if(!printWindow){showToast('Autorisez les fenêtres contextuelles pour imprimer la facture.');return;}
   try{
     const data=await fetchReportData('sale-receipt',{vente_id:button.dataset.saleInvoice});
     const sale=data.sale;
-    const rows=data.details.map(row=>{
+    const formatInvoiceMoney=(amount,currency)=>escapeHtml(moneyCurrencyLabel(amount,currency));
+    const rows=data.details.map((row,index)=>{
       const unit=row.unit_symbol||row.unit_name||'';
       const discount=Number(row.discount_amount||0);
-      return `<tr><td>${escapeHtml(row.sku)}</td><td>${escapeHtml(row.product_name)}</td><td>${Number(row.quantity)} ${escapeHtml(unit)}</td><td>${moneyCurrencyLabel(row.unit_price,row.monais)}</td><td>${discount>0?moneyCurrencyLabel(discount,row.monais):'—'}</td><td>${moneyCurrencyLabel(row.subtotal,row.monais)}</td></tr>`;
+      const quantity=Number(row.quantity).toLocaleString('fr-FR',{maximumFractionDigits:3});
+      const reference=row.sku?`<small>Réf. ${escapeHtml(row.sku)}</small>`:'';
+      return `<tr><td>${index+1}</td><td><strong>${escapeHtml(row.product_name)}</strong>${reference}</td><td>${quantity} ${escapeHtml(unit)}</td><td>${formatInvoiceMoney(row.unit_price,row.monais)}</td><td>${discount>0?formatInvoiceMoney(discount,row.monais):'—'}</td><td><strong>${formatInvoiceMoney(row.subtotal,row.monais)}</strong></td></tr>`;
     }).join('');
-    const due=saleCurrencyDueBalances(sale).map(balance=>moneyCurrencyLabel(balance.due,balance.monais)).join(' · ');
-    const content=`<p><strong>Facture :</strong> ${escapeHtml(sale.invoice_no)} · <strong>Date :</strong> ${escapeHtml(dateLabel(sale.sale_date))}</p><p><strong>Client :</strong> ${escapeHtml(sale.client_name||'Client comptoir')} · <strong>Succursale :</strong> ${escapeHtml(sale.branch_name)} · <strong>Vendeur :</strong> ${escapeHtml(sale.seller_name||sale.cashier||'—')}</p><table class="report-table"><thead><tr><th>Référence</th><th>Produit</th><th>Quantité</th><th>Prix de vente</th><th>Réduction</th><th>Total ligne</th></tr></thead><tbody>${rows}</tbody></table><h2>Totaux facture : ${saleCurrencyAmounts(sale,'total_amount')}</h2><p><strong>Montants payés :</strong> ${saleCurrencyAmounts(sale,'amount_paid')} · <strong>Restes à payer :</strong> ${due}</p><p><strong>Statut :</strong> ${escapeHtml(saleStatusLabel(sale.status))}</p>`;
+    const paidByCurrency=new Map(salePaidCurrencyBalances(sale).map(balance=>[String(balance.monais||'').trim().toUpperCase(),Number(balance.amount_paid||0)]));
+    const dueByCurrency=new Map(saleCurrencyDueBalances(sale).map(balance=>[String(balance.monais||'').trim().toUpperCase(),Number(balance.due||0)]));
+    const totals=saleCurrencyBalances(sale).map(balance=>{
+      const currency=String(balance.monais||'').trim();
+      const normalizedCurrency=currency.toUpperCase();
+      const paid=paidByCurrency.get(normalizedCurrency)||0;
+      const due=dueByCurrency.get(normalizedCurrency)||0;
+      return `<div class="sale-invoice-totals"><div class="sale-invoice-total sale-invoice-total--amount"><span>Total à payer</span><strong>${formatInvoiceMoney(balance.total_amount,currency)}</strong></div><div class="sale-invoice-total sale-invoice-total--paid"><span>Montant payé</span><strong>${formatInvoiceMoney(paid,currency)}</strong></div><div class="sale-invoice-total sale-invoice-total--due"><span>Reste à payer</span><strong>${formatInvoiceMoney(due,currency)}</strong></div></div>`;
+    }).join('');
+    const content=`<article class="sale-invoice">${saleDocumentHeaderMarkup(sale,'FACTURE',sale.invoice_no,saleStatusLabel(sale.status))}<div class="sale-invoice-table-title">FACTURE N° ${escapeHtml(sale.invoice_no)}</div><table class="report-table sale-invoice-table" data-skip-report-totals="true"><thead><tr><th>#</th><th>Description</th><th>Quantité</th><th>Prix unit.</th><th>Remise</th><th>Montant</th></tr></thead><tbody>${rows||'<tr><td colspan="6">Aucun détail disponible</td></tr>'}</tbody></table><section class="sale-invoice-summary"><div>${totals}</div></section>${saleDocumentSignatureMarkup()}</article>`;
     printReportInWindow(printWindow,`Facture ${sale.invoice_no}`,content);
   }catch(error){printWindow.close();showToast(`Impression de la facture impossible : ${error.message}`);}
 }
@@ -3859,26 +4063,42 @@ async function printSalePaymentReceipt(button){
     const currency=button.dataset.salePaymentCurrency||sale.monais||'';
     const currencyBalances=saleCurrencyBalances(sale);
     const paidByCurrency=new Map(salePaidCurrencyBalances(sale).map(balance=>[String(balance.monais||'').trim().toUpperCase(),Number(balance.amount_paid||0)]));
-    const balanceRows=currencyBalances.map(balance=>{
-      const balanceCurrency=balance.monais||'';
-      const currencyTotal=Number(balance.total_amount||0);
-      const normalizedCurrency=String(balanceCurrency).trim().toUpperCase();
-      const currencyPaid=paidByCurrency.has(normalizedCurrency)?paidByCurrency.get(normalizedCurrency):Number(balance.amount_paid||0);
-      const due=Math.max(0,currencyTotal-currencyPaid);
-      return `<tr><td>${escapeHtml(balanceCurrency)}</td><td>${moneyCurrencyLabel(currencyTotal,balanceCurrency)}</td><td>${moneyCurrencyLabel(currencyPaid,balanceCurrency)}</td><td>${moneyCurrencyLabel(due,balanceCurrency)}</td></tr>`;
-    }).join('');
     const payments=data.payments||[];
-    const paymentRows=payments.map(payment=>{const invoiceCurrency=payment.monais_facture||payment.monais;const converted=invoiceCurrency!==payment.monais;const rate=Number(payment.exchange_rate||1);const inverse=rate>0?1/rate:0;return `<tr><td>${escapeHtml(dateLabel(payment.payment_date))}</td><td>${escapeHtml(payment.payment_type==='REFUND'?'Remboursement':'Paiement')}</td><td>${escapeHtml(payment.payment_mode||'—')}</td><td>${escapeHtml(payment.reference||'—')}</td><td>${moneyCurrencyLabel(payment.amount,payment.monais)}${converted?`<br><small>Imputé : ${moneyCurrencyLabel(payment.amount_applied??payment.amount,invoiceCurrency)} · Taux : 1 ${escapeHtml(payment.monais)} = ${rate.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(invoiceCurrency)} · Inverse : ${inverse.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(payment.monais)} = 1 ${escapeHtml(invoiceCurrency)}</small>`:''}</td></tr>`;}).join('');
-    const selectedPayment=payments.find(payment=>Number(payment.paiement_id)===Number(button.dataset.salePaymentId));
+    const selectedPaymentIndex=payments.findIndex(payment=>Number(payment.paiement_id)===Number(button.dataset.salePaymentId));
+    const selectedPayment=selectedPaymentIndex>=0?payments[selectedPaymentIndex]:null;
     const selectedInvoiceCurrency=selectedPayment?.monais_facture||selectedPayment?.monais||currency;
     const selectedAmountApplied=Number(selectedPayment?.amount_applied??amount);
     const selectedRate=Number(selectedPayment?.exchange_rate||1);
     const inverseSelectedRate=selectedRate>0?1/selectedRate:0;
     const conversionSummary=selectedInvoiceCurrency!==currency?`<p><strong>Montant imputé à la facture :</strong> ${moneyCurrencyLabel(selectedAmountApplied,selectedInvoiceCurrency)} · <strong>Taux appliqué :</strong> 1 ${escapeHtml(currency)} = ${selectedRate.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(selectedInvoiceCurrency)} · <strong>Inverse :</strong> ${inverseSelectedRate.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(currency)} = 1 ${escapeHtml(selectedInvoiceCurrency)}</p>`:'';
+    const normalizedInvoiceCurrency=String(selectedInvoiceCurrency).trim().toUpperCase();
+    const invoiceBalance=currencyBalances.find(balance=>String(balance.monais||'').trim().toUpperCase()===normalizedInvoiceCurrency);
+    const invoiceTotal=Number(invoiceBalance?.total_amount||0);
+    const currentPaid=paidByCurrency.get(normalizedInvoiceCurrency)??Number(invoiceBalance?.amount_paid||0);
+    const paidBefore=selectedPaymentIndex>=0
+      ? payments.slice(0,selectedPaymentIndex).reduce((total,payment)=>{
+          if(String(payment.monais_facture||payment.monais||'').trim().toUpperCase()!==normalizedInvoiceCurrency)return total;
+          const applied=Number(payment.amount_applied??payment.amount);
+          return total+(payment.payment_type==='REFUND'?-applied:applied);
+        },0)
+      : currentPaid-selectedAmountApplied;
+    const balanceBefore=Math.max(0,invoiceTotal-Math.max(0,paidBefore));
+    const balanceAfter=Math.max(0,balanceBefore-selectedAmountApplied);
     const receiptNumber=button.dataset.salePaymentNumber||`${sale.invoice_no}-${String(button.dataset.salePaymentDate||'').replace(/\D/g,'')}`;
     const reference=button.dataset.salePaymentReference;
-    const content=`<section><h2>REÇU DE PAIEMENT</h2><p><strong>Reçu n° :</strong> ${escapeHtml(receiptNumber)}</p><p><strong>Date :</strong> ${escapeHtml(dateLabel(button.dataset.salePaymentDate||new Date().toISOString()))}</p><p><strong>Facture :</strong> ${escapeHtml(sale.invoice_no)}</p><p><strong>Client :</strong> ${escapeHtml(sale.client_name||'Client comptoir')}</p><p><strong>Succursale :</strong> ${escapeHtml(sale.branch_name)}</p><p><strong>Caissier :</strong> ${escapeHtml(sale.cashier||'—')}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(button.dataset.salePaymentMode||'Caisse')}</p>${reference?`<p><strong>Référence de paiement :</strong> ${escapeHtml(reference)}</p>`:''}<h2>Montant reçu : ${moneyCurrencyLabel(amount,currency)}</h2>${conversionSummary}<h3>Situation de la facture par monnaie</h3><table class="report-table"><thead><tr><th>Monnaie</th><th>Total facture</th><th>Total payé</th><th>Reste dû</th></tr></thead><tbody>${balanceRows}</tbody></table>${paymentRows?`<h3>Historique des règlements</h3><table class="report-table"><thead><tr><th>Date</th><th>Opération</th><th>Mode</th><th>Référence</th><th>Montant</th></tr></thead><tbody>${paymentRows}</tbody></table>`:''}</section>`;
-    printReportInWindow(printWindow,`Reçu de paiement ${sale.invoice_no}`,content,'','portrait',true);
+    const paymentMode=selectedPayment?.payment_mode||button.dataset.salePaymentMode||'—';
+    const paymentDate=selectedPayment?.payment_date||button.dataset.salePaymentDate||new Date().toISOString();
+    const paymentLocation=selectedPayment?.cash_name
+      ? {label:'Caisse',name:selectedPayment.cash_name}
+      : selectedPayment?.bank_name
+        ? {label:'Banque',name:selectedPayment.bank_name}
+        : {label:'Succursale',name:sale.branch_name||'—'};
+    const paymentDetails=`<p><strong>${escapeHtml(paymentLocation.label)} :</strong> ${escapeHtml(paymentLocation.name)}</p><p><strong>Mode :</strong> ${escapeHtml(paymentMode)}</p><p><strong>Vente N° :</strong> ${escapeHtml(sale.invoice_no)}</p><p><strong>Motif :</strong> Paiement vente crédit N°${escapeHtml(sale.invoice_no)}</p>`;
+    const receivedAmount=moneyCurrencyLabel(Number(selectedPayment?.amount??amount),currency);
+    const stamp=sessionUser?.enterprise_cachet?`<img src="${escapeHtml(companyImageUrl(sessionUser.enterprise_cachet))}" alt="Cachet ${escapeHtml(sessionUser.enterprise_name||'entreprise')}">`:'';
+    const generatedAt=new Date().toLocaleString('fr-FR');
+    const content=`<article class="sale-invoice sale-invoice--payment sale-invoice--payment-receipt">${saleDocumentHeaderMarkup(sale,'REÇU DE PAIEMENT',receiptNumber,'ENCAISSEMENT',paymentDate,paymentDetails,'Payé par','Détails du reçu',false)}<section class="sale-payment-confirmation"><h2>✓ Paiement reçu</h2><p>Nous accusons réception de la somme de</p><strong>${escapeHtml(receivedAmount)}</strong><p>Mode de paiement : ${escapeHtml(paymentMode)}</p></section><section class="sale-payment-balance"><div class="sale-payment-balance-row"><span>Montant total de la vente :</span><strong>${escapeHtml(moneyCurrencyLabel(invoiceTotal,selectedInvoiceCurrency))}</strong></div><div class="sale-payment-balance-row"><span>Montant restant avant ce paiement :</span><strong>${escapeHtml(moneyCurrencyLabel(balanceBefore,selectedInvoiceCurrency))}</strong></div><div class="sale-payment-balance-row sale-payment-balance-row--paid"><span>Montant de ce paiement :</span><strong>${escapeHtml(moneyCurrencyLabel(selectedAmountApplied,selectedInvoiceCurrency))}</strong></div><div class="sale-payment-balance-row sale-payment-balance-row--after"><span>Montant restant après ce paiement :</span><strong>${escapeHtml(moneyCurrencyLabel(balanceAfter,selectedInvoiceCurrency))}</strong></div></section><section class="sale-payment-notes"><h3>Notes et références</h3><p>Motif : Paiement vente crédit N°${escapeHtml(sale.invoice_no)}</p>${reference?`<p>Référence : ${escapeHtml(reference)}</p>`:''}${conversionSummary||''}</section><section class="sale-payment-signatures"><div>Le client<div class="sale-payment-signature-line sale-payment-signature-line--client"></div>Signature</div><div class="sale-payment-company-signature">Pour l’entreprise<div class="sale-payment-stamp-slot">${stamp}</div><div class="sale-payment-signature-line"></div>Signature et cachet</div></section><p class="sale-payment-generated">Merci pour votre confiance !<small>Reçu généré le ${escapeHtml(generatedAt)}</small></p></article>`;
+    printReportInWindow(printWindow,`Reçu de paiement ${sale.invoice_no}`,content);
   }catch(error){printWindow.close();showToast(`Impression du reçu impossible : ${error.message}`);}
 }
 async function printSaleReceipt(button){
@@ -3886,11 +4106,12 @@ async function printSaleReceipt(button){
   try {
     const data=await fetchReportData('sale-receipt',{vente_id:button.dataset.saleReceipt});
     const sale=data.sale;
+    const paidByCurrency=new Map(salePaidCurrencyBalances(sale).map(balance=>[String(balance.monais||'').trim().toUpperCase(),Number(balance.amount_paid||0)]));
     const payments=data.payments||[];
     const paymentSummary=payments.length?`<h2>Règlements reçus</h2><table class="report-table"><thead><tr><th>Date</th><th>Mode</th><th>Référence</th><th>Montant</th></tr></thead><tbody>${payments.map(payment=>{const invoiceCurrency=payment.monais_facture||payment.monais;const converted=invoiceCurrency!==payment.monais;const rate=Number(payment.exchange_rate||1);const inverse=rate>0?1/rate:0;return `<tr><td>${escapeHtml(dateLabel(payment.payment_date))}</td><td>${escapeHtml(payment.payment_type==='REFUND'?`Remboursement — ${payment.payment_mode}`:payment.payment_mode)}</td><td>${escapeHtml(payment.reference||'—')}</td><td>${moneyCurrencyLabel(payment.amount,payment.monais)}${converted?`<br><small>Imputé : ${moneyCurrencyLabel(payment.amount_applied??payment.amount,invoiceCurrency)} · Taux : 1 ${escapeHtml(payment.monais)} = ${rate.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(invoiceCurrency)} · Inverse : ${inverse.toLocaleString('fr-FR',{maximumFractionDigits:10})} ${escapeHtml(payment.monais)} = 1 ${escapeHtml(invoiceCurrency)}</small>`:''}</td></tr>`;}).join('')}</tbody></table>`:'';
-    const rows=data.details.map(row=>{const unit=row.unit_symbol||row.unit_name||'';return `<tr><td>${escapeHtml(row.sku)}</td><td>${escapeHtml(row.product_name)}</td><td>${Number(row.quantity)} ${escapeHtml(unit)}</td><td>${moneyCurrencyLabel(row.unit_price,row.monais)}</td><td>${Number(row.discount_percent)>0?moneyCurrencyLabel(row.discount_amount,row.monais):'—'}</td><td>${moneyCurrencyLabel(row.subtotal,row.monais)}</td></tr>`;}).join('');
-    const due=saleCurrencyDueBalances(sale).map(balance=>moneyCurrencyLabel(balance.due,balance.monais)).join(' · ');
-    const content=`<p><strong>Facture :</strong> ${escapeHtml(sale.invoice_no)} · <strong>Date :</strong> ${escapeHtml(dateLabel(sale.sale_date))}</p><p><strong>Client :</strong> ${escapeHtml(sale.client_name||'Client comptoir')} · <strong>Succursale :</strong> ${escapeHtml(sale.branch_name)} · <strong>Vendeur :</strong> ${escapeHtml(sale.seller_name||sale.cashier||'—')}</p><table class="report-table"><thead><tr><th>Référence</th><th>Produit</th><th>Quantité</th><th>Prix unitaire</th><th>Réduction</th><th>Total ligne</th></tr></thead><tbody>${rows}</tbody></table><h2>Totaux facture : ${saleCurrencyAmounts(sale,'total_amount')}</h2><p><strong>Montants payés :</strong> ${saleCurrencyAmounts(sale,'amount_paid')} · <strong>Restes à payer :</strong> ${due}</p><p><strong>Statut :</strong> ${escapeHtml(saleStatusLabel(sale.status))}</p>${paymentSummary}`;
+    const rows=data.details.map((row,index)=>{const unit=row.unit_symbol||row.unit_name||'';const quantity=Number(row.quantity).toLocaleString('fr-FR',{maximumFractionDigits:3});return `<tr><td>${index+1}</td><td><strong>${escapeHtml(row.product_name)}</strong>${row.sku?`<small>Réf. ${escapeHtml(row.sku)}</small>`:''}</td><td>${quantity} ${escapeHtml(unit)}</td><td>${escapeHtml(moneyCurrencyLabel(row.unit_price,row.monais))}</td><td>${Number(row.discount_percent)>0?escapeHtml(moneyCurrencyLabel(row.discount_amount,row.monais)):'—'}</td><td><strong>${escapeHtml(moneyCurrencyLabel(row.subtotal,row.monais))}</strong></td></tr>`;}).join('');
+    const totals=saleCurrencyBalances(sale).map(balance=>{const currency=String(balance.monais||'').trim();const paid=paidByCurrency.has(currency.toUpperCase())?paidByCurrency.get(currency.toUpperCase()):Number(balance.amount_paid||0);const due=Math.max(0,Number(balance.total_amount||0)-paid);return `<div class="sale-invoice-totals"><div class="sale-invoice-total sale-invoice-total--amount"><span>Total facture</span><strong>${escapeHtml(moneyCurrencyLabel(balance.total_amount,currency))}</strong></div><div class="sale-invoice-total sale-invoice-total--paid"><span>Montant payé</span><strong>${escapeHtml(moneyCurrencyLabel(paid,currency))}</strong></div><div class="sale-invoice-total sale-invoice-total--due"><span>Reste à payer</span><strong>${escapeHtml(moneyCurrencyLabel(due,currency))}</strong></div></div>`;}).join('');
+    const content=`<article class="sale-invoice sale-invoice--sale-receipt">${saleDocumentHeaderMarkup(sale,'REÇU DE VENTE',sale.invoice_no,saleStatusLabel(sale.status))}<div class="sale-invoice-table-title">DÉTAILS DE LA VENTE N° ${escapeHtml(sale.invoice_no)}</div><table class="report-table sale-invoice-table" data-skip-report-totals="true"><thead><tr><th>#</th><th>Description</th><th>Quantité</th><th>Prix unit.</th><th>Remise</th><th>Montant</th></tr></thead><tbody>${rows}</tbody></table><section class="sale-invoice-summary"><div>${totals}</div></section>${paymentSummary?`<h3 class="sale-invoice-section-title">Historique des règlements</h3>${paymentSummary.replace('<table class="report-table">','<table class="report-table sale-invoice-table" data-skip-report-totals="true">')}`:''}${saleDocumentSignatureMarkup()}<p class="sale-invoice-section-title">${escapeHtml('Les marchandises vendues ne peuvent pas être reprises.')}</p></article>`;
     printReportInWindow(printWindow,`Reçu de vente — ${sale.invoice_no}`,content,'Les marchandises vendues ne peuvent pas être reprises.');
   }catch(error){printWindow.close();showToast(`Impression du reçu impossible : ${error.message}`);}
 }

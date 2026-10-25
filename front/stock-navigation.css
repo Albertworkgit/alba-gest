@@ -116,7 +116,9 @@
 .supplier-suggestion:hover,.supplier-suggestion:focus-visible { background: #edf8f0; }
 .supplier-suggestion strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .supplier-suggestion span { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.supplier-suggestion-empty { margin: 0; padding: 10px 12px; color: var(--muted); font-size: 11px; }
 .dark-theme .supplier-suggestions,.dark-theme .supplier-suggestion { border-color: var(--line); background: #263633; }
+.dark-theme .supplier-suggestion-empty { background: #263633; }
 .dark-theme .supplier-suggestion:hover,.dark-theme .supplier-suggestion:focus-visible { background: #294b41; }
 
 @media (max-width: 600px) {
