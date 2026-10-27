@@ -11,6 +11,7 @@ require_once __DIR__ . '/../Services/AuthService.php';
 require_once __DIR__ . '/../Services/EmailNotificationService.php';
 require_once __DIR__ . '/../Services/ProcurementService.php';
 require_once __DIR__ . '/../Services/SalesService.php';
+require_once __DIR__ . '/../Services/ServiceSalesSettingsService.php';
 require_once __DIR__ . '/../Services/CompanyProfileService.php';
 require_once __DIR__ . '/../Services/ExchangeRateService.php';
 require_once __DIR__ . '/../Services/CashTransferService.php';
@@ -24,6 +25,7 @@ use AlbaStock\Services\AuthService;
 use AlbaStock\Services\EmailNotificationService;
 use AlbaStock\Services\ProcurementService;
 use AlbaStock\Services\SalesService;
+use AlbaStock\Services\ServiceSalesSettingsService;
 use AlbaStock\Services\CompanyProfileService;
 use AlbaStock\Services\ExchangeRateService;
 use AlbaStock\Services\CashTransferService;
@@ -426,6 +428,17 @@ try {
         JsonResponse::send(['success' => true, 'data' => $service->sessionProfile($profile)]);
     }
 
+    if ($action === 'service-sales-settings' && in_array($method, ['GET', 'PUT'], true)) {
+        $actor = AuthGuard::requireAuthenticated();
+        if (($actor['type'] ?? '') !== 'user') JsonResponse::error('Action réservée à une entreprise.', 403);
+        $settingsService = new ServiceSalesSettingsService(Database::connection());
+        if ($method === 'GET') {
+            JsonResponse::send(['success' => true, 'data' => $settingsService->settings($actor)]);
+        }
+        $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
+        JsonResponse::send(['success' => true, 'data' => $settingsService->update($actor, $body)]);
+    }
+
     if ($action === 'company-profile' && $method === 'POST') {
         $actor = AuthGuard::requireAuthenticated();
         if (($actor['type'] ?? '') !== 'user' || empty($actor['is_company_admin'])) {
@@ -593,6 +606,8 @@ try {
     if ($action === 'create-service-sale' && $method === 'POST') {
         $actor=AuthGuard::requireAuthenticated();if(!$actor||$actor['type']!=='user')JsonResponse::error('Action réservée à un utilisateur d’entreprise.',403);
         Authorization::requirePermission($actor,'creer_ventes');$body=json_decode((string)file_get_contents('php://input'),true)?:[];$requested=isset($body['succursale_id'])?(int)$body['succursale_id']:null;$allowed=Authorization::branchId($actor,$requested);if($allowed!==null)$body['succursale_id']=$allowed;
+        $saleBranchId = (int) ($body['succursale_id'] ?? $actor['succursale_id'] ?? 0);
+        (new ServiceSalesSettingsService(Database::connection()))->requireAllowed((int) $actor['entreprise_id'], $saleBranchId);
         $id=(new SalesService(Database::connection()))->createServiceSale($actor,$body);JsonResponse::send(['success'=>true,'data'=>['vente_id'=>$id]],201);
     }
     if ($action === 'create-sale-client' && $method === 'POST') {

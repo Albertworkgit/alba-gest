@@ -176,7 +176,13 @@ function renderView(viewName) {
   document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.dataset.view === viewName));
   kicker.textContent = view.kicker; title.innerHTML = view.title; description.textContent = view.description; breadcrumb.textContent = view.label; action.innerHTML = view.action; action.hidden = !view.action || (viewName === 'branches' && !canSelectCompanyBranches()); action.classList.toggle('user-create-action', viewName === 'users');
   container.innerHTML = view.html;
-  const serviceSaleButton=container.querySelector('[data-new-service-sale]');if(serviceSaleButton)serviceSaleButton.hidden=!hasAccess('creer_ventes');
+  const serviceSaleButton=container.querySelector('[data-new-service-sale]');if(serviceSaleButton)serviceSaleButton.hidden=true;
+  if (viewName === 'settings') {
+    const passwordPanel = container.querySelector('#password-form')?.closest('.panel');
+    if (passwordPanel) {
+      passwordPanel.insertAdjacentHTML('beforebegin', '<section class="panel service-sales-settings-panel" id="service-sales-company-panel" hidden><h2>Autorisation de vente de services</h2><p class="panel-subtitle">Ce réglage concerne toute l’entreprise et ses succursales. Quand il est désactivé, aucune succursale ne peut vendre de services.</p><form id="company-service-sales-form" class="entity-form"><label class="full"><span>Autoriser la vente de services dans toute l’entreprise</span><input name="enterprise_enabled" type="checkbox" value="1"></label><div class="entity-modal-actions full"><button class="modal-submit">Enregistrer l’autorisation</button></div></form></section><section class="panel service-sales-settings-panel" id="service-sales-branch-panel" hidden><h2>Autorisation de vente de services de ma succursale</h2><p class="panel-subtitle">Ce réglage concerne uniquement cette succursale et reste soumis à l’autorisation de l’entreprise.</p><form id="branch-service-sales-form" class="entity-form"><label class="full"><span>Autoriser la vente de services dans ma succursale</span><input name="branch_enabled" type="checkbox" value="1"></label><div class="entity-modal-actions full"><button class="modal-submit">Enregistrer l’autorisation</button></div></form></section>');
+    }
+  }
   if (viewName === 'cash') {
     const debtPanel = document.createElement('section');
     debtPanel.className = 'panel table-panel';
@@ -256,7 +262,12 @@ function renderView(viewName) {
     loadDashboardData();
     if (hasAccess('voir_stock')) loadExpiringStock();
   }
-  if (viewName === 'sales') { loadSalesRows(); loadSalesTopProducts(); }
+  if (viewName === 'sales') {
+    loadSalesRows();
+    loadSalesTopProducts();
+    loadServiceSalesSettings().catch(error => showToast(error.message));
+  }
+  if (viewName === 'settings') loadServiceSalesSettings().catch(error => showToast(error.message));
   if (viewName === 'cash') loadCashRows();
   if (viewName === 'accounting') loadAccountingData();
   if (viewName === 'branches') loadSimpleRows('succursales', 'branch-rows', 6, branchRowMarkup, 'Aucune succursale enregistrée.');
@@ -940,6 +951,7 @@ function canManageRequestsInModule(module) {
 function accessRequirementAllowed(requirement, user) {
   if (requirement === 'session') return Boolean(user);
   if (requirement === 'company_admin') return Boolean(user?.is_company_admin);
+  if (requirement === 'branch_admin') return Boolean(user?.is_branch_admin);
   if (requirement === 'branch_requests') return Boolean(user?.is_company_admin || user?.is_branch_admin);
   if (requirement === '*') return permissionList(user).includes('*');
   return hasAccess(requirement, user);
@@ -984,7 +996,11 @@ function applyViewAccess(viewName, user) {
       ['#role-list', 'voir_roles|gerer_roles'],
       ['[data-create-role]', 'gerer_roles'],
     ],
-    settings: [['#company-profile-panel', 'company_admin']],
+    settings: [
+      ['#company-profile-panel', 'company_admin'],
+      ['#service-sales-company-panel', 'company_admin'],
+      ['#service-sales-branch-panel', 'branch_admin'],
+    ],
   };
   for (const [selector, requirement] of accessRules[viewName] || []) {
     container.querySelectorAll(selector).forEach(element => {
@@ -1103,6 +1119,27 @@ async function apiGet(resource, branchId) {
   const result = await readJson(response);
   if (!response.ok || !result.success) throw new Error(result.message || 'Chargement impossible.');
   return result.data;
+}
+function serviceSalesAllowedForActiveBranch(settings) {
+  const allowedBranches = settings.branches?.filter(branch => branch.service_sales_allowed) || [];
+  return activeBranchId
+    ? allowedBranches.some(branch => Number(branch.succursale_id) === Number(activeBranchId))
+    : allowedBranches.length > 0;
+}
+async function loadServiceSalesSettings() {
+  const response = await fetch('../backend/public/auth.php?action=service-sales-settings', {credentials:'include'});
+  const result = await readJson(response);
+  if (!response.ok || !result.success) throw new Error(result.message || 'Chargement des paramètres de vente de services impossible.');
+  const settings = result.data;
+  const companyToggle = document.querySelector('#company-service-sales-form [name="enterprise_enabled"]');
+  const branchToggle = document.querySelector('#branch-service-sales-form [name="branch_enabled"]');
+  if (companyToggle) companyToggle.checked = Boolean(settings.enterprise_enabled);
+  if (branchToggle) branchToggle.checked = Boolean(settings.branches?.find(branch => branch.is_current)?.branch_enabled);
+  const serviceSaleButton = currentViewName === 'sales' ? container.querySelector('[data-new-service-sale]') : null;
+  if (serviceSaleButton) {
+    serviceSaleButton.hidden = !hasAccess('creer_ventes') || !serviceSalesAllowedForActiveBranch(settings);
+  }
+  return settings;
 }
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 25, 100];
 let PAGE_SIZE = PAGE_SIZE_OPTIONS.includes(Number(localStorage.getItem('alba-stock-page-size')))
@@ -1287,15 +1324,135 @@ async function openSaleForm() {
   form.addEventListener('submit',async event=>{event.preventDefault();const items=[...linesBox.querySelectorAll('[data-sale-line]')].map(row=>({produit_id:Number(row.querySelector('[data-sale-product]').value),quantity:Number(row.querySelector('[data-sale-quantity]').value),unit_price:Number(row.querySelector('[data-sale-price]').value||0),discount_enabled:row.querySelector('[data-sale-discount]').checked?1:0,discount_amount:Number(row.querySelector('[data-sale-discount-amount]').value||0)}));if(items.some(item=>!item.produit_id)){showToast('Choisissez un produit sur chaque ligne.');return;}if([...linesBox.querySelectorAll('[data-sale-line]')].some(row=>{const option=row.querySelector('[data-sale-product]').selectedOptions[0];return Number(option?.dataset.price||0)<=0&&Number(row.querySelector('[data-sale-price]').value||0)<=0;})){showToast('Saisissez un prix de vente positif pour chaque produit concerné.');return;}const body={invoice_no:form.elements.namedItem('invoice_no').value.trim(),succursale_id:Number(branchSelect.value),caisse_id:null,client_id:clientSelect.value||null,client_comptoir_name:clientSelect.value?'':counterClientInput.value.trim(),items};try{const response=await fetch('../backend/public/auth.php?action=create-sale',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Enregistrement de la vente impossible.');modal.remove();showToast('Vente enregistrée. La facture est disponible dans la liste.');loadSalesRows();loadCashRows();loadStock();}catch(error){showToast(error.message);}});
 }
 async function openServiceSaleForm() {
-  if(!hasAccess('creer_ventes'))return;
-  const modal=document.createElement('div');modal.className='entity-modal';modal.innerHTML='<section class="entity-dialog sale-dialog service-sale-dialog"><header class="service-sale-hero"><div><span class="service-sale-eyebrow">FACTURATION DE PRESTATION</span><h2>Vendre un service</h2><p>Décrivez le service rendu et établissez sa facture.</p></div></header><div class="service-sale-steps"><span><b>1</b> Client</span><i></i><span><b>2</b> Prestation</span><i></i><span><b>3</b> Paiement en caisse</span></div><form class="entity-form service-sale-form"><label>Référence de facture<input name="invoice_no" required><small>Générée automatiquement, modifiable si besoin.</small></label><label>Succursale<select name="succursale_id" required></select></label><label class="full">Client (facultatif)<select name="client_id"><option value="">Client comptoir</option></select></label><label class="full" data-service-client>Nom du client<input name="client_comptoir_name" maxlength="100" required></label><div class="full sale-lines-wrap"><div class="sale-lines-heading"><strong>Prestations</strong><button type="button" data-service-add>+ Ajouter un service</button></div><div data-service-lines></div></div><p class="full service-sale-total-label">Montant de la facture</p><p class="full sale-total service-sale-total" data-service-total>Totaux par monnaie : —</p><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Enregistrer la facture</button></div></form></section>';document.body.appendChild(modal);
-  const form=modal.querySelector('form'),branch=form.elements.namedItem('succursale_id'),client=form.elements.namedItem('client_id'),clientName=form.elements.namedItem('client_comptoir_name'),lines=modal.querySelector('[data-service-lines]');const branches=branchOptions.length?branchOptions:sessionUser?.succursale_id?[{succursale_id:sessionUser.succursale_id,name:sessionUser.branch_name||'Ma succursale'}]:[];branch.innerHTML=branches.map(b=>`<option value="${Number(b.succursale_id)}">${escapeHtml(b.name)}</option>`).join('');branch.value=String(activeBranchId||sessionUser?.succursale_id||branches[0]?.succursale_id||'');hideFixedBranchChoice(branch);form.elements.namedItem('invoice_no').value=`FAC-${new Date().toISOString().slice(0,10).replaceAll('-','')}-S${Math.random().toString(36).slice(2,5).toUpperCase()}`;
-  let catalog;try{catalog=await fetchReportData('sale-catalog',{succursale_id:branch.value});client.innerHTML='<option value="">Client comptoir</option>'+catalog.clients.map(c=>`<option value="${Number(c.client_id)}">${escapeHtml(c.name)}</option>`).join('');}catch(e){modal.remove();showToast(e.message);return;}
-  const syncClient=()=>{const counter=!client.value;modal.querySelector('[data-service-client]').hidden=!counter;clientName.required=counter;if(!counter)clientName.value='';};client.addEventListener('change',syncClient);syncClient();const codes=[...new Set([...(catalog.currencies||[]),...catalog.cashboxes.map(c=>c.monais),...catalog.products.map(p=>p.monais)])];if(!codes.length){modal.remove();showToast('Aucune monnaie active n’est configurée pour cette entreprise.');return;}
-  const recalc=()=>{const totals={};for(const row of lines.querySelectorAll('[data-service-line]')){const name=row.querySelector('[name=service_name]').value,qty=Number(row.querySelector('[name=quantity]').value||0),price=Number(row.querySelector('[name=unit_price]').value||0),discount=Number(row.querySelector('[name=discount_amount]').value||0),code=row.querySelector('[name=monais]').value;if(code)totals[code]=(totals[code]||0)+Math.max(0,qty*price-discount);row.querySelector('[data-service-subtotal]').textContent=moneyCurrencyLabel(Math.max(0,qty*price-discount),code);}modal.querySelector('[data-service-total]').textContent='Totaux par monnaie : '+(Object.entries(totals).map(([c,v])=>moneyCurrencyLabel(v,c)).join(' · ')||'—');};
-  const addLine=()=>{const row=document.createElement('div');row.className='sale-line service-sale-line';row.dataset.serviceLine='';row.innerHTML=`<label>Service rendu<input name="service_name" maxlength="150" required></label><label>Quantité rendue<input name="quantity" type="number" min="0.001" step="0.001" value="1" required></label><label>Prix unitaire<input name="unit_price" type="number" min="0.01" step="0.01" required></label><label>Remise<input name="discount_amount" type="number" min="0" step="0.01" value="0"></label><label>Monnaie<select name="monais" required><option value="">Choisir une monnaie</option>${codes.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}</select></label><strong data-service-subtotal>—</strong><button type="button" data-service-remove aria-label="Retirer le service">×</button>`;lines.append(row);row.addEventListener('input',recalc);row.addEventListener('change',recalc);recalc();};
-  modal.querySelector('[data-service-add]').addEventListener('click',addLine);lines.addEventListener('click',e=>{if(e.target.closest('[data-service-remove]')){e.target.closest('[data-service-line]').remove();recalc();}});modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());addLine();
-  form.addEventListener('submit',async e=>{e.preventDefault();const items=[...lines.querySelectorAll('[data-service-line]')].map(r=>({service_name:r.querySelector('[name=service_name]').value.trim(),quantity:Number(r.querySelector('[name=quantity]').value),unit_price:Number(r.querySelector('[name=unit_price]').value),discount_amount:Number(r.querySelector('[name=discount_amount]').value||0),monais:r.querySelector('[name=monais]').value}));if(!items.length||items.some(i=>!i.service_name||i.quantity<=0||i.unit_price<=0||i.discount_amount<0||i.discount_amount>i.quantity*i.unit_price||!i.monais)){showToast('Complétez les informations de chaque prestation.');return;}const body={invoice_no:form.elements.namedItem('invoice_no').value.trim(),succursale_id:Number(branch.value),client_id:client.value||null,client_comptoir_name:client.value?'':clientName.value.trim(),items};try{const res=await fetch('../backend/public/auth.php?action=create-service-sale',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)});const result=await readJson(res);if(!res.ok||!result.success)throw new Error(result.message||'Création de la facture impossible.');modal.remove();showToast('Facture de service créée. Le paiement se fait depuis la caisse.');loadSalesRows();loadPendingSales();}catch(err){showToast(err.message);}});
+  if (!hasAccess('creer_ventes')) return;
+  let settings;
+  try { settings = await loadServiceSalesSettings(); }
+  catch (error) { showToast(error.message); return; }
+  const branches = settings?.branches?.filter(branch => branch.service_sales_allowed) || [];
+  if (!branches.length) {
+    showToast('La vente de services n’est pas autorisée pour cette entreprise ou cette succursale.');
+    return;
+  }
+  const modal = document.createElement('div');
+  modal.className = 'entity-modal';
+  modal.innerHTML = '<section class="entity-dialog sale-dialog service-sale-dialog"><header class="service-sale-hero"><div><span class="service-sale-eyebrow">FACTURATION DE PRESTATION</span><h2>Vendre un service</h2><p>Décrivez le service rendu et établissez sa facture.</p></div></header><div class="service-sale-steps"><span><b>1</b> Client</span><i></i><span><b>2</b> Prestation</span><i></i><span><b>3</b> Paiement en caisse</span></div><form class="entity-form service-sale-form"><label>Référence de facture<input name="invoice_no" required><small>Générée automatiquement, modifiable si besoin.</small></label><label>Succursale<select name="succursale_id" required></select></label><label class="full">Client (facultatif)<select name="client_id"><option value="">Client comptoir</option></select></label><label class="full" data-service-client>Nom du client<input name="client_comptoir_name" maxlength="100" required></label><div class="full sale-lines-wrap"><div class="sale-lines-heading"><strong>Prestations</strong><button type="button" data-service-add>+ Ajouter un service</button></div><div data-service-lines></div></div><p class="full service-sale-total-label">Montant de la facture</p><p class="full sale-total service-sale-total" data-service-total>Totaux par monnaie : —</p><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Enregistrer la facture</button></div></form></section>';
+  document.body.appendChild(modal);
+  const form = modal.querySelector('form');
+  const branch = form.elements.namedItem('succursale_id');
+  const client = form.elements.namedItem('client_id');
+  const clientName = form.elements.namedItem('client_comptoir_name');
+  const lines = modal.querySelector('[data-service-lines]');
+  branch.innerHTML = branches.map(item => `<option value="${Number(item.succursale_id)}">${escapeHtml(item.name)}</option>`).join('');
+  const preferredBranch = branches.some(item => Number(item.succursale_id) === Number(activeBranchId))
+    ? activeBranchId
+    : branches.some(item => Number(item.succursale_id) === Number(sessionUser?.succursale_id))
+      ? sessionUser.succursale_id
+      : branches[0].succursale_id;
+  branch.value = String(preferredBranch);
+  hideFixedBranchChoice(branch);
+  form.elements.namedItem('invoice_no').value = `FAC-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-S${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+
+  const syncClient = () => {
+    const counter = !client.value;
+    modal.querySelector('[data-service-client]').hidden = !counter;
+    clientName.required = counter;
+    if (!counter) clientName.value = '';
+  };
+  client.addEventListener('change', syncClient);
+  let codes = [];
+  const recalc = () => {
+    const totals = {};
+    for (const row of lines.querySelectorAll('[data-service-line]')) {
+      const quantity = Number(row.querySelector('[name=quantity]').value || 0);
+      const price = Number(row.querySelector('[name=unit_price]').value || 0);
+      const discount = Number(row.querySelector('[name=discount_amount]').value || 0);
+      const currency = row.querySelector('[name=monais]').value;
+      const subtotal = Math.max(0, quantity * price - discount);
+      if (currency) totals[currency] = (totals[currency] || 0) + subtotal;
+      row.querySelector('[data-service-subtotal]').textContent = moneyCurrencyLabel(subtotal, currency);
+    }
+    modal.querySelector('[data-service-total]').textContent = 'Totaux par monnaie : '
+      + (Object.entries(totals).map(([currency, total]) => moneyCurrencyLabel(total, currency)).join(' · ') || '—');
+  };
+  const addLine = () => {
+    const row = document.createElement('div');
+    row.className = 'sale-line service-sale-line';
+    row.dataset.serviceLine = '';
+    row.innerHTML = `<label>Service rendu<input name="service_name" maxlength="150" required></label><label>Quantité rendue<input name="quantity" type="number" min="0.001" step="0.001" value="1" required></label><label>Prix unitaire<input name="unit_price" type="number" min="0.01" step="0.01" required></label><label>Remise<input name="discount_amount" type="number" min="0" step="0.01" value="0"></label><label>Monnaie<select name="monais" required><option value="">Choisir une monnaie</option>${codes.map(code => `<option value="${escapeHtml(code)}">${escapeHtml(code)}</option>`).join('')}</select></label><strong data-service-subtotal>—</strong><button type="button" data-service-remove aria-label="Retirer le service">×</button>`;
+    lines.append(row);
+    row.addEventListener('input', recalc);
+    row.addEventListener('change', recalc);
+    recalc();
+  };
+  const loadCatalog = async () => {
+    try {
+      const catalog = await fetchReportData('sale-catalog', {succursale_id:branch.value});
+      client.innerHTML = '<option value="">Client comptoir</option>' + catalog.clients.map(item => `<option value="${Number(item.client_id)}">${escapeHtml(item.name)}</option>`).join('');
+      syncClient();
+      codes = [...new Set([...(catalog.currencies || []), ...catalog.cashboxes.map(item => item.monais), ...catalog.products.map(item => item.monais)])];
+      if (!codes.length) throw new Error('Aucune monnaie active n’est configurée pour cette entreprise.');
+      lines.querySelectorAll('[name=monais]').forEach(select => {
+        const previous = select.value;
+        select.innerHTML = '<option value="">Choisir une monnaie</option>' + codes.map(code => `<option value="${escapeHtml(code)}">${escapeHtml(code)}</option>`).join('');
+        select.value = codes.includes(previous) ? previous : '';
+      });
+      recalc();
+    } catch (error) {
+      showToast(error.message);
+      if (!lines.children.length) modal.remove();
+    }
+  };
+  modal.querySelector('[data-service-add]').addEventListener('click', addLine);
+  lines.addEventListener('click', event => {
+    if (event.target.closest('[data-service-remove]')) {
+      event.target.closest('[data-service-line]').remove();
+      recalc();
+    }
+  });
+  modal.querySelector('.modal-cancel').addEventListener('click', () => modal.remove());
+  branch.addEventListener('change', loadCatalog);
+  await loadCatalog();
+  if (!modal.isConnected) return;
+  addLine();
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const items = [...lines.querySelectorAll('[data-service-line]')].map(row => ({
+      service_name:row.querySelector('[name=service_name]').value.trim(),
+      quantity:Number(row.querySelector('[name=quantity]').value),
+      unit_price:Number(row.querySelector('[name=unit_price]').value),
+      discount_amount:Number(row.querySelector('[name=discount_amount]').value || 0),
+      monais:row.querySelector('[name=monais]').value,
+    }));
+    if (!items.length || items.some(item => !item.service_name || item.quantity <= 0 || item.unit_price <= 0
+      || item.discount_amount < 0 || item.discount_amount > item.quantity * item.unit_price || !item.monais)) {
+      showToast('Complétez les informations de chaque prestation.');
+      return;
+    }
+    const body = {
+      invoice_no:form.elements.namedItem('invoice_no').value.trim(),
+      succursale_id:Number(branch.value),
+      client_id:client.value || null,
+      client_comptoir_name:client.value ? '' : clientName.value.trim(),
+      items,
+    };
+    try {
+      const response = await fetch('../backend/public/auth.php?action=create-service-sale', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'include',
+        body:JSON.stringify(body),
+      });
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Création de la facture impossible.');
+      modal.remove();
+      showToast('Facture de service créée. Le paiement se fait depuis la caisse.');
+      loadSalesRows();
+      loadPendingSales();
+    } catch (error) {
+      showToast(error.message);
+    }
+  });
 }
 function labelSaleInvoiceButtons(root) {
   root.querySelectorAll('[data-sale-receipt]').forEach(button => {
@@ -4529,6 +4686,42 @@ document.addEventListener('click', event => {
   form.hidden = !form.hidden;
   form.style.display = form.hidden ? 'none' : 'grid';
   cleanupToggle.textContent = form.hidden ? 'Nettoyer les données' : 'Fermer';
+});
+document.addEventListener('submit', async event => {
+  const companySettingsForm = event.target.closest('#company-service-sales-form');
+  const branchSettingsForm = event.target.closest('#branch-service-sales-form');
+  if (!companySettingsForm && !branchSettingsForm) return;
+  event.preventDefault();
+  const form = companySettingsForm || branchSettingsForm;
+  const checkbox = form.querySelector('input[type="checkbox"]');
+  const submitButton = form.querySelector('button[type="submit"],button:not([type])');
+  if (submitButton) submitButton.disabled = true;
+  try {
+    const body = companySettingsForm
+      ? {enterprise_enabled:checkbox.checked}
+      : {branch_enabled:checkbox.checked};
+    const response = await fetch('../backend/public/auth.php?action=service-sales-settings', {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body:JSON.stringify(body),
+    });
+    const result = await readJson(response);
+    if (!response.ok || !result.success) throw new Error(result.message || 'Enregistrement du paramètre impossible.');
+    const settings = result.data;
+    if (companySettingsForm) checkbox.checked = Boolean(settings.enterprise_enabled);
+    else checkbox.checked = Boolean(settings.branches?.find(branch => branch.is_current)?.branch_enabled);
+    if (currentViewName === 'sales') {
+      const button = container.querySelector('[data-new-service-sale]');
+      if (button) button.hidden = !hasAccess('creer_ventes')
+        || !serviceSalesAllowedForActiveBranch(settings);
+    }
+    showToast('Paramètre de vente de services enregistré.');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    if (submitButton) submitButton.disabled = false;
+  }
 });
 document.addEventListener('submit', async event => {
   const cleanupForm = event.target.closest('#company-data-cleanup-form');

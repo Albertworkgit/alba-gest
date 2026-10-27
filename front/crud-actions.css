@@ -245,6 +245,7 @@ button[data-purchase-voucher]:focus-visible { outline: 2px solid #147c70; outlin
 /* Service sale workflow */
 .sales-panel-heading { align-items: center; }
 .service-sale-button { display:inline-flex; align-items:center; gap:8px; padding:10px 15px; border:1px solid #c8e3d9; border-radius:8px; background:linear-gradient(135deg,#f1faf5,#e2f2eb); color:#12695d; font-size:12px; font-weight:700; box-shadow:0 3px 9px #164c3c12; transition:transform .16s ease,box-shadow .16s ease,background .16s ease; }
+.service-sale-button[hidden] { display:none; }
 
 .service-sale-button:hover { transform:translateY(-1px); background:#e5f4ec; box-shadow:0 6px 14px #164c3c1a; }
 .service-sale-button:focus-visible { outline:3px solid #83b9a8; outline-offset:2px; }

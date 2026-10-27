@@ -319,7 +319,7 @@ final class AuthService
         $logoColumn = $companyColumn('logo', 'enterprise_logo');
         $stampColumn = $companyColumn('cachet', 'enterprise_cachet');
         // Charge le nom de l'entreprise et de la succursale depuis la base, pas depuis le navigateur.
-        $statement = $this->db->prepare('SELECT u.full_name, u.username, u.email, u.succursale_id, u.preferred_language, s.est_sucursal_mere AS is_main_branch, r.role_name, r.permissions, e.name AS enterprise_name, e.email AS enterprise_email, e.phone AS enterprise_phone, e.address AS enterprise_address, ' . $rccmColumn . ', ' . $postalBoxColumn . ', ' . $logoColumn . ', ' . $stampColumn . ', s.name AS branch_name, (SELECT MIN(first_user.user_id) FROM users first_user WHERE first_user.entreprise_id = u.entreprise_id) AS first_user_id FROM users u INNER JOIN roles r ON r.role_id = u.role_id AND r.entreprise_id = u.entreprise_id INNER JOIN entreprises e ON e.entreprise_id = u.entreprise_id LEFT JOIN succursales s ON s.succursale_id = u.succursale_id AND s.entreprise_id = u.entreprise_id WHERE u.user_id = ? AND u.entreprise_id = ? AND u.is_active = 1 AND e.is_active = 1 LIMIT 1');
+        $statement = $this->db->prepare('SELECT u.full_name, u.username, u.email, u.succursale_id, u.preferred_language, s.est_sucursal_mere AS is_main_branch, s.vente_services_autorisee AS branch_service_sales_enabled, r.role_name, r.permissions, e.name AS enterprise_name, e.email AS enterprise_email, e.phone AS enterprise_phone, e.address AS enterprise_address, e.vente_services_autorisee AS enterprise_service_sales_enabled, ' . $rccmColumn . ', ' . $postalBoxColumn . ', ' . $logoColumn . ', ' . $stampColumn . ', s.name AS branch_name, (SELECT MIN(first_user.user_id) FROM users first_user WHERE first_user.entreprise_id = u.entreprise_id) AS first_user_id FROM users u INNER JOIN roles r ON r.role_id = u.role_id AND r.entreprise_id = u.entreprise_id INNER JOIN entreprises e ON e.entreprise_id = u.entreprise_id LEFT JOIN succursales s ON s.succursale_id = u.succursale_id AND s.entreprise_id = u.entreprise_id WHERE u.user_id = ? AND u.entreprise_id = ? AND u.is_active = 1 AND e.is_active = 1 LIMIT 1');
         $statement->bind_param('ii', $userId, $enterpriseId);
         $statement->execute();
         $profile = $statement->get_result()->fetch_assoc() ?: [];
@@ -337,10 +337,18 @@ final class AuthService
             $profile['role_name'] = 'Administrateur de l’entreprise';
             $profile['permissions'] = json_encode(['*', 'toutes_succursales'], JSON_UNESCAPED_UNICODE);
         }
+        $profilePermissions = json_decode((string) ($profile['permissions'] ?? '[]'), true);
+        $isBranchAdmin = !$isCompanyAdmin
+            && !empty($profile['succursale_id'])
+            && is_array($profilePermissions)
+            && (in_array('*', $profilePermissions, true) || in_array('gerer_demandes', $profilePermissions, true));
         unset($profile['first_user_id']);
         return array_merge($actor, $profile, [
             'is_company_admin' => $isCompanyAdmin,
+            'is_branch_admin' => $isBranchAdmin,
             'is_main_branch' => (bool) ($profile['is_main_branch'] ?? false),
+            'enterprise_service_sales_enabled' => (bool) ($profile['enterprise_service_sales_enabled'] ?? false),
+            'branch_service_sales_enabled' => (bool) ($profile['branch_service_sales_enabled'] ?? false),
             'modules_autorises' => $this->enterpriseModules($enterpriseId),
         ]);
     }

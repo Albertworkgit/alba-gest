@@ -237,6 +237,10 @@ a:focus-visible {
   background: #edf8f0;
 }
 
+#view-container .service-sales-settings-panel {
+  grid-column: 1 / -1;
+}
+
 #view-container .filter-bar {
   align-items: center;
   flex-wrap: wrap;
