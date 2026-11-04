@@ -26,6 +26,7 @@ final class Authorization
 
     public static function moduleForPermission(string $permission): ?string
     {
+        if ($permission === 'voir_risques_stock') return 'stock_risk';
         if (in_array($permission, ['voir_stock', 'modifier_stock', 'stock', 'creer_produit', 'modifier_produit', 'supprimer_produit', 'voir_fournisseurs', 'creer_fournisseurs', 'modifier_fournisseurs', 'supprimer_fournisseurs', 'gerer_unites_mesure', 'voir_transferts', 'creer_transferts'], true)) return 'stock';
         if (in_array($permission, ['approvisionnement'], true) || str_ends_with($permission, '_approvisionnements')) return 'approvisionnements';
         if (str_ends_with($permission, '_transferts')) return 'stock';
@@ -152,7 +153,7 @@ final class Authorization
         if (!is_array($permissions)) return [];
         // Convertit l'ancien alias de groupe en droits utilisables par l'API.
         if (in_array('stock', $permissions, true) || (in_array('voir_stock', $permissions, true) && !in_array('approvisionnement', $permissions, true))) {
-            $permissions = array_merge($permissions, ['voir_stock', 'modifier_stock', 'creer_produit', 'modifier_produit', 'supprimer_produit', 'voir_succursales', 'voir_fournisseurs', 'creer_fournisseurs', 'modifier_fournisseurs', 'supprimer_fournisseurs', 'voir_approvisionnements', 'creer_approvisionnements']);
+            $permissions = array_merge($permissions, ['voir_stock', 'modifier_stock', 'creer_produit', 'modifier_produit', 'supprimer_produit', 'voir_succursales', 'voir_fournisseurs', 'creer_fournisseurs', 'modifier_fournisseurs', 'supprimer_fournisseurs', 'voir_approvisionnements', 'creer_approvisionnements', 'voir_risques_stock']);
         }
         if (in_array('vente', $permissions, true)) $permissions = array_merge($permissions, ['voir_ventes', 'creer_ventes', 'modifier_ventes']);
         if (in_array('caisse', $permissions, true)) $permissions = array_merge($permissions, ['voir_caisse', 'creer_caisse', 'modifier_caisse', 'supprimer_caisse']);

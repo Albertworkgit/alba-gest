@@ -617,7 +617,17 @@ try {
         if (!$actor || $actor['type'] !== 'user') JsonResponse::error('Action réservée à un utilisateur d’entreprise.', 403);
         Authorization::requirePermission($actor, 'creer_approvisionnements');
         $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
-        (new ProcurementService(Database::connection()))->updatePurchaseStatus($actor, (int) ($body['achat_id'] ?? 0), (string) ($body['status'] ?? ''), isset($body['date_expiration']) ? (string) $body['date_expiration'] : null);
+        $quantityReceived = isset($body['quantity_received']) ? filter_var($body['quantity_received'], FILTER_VALIDATE_INT) : null;
+        $receivedUnitCost = isset($body['unit_cost']) ? filter_var($body['unit_cost'], FILTER_VALIDATE_FLOAT) : null;
+        if ($quantityReceived === false || $receivedUnitCost === false) JsonResponse::error('La quantité reçue ou le coût unitaire est invalide.', 422);
+        (new ProcurementService(Database::connection()))->updatePurchaseStatus(
+            $actor,
+            (int) ($body['achat_id'] ?? 0),
+            (string) ($body['status'] ?? ''),
+            isset($body['date_expiration']) ? (string) $body['date_expiration'] : null,
+            $quantityReceived,
+            $receivedUnitCost === null ? null : (float) $receivedUnitCost
+        );
         JsonResponse::send(['success' => true, 'message' => 'Statut modifié.']);
     }
 

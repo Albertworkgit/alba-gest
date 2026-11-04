@@ -636,7 +636,7 @@ try {
         $response = ['success' => true, 'data' => $query->get_result()->fetch_all(MYSQLI_ASSOC)];
         if ($response['data'] !== []) {
             $purchaseIds = implode(',', array_map(static fn (array $row): int => (int) $row['achat_id'], $response['data']));
-            $detailsQuery = $db->prepare('SELECT ad.achat_id, SUM(ad.quantity) AS total_quantity, MAX(u.name) AS unit_name, MAX(u.symbole) AS unit_abbreviation, MAX(p.monais) AS monais FROM achat_details ad JOIN produits p ON p.produit_id = ad.produit_id AND p.entreprise_id = ad.entreprise_id LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE ad.entreprise_id = ? AND ad.achat_id IN (' . $purchaseIds . ') GROUP BY ad.achat_id');
+            $detailsQuery = $db->prepare('SELECT ad.achat_id, SUM(ad.quantity) AS total_quantity, MAX(ad.unit_cost) AS unit_cost, MAX(p.name) AS product_name, MAX(p.sku) AS product_sku, MAX(p.est_perisable) AS is_perishable, MAX(u.name) AS unit_name, MAX(u.symbole) AS unit_abbreviation, MAX(p.monais) AS monais FROM achat_details ad JOIN produits p ON p.produit_id = ad.produit_id AND p.entreprise_id = ad.entreprise_id LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE ad.entreprise_id = ? AND ad.achat_id IN (' . $purchaseIds . ') GROUP BY ad.achat_id');
             $detailsQuery->bind_param('i', $enterpriseId);
             $detailsQuery->execute();
             $purchaseDetails = [];
@@ -644,6 +644,10 @@ try {
             foreach ($response['data'] as &$purchaseRow) {
                 $details = $purchaseDetails[(int) $purchaseRow['achat_id']] ?? [];
                 $purchaseRow['total_quantity'] = (int) ($details['total_quantity'] ?? 0);
+                $purchaseRow['unit_cost'] = (float) ($details['unit_cost'] ?? 0);
+                $purchaseRow['product_name'] = $details['product_name'] ?? null;
+                $purchaseRow['product_sku'] = $details['product_sku'] ?? null;
+                $purchaseRow['is_perishable'] = (bool) ($details['is_perishable'] ?? false);
                 $purchaseRow['unit_name'] = $details['unit_name'] ?? null;
                 $purchaseRow['unit_abbreviation'] = $details['unit_abbreviation'] ?? null;
                 $purchaseRow['monais'] = $details['monais'] ?? null;

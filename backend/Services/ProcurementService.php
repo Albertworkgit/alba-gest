@@ -190,16 +190,30 @@ final class ProcurementService
     }
 
     // fonction pour mettre à jour le statut d'un approvisionnement existant
-    public function updatePurchaseStatus(array $actor, int $purchaseId, string $newStatus, ?string $expirationDate = null): void
+    public function updatePurchaseStatus(
+        array $actor,
+        int $purchaseId,
+        string $newStatus,
+        ?string $expirationDate = null,
+        ?int $quantityReceived = null,
+        ?float $receivedUnitCost = null
+    ): void
     {
         if (!in_array($newStatus, ['PENDING', 'RECEIVED', 'CANCELLED'], true)) throw new RuntimeException('Statut invalide.');
         $enterpriseId = (int) $actor['entreprise_id'];
         $this->db->begin_transaction();
         try {
-            $query = $this->db->prepare('SELECT succursale_id, user_id, movement_type, status, validation_date FROM achats WHERE achat_id = ? AND entreprise_id = ? LIMIT 1 FOR UPDATE');
+            $query = $this->db->prepare('SELECT succursale_id, user_id, purchase_no, movement_type, status, validation_date FROM achats WHERE achat_id = ? AND entreprise_id = ? LIMIT 1 FOR UPDATE');
             $query->bind_param('ii', $purchaseId, $enterpriseId); $query->execute(); $purchase = $query->get_result()->fetch_assoc();
             if (!$purchase) throw new RuntimeException('Approvisionnement introuvable.');
             if ((int)($actor['succursale_id'] ?? 0) > 0 && (int)$actor['succursale_id'] !== (int)$purchase['succursale_id']) throw new RuntimeException('Accès limité à une autre succursale.');
+            $isForecastPurchase = str_starts_with((string) $purchase['purchase_no'], 'PREV-') && $purchase['movement_type'] === 'IN';
+            if (($quantityReceived !== null || $receivedUnitCost !== null) && !$isForecastPurchase) {
+                throw new RuntimeException('La quantité et le coût modifiables sont réservés aux approvisionnements prévisionnels.');
+            }
+            if (($quantityReceived !== null && $quantityReceived < 1) || ($receivedUnitCost !== null && $receivedUnitCost <= 0)) {
+                throw new RuntimeException('La quantité reçue et le coût unitaire doivent être supérieurs à zéro.');
+            }
             if ($purchase['status'] === $newStatus) { $this->db->commit(); return; }
             if ($purchase['status'] === 'RECEIVED' && $newStatus === 'CANCELLED') {
                 if (empty($purchase['validation_date']) || time() - strtotime((string)$purchase['validation_date']) >= 172800) throw new RuntimeException('Un approvisionnement validé ne peut être annulé que pendant les 48 heures suivant sa validation.');
@@ -215,9 +229,24 @@ final class ProcurementService
                 $m=$this->db->prepare('INSERT INTO mouvements_stock (entreprise_id,succursale_id,produit_id,user_id,movement_type,quantity_before,quantity_moved,quantity_after,reference_type,reference_id,note) VALUES (?,?,?,?,?,?,?,?,?,?,?)');$m->bind_param('iiiisiiisis',$enterpriseId,$branch,$product,$user,$type,$before,$quantity,$after,$ref,$purchaseId,$note);$m->execute();
             } elseif ($purchase['status'] !== 'PENDING') throw new RuntimeException('Un approvisionnement validé ou annulé ne peut pas être modifié.');
             if ($newStatus === 'RECEIVED') {
-                $q = $this->db->prepare('SELECT d.achat_detail_id, d.produit_id, d.quantity, d.date_expiration, p.est_perisable FROM achat_details d JOIN produits p ON p.produit_id=d.produit_id AND p.entreprise_id=d.entreprise_id WHERE d.entreprise_id=? AND d.achat_id=? LIMIT 1 FOR UPDATE');
+                $q = $this->db->prepare('SELECT d.achat_detail_id, d.produit_id, d.quantity, d.date_expiration, d.unit_cost, p.est_perisable FROM achat_details d JOIN produits p ON p.produit_id=d.produit_id AND p.entreprise_id=d.entreprise_id WHERE d.entreprise_id=? AND d.achat_id=? LIMIT 1 FOR UPDATE');
                 $q->bind_param('ii', $enterpriseId, $purchaseId); $q->execute(); $d = $q->get_result()->fetch_assoc();
                 if (!$d) throw new RuntimeException('Détail d’approvisionnement introuvable.');
+                if ($isForecastPurchase && $purchase['movement_type'] === 'IN') {
+                    $quantity = $quantityReceived ?? (int) $d['quantity'];
+                    $unitCost = $receivedUnitCost ?? (float) $d['unit_cost'];
+                    if ($quantity < 1 || $unitCost <= 0) throw new RuntimeException('Saisissez une quantité reçue et un coût unitaire supérieurs à zéro.');
+                    $subtotal = $quantity * $unitCost;
+                    $detailId = (int) $d['achat_detail_id'];
+                    $saveReceiptDetails = $this->db->prepare('UPDATE achat_details SET quantity = ?, unit_cost = ?, subtotal = ? WHERE achat_detail_id = ? AND entreprise_id = ?');
+                    $saveReceiptDetails->bind_param('iddii', $quantity, $unitCost, $subtotal, $detailId, $enterpriseId);
+                    $saveReceiptDetails->execute();
+                    $saveReceiptTotal = $this->db->prepare('UPDATE achats SET total_amount = ? WHERE achat_id = ? AND entreprise_id = ?');
+                    $saveReceiptTotal->bind_param('dii', $subtotal, $purchaseId, $enterpriseId);
+                    $saveReceiptTotal->execute();
+                    $d['quantity'] = $quantity;
+                    $d['unit_cost'] = $unitCost;
+                }
                 $branch=(int)$purchase['succursale_id']; $product=(int)$d['produit_id']; $quantity=(int)$d['quantity']; $user=(int)$actor['id'];
                 if ((int)$d['est_perisable'] === 1 && $purchase['movement_type'] === 'IN' && empty($d['date_expiration'])) {
                     $validExpiration = is_string($expirationDate)

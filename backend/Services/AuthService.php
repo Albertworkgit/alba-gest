@@ -326,7 +326,7 @@ final class AuthService
         // Compatibilité avec les anciens rôles enregistrés sous l'alias "stock".
         $permissions = json_decode((string) ($profile['permissions'] ?? '[]'), true);
         if (is_array($permissions) && (in_array('stock', $permissions, true) || (in_array('voir_stock', $permissions, true) && !in_array('approvisionnement', $permissions, true)))) {
-            $profile['permissions'] = json_encode(array_values(array_unique(array_merge($permissions, ['voir_stock', 'modifier_stock', 'creer_produit', 'modifier_produit', 'supprimer_produit', 'voir_succursales', 'voir_fournisseurs', 'creer_fournisseurs', 'modifier_fournisseurs', 'supprimer_fournisseurs', 'voir_approvisionnements', 'creer_approvisionnements']))), JSON_UNESCAPED_UNICODE);
+            $profile['permissions'] = json_encode(array_values(array_unique(array_merge($permissions, ['voir_stock', 'modifier_stock', 'creer_produit', 'modifier_produit', 'supprimer_produit', 'voir_succursales', 'voir_fournisseurs', 'creer_fournisseurs', 'modifier_fournisseurs', 'supprimer_fournisseurs', 'voir_approvisionnements', 'creer_approvisionnements', 'voir_risques_stock']))), JSON_UNESCAPED_UNICODE);
         } elseif (is_array($permissions) && in_array('creer_approvisionnements', $permissions, true)) {
             $permissions[] = 'creer_fournisseurs';
             $profile['permissions'] = json_encode(array_values(array_unique($permissions)), JSON_UNESCAPED_UNICODE);
@@ -699,7 +699,8 @@ final class AuthService
             // Caisse : consultation et gestion complète des caisses.
             'caisse' => ['voir_caisse', 'creer_caisse', 'modifier_caisse', 'supprimer_caisse'],
             // Stock : consultation/ajustement des quantités et gestion des produits.
-            'stock' => ['voir_stock', 'modifier_stock', 'creer_produit', 'modifier_produit', 'supprimer_produit', 'voir_succursales', 'voir_fournisseurs', 'creer_fournisseurs', 'modifier_fournisseurs', 'supprimer_fournisseurs', 'voir_approvisionnements', 'creer_approvisionnements'],
+            'stock' => ['voir_stock', 'modifier_stock', 'creer_produit', 'modifier_produit', 'supprimer_produit', 'voir_succursales', 'voir_fournisseurs', 'creer_fournisseurs', 'modifier_fournisseurs', 'supprimer_fournisseurs', 'voir_approvisionnements', 'creer_approvisionnements', 'voir_risques_stock'],
+            'gestion_risque_stock' => ['voir_risques_stock'],
             // Approvisionnement : recherche du catalogue, fournisseurs et mouvements d'entrée/sortie.
             'approvisionnement' => ['voir_stock', 'voir_succursales', 'voir_fournisseurs', 'creer_fournisseurs', 'voir_approvisionnements', 'creer_approvisionnements'],
             'voir_clients' => ['voir_clients'],
@@ -733,7 +734,8 @@ final class AuthService
         $groups = [
             'vente' => ['voir_ventes', 'creer_ventes', 'modifier_ventes'],
             'caisse' => ['voir_caisse', 'creer_caisse', 'modifier_caisse', 'supprimer_caisse'],
-            'stock' => ['voir_stock', 'modifier_stock', 'creer_produit', 'modifier_produit', 'supprimer_produit', 'voir_succursales', 'voir_fournisseurs', 'creer_fournisseurs', 'modifier_fournisseurs', 'supprimer_fournisseurs', 'voir_approvisionnements', 'creer_approvisionnements'],
+            'stock' => ['voir_stock', 'modifier_stock', 'creer_produit', 'modifier_produit', 'supprimer_produit', 'voir_succursales', 'voir_fournisseurs', 'creer_fournisseurs', 'modifier_fournisseurs', 'supprimer_fournisseurs', 'voir_approvisionnements', 'creer_approvisionnements', 'voir_risques_stock'],
+            'gestion_risque_stock' => ['voir_risques_stock'],
             'approvisionnement' => ['voir_stock', 'voir_succursales', 'voir_fournisseurs', 'creer_fournisseurs', 'voir_approvisionnements', 'creer_approvisionnements'],
             'voir_clients' => ['voir_clients'],
             'gerer_clients' => ['voir_clients', 'gerer_clients'],

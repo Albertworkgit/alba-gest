@@ -8,6 +8,12 @@
 .risk-treasury-note{grid-column:1/-1;color:var(--muted,#73807b);font-size:12px}
 .risk-input{width:88px;min-width:76px;padding:7px;border:1px solid var(--line,#dfe7e2);border-radius:5px;background:var(--surface,#fff);color:inherit}
 .risk-checkbox{width:18px;height:18px;accent-color:var(--teal,#198754)}
+.risk-action-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap}
+.risk-action-button--compact{min-height:32px;padding:6px 9px;font-size:11px}
+.risk-action-icon{width:16px;height:16px;flex:0 0 16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.risk-order-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:180px}
+.risk-order-actions .risk-action-button{max-width:100%}
+.risk-order-actions .risk-action-button span{white-space:normal;text-align:left}
 .risk-status{display:inline-flex;padding:4px 8px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
 .risk-status--urgent,.risk-status--expired{background:#fde8e4;color:#ad3932}
 .risk-status--soon,.risk-status--warning{background:#fff1d8;color:#8d5b00}
@@ -23,4 +29,4 @@
 .dark-theme .risk-status--urgent,.dark-theme .risk-status--expired{background:#542f2c;color:#ffc2ba}
 .dark-theme .risk-status--soon,.dark-theme .risk-status--warning{background:#4b3b22;color:#f5d28e}
 .dark-theme .risk-status--safe{background:#294b36;color:#a8dfbd}
-@media(max-width:720px){.risk-order-details{min-width:260px}}
+@media(max-width:720px){.risk-order-details{min-width:260px}.risk-order-actions{min-width:150px}}

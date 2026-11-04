@@ -18,7 +18,7 @@ try {
     $actor = AuthGuard::requireAuthenticated();
     if (($actor['type'] ?? '') !== 'user') JsonResponse::error('Action réservée aux utilisateurs d’entreprise.', 403);
     Authorization::requireModule($actor, 'stock_risk');
-    Authorization::requirePermission($actor, 'voir_stock');
+    Authorization::requirePermission($actor, 'voir_risques_stock');
 
     $service = new StockRiskService(Database::connection());
     $method = $_SERVER['REQUEST_METHOD'];
@@ -29,7 +29,7 @@ try {
         JsonResponse::send(['success' => true, 'data' => $service->dashboard($actor, $requestedBranch)]);
     }
     if ($method === 'GET' && $action === 'orders') {
-        Authorization::requireAnyPermission($actor, ['voir_approvisionnements', 'creer_approvisionnements']);
+        Authorization::requireAnyPermission($actor, ['voir_risques_stock', 'voir_approvisionnements', 'creer_approvisionnements']);
         JsonResponse::send(['success' => true, 'data' => $service->orders($actor, $requestedBranch)]);
     }
     if ($method === 'POST' && $action === 'orders') {
