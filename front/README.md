@@ -10,6 +10,8 @@ Forecast orders transmitted to procurement are listed alongside regular pending 
 
 Company administrators can assign the separate `Gestion des risques de stock` role permission to users. The enterprise must also have the stock-risk module enabled; the risk role grants access to analysis, while creating or transmitting purchase orders still requires procurement rights.
 
+Role permission options and displayed permission labels are limited to the modules enabled for the company by the super administrator. Hidden permissions already assigned to an existing role remain preserved when the role is edited.
+
 Company administrators can select an enterprise default from the expanded theme palette in settings, including green, teal, blue, navy, purple, pink, red, orange, amber, black, and gray. Each user can also choose a personal interface color in their settings; it only changes that user's interface and can be reset to the company default. Apply `backend/database/049_user_interface_theme.sql` to add the per-user preference before deployment.
 
 From this directory, install dependencies and build the assets:

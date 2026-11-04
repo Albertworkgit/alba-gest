@@ -963,7 +963,7 @@ function permissionList(user = sessionUser) {
   if (typeof permissions === 'string') { try { permissions = JSON.parse(permissions); } catch { permissions = []; } }
   if (!Array.isArray(permissions)) return [];
   // Compatibilité avec les anciens rôles qui stockaient le groupe "stock" tel quel.
-  if (permissions.includes('stock') || (permissions.includes('voir_stock') && !permissions.includes('approvisionnement'))) permissions.push('voir_stock', 'modifier_stock', 'creer_produit', 'modifier_produit', 'supprimer_produit', 'voir_succursales', 'voir_fournisseurs', 'creer_fournisseurs', 'modifier_fournisseurs', 'supprimer_fournisseurs', 'voir_approvisionnements', 'creer_approvisionnements', 'voir_risques_stock');
+  if (permissions.includes('stock') || (permissions.includes('voir_stock') && !permissions.includes('approvisionnement'))) permissions.push('voir_stock', 'modifier_stock', 'creer_produit', 'modifier_produit', 'supprimer_produit', 'voir_succursales', 'voir_fournisseurs', 'creer_fournisseurs', 'modifier_fournisseurs', 'supprimer_fournisseurs', 'voir_approvisionnements', 'creer_approvisionnements');
   if (permissions.includes('vente')) permissions.push('voir_ventes', 'creer_ventes', 'modifier_ventes');
   if (permissions.includes('caisse')) permissions.push('voir_caisse', 'creer_caisse', 'modifier_caisse', 'supprimer_caisse');
   if (permissions.includes('comptabilite')) permissions.push('voir_comptabilite', 'creer_comptabilite', 'modifier_comptabilite');
@@ -983,6 +983,24 @@ function moduleForPermission(permission) {
   if (permission === 'voir_rapports') return 'rapports';
   if (['voir_succursales', 'gerer_succursales', 'voir_clients', 'gerer_clients'].includes(permission) || permission.endsWith('_clients')) return 'administration';
   return null;
+}
+function moduleForRoleGroup(group) {
+  const modules = {
+    vente: 'ventes',
+    caisse: 'caisse',
+    stock: 'stock',
+    gestion_risque_stock: 'stock_risk',
+    approvisionnement: 'approvisionnements',
+    voir_clients: 'administration',
+    gerer_clients: 'administration',
+    demandes: 'administration',
+    comptabilite: 'comptabilite',
+  };
+  return modules[group] || null;
+}
+function isRoleGroupModuleEnabled(group) {
+  const module = moduleForRoleGroup(group);
+  return module === null || (Array.isArray(sessionUser?.modules_autorises) && sessionUser.modules_autorises.includes(module));
 }
 function hasAccess(permission, user = sessionUser) {
   const permissions = permissionList(user);
@@ -1254,7 +1272,10 @@ async function loadRoleList(page = 1) {
     list.innerHTML = roles.length ? roles.map(role => {
       let permissions = role.permissions;
       if (typeof permissions === 'string') { try { permissions = JSON.parse(permissions); } catch { permissions = []; } }
-      const labels = Array.isArray(permissions) && permissions.includes('*') ? ['Accès complet'] : (Array.isArray(permissions) ? permissions.map(permission => permissionLabels[permission]).filter(Boolean) : []);
+      const labels = Array.isArray(permissions) && permissions.includes('*') ? ['Accès complet'] : (Array.isArray(permissions) ? permissions.filter(permission => {
+        const module = moduleForRoleGroup(permission) || moduleForPermission(permission);
+        return module === null || sessionUser?.modules_autorises?.includes(module);
+      }).map(permission => permissionLabels[permission]).filter(Boolean) : []);
       const actions = hasAccess('gerer_roles') && canSelectCompanyBranches() ? `<div class="user-action-group"><button class="user-action-button user-action-edit" title="Modifier le rôle" aria-label="Modifier le rôle ${escapeHtml(role.role_name)}" data-role-edit="${Number(role.role_id)}"><span aria-hidden="true">✎</span> Modifier</button><button class="user-action-button user-action-delete" title="Supprimer le rôle" aria-label="Supprimer le rôle ${escapeHtml(role.role_name)}" data-role-delete="${Number(role.role_id)}"><span aria-hidden="true">×</span> Supprimer</button></div>` : '';
       return `<div class="permission"><strong>${escapeHtml(role.role_name)}</strong><small>${escapeHtml(labels.join(' · ') || 'Aucun droit attribué')}</small>${actions}</div>`;
     }).join('') : '<p class="empty-note">Aucun rôle défini. Créez un rôle pour commencer.</p>';
@@ -3358,6 +3379,10 @@ function openEntityForm(type, entity = null) {
         permissionFieldset.append(label);
       }
     }
+    form.querySelectorAll('input[name="permissions"]').forEach(input => {
+      const label = input.closest('label');
+      if (label) label.hidden = !isRoleGroupModuleEnabled(input.value);
+    });
   }
   if (type === 'purchase') {
     const branchLabel = document.createElement('label');
