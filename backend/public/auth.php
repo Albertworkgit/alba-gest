@@ -12,6 +12,7 @@ require_once __DIR__ . '/../Services/EmailNotificationService.php';
 require_once __DIR__ . '/../Services/ProcurementService.php';
 require_once __DIR__ . '/../Services/SalesService.php';
 require_once __DIR__ . '/../Services/ServiceSalesSettingsService.php';
+require_once __DIR__ . '/../Services/CompanyThemeService.php';
 require_once __DIR__ . '/../Services/CompanyProfileService.php';
 require_once __DIR__ . '/../Services/ExchangeRateService.php';
 require_once __DIR__ . '/../Services/CashTransferService.php';
@@ -26,6 +27,7 @@ use AlbaStock\Services\EmailNotificationService;
 use AlbaStock\Services\ProcurementService;
 use AlbaStock\Services\SalesService;
 use AlbaStock\Services\ServiceSalesSettingsService;
+use AlbaStock\Services\CompanyThemeService;
 use AlbaStock\Services\CompanyProfileService;
 use AlbaStock\Services\ExchangeRateService;
 use AlbaStock\Services\CashTransferService;
@@ -439,6 +441,28 @@ try {
         JsonResponse::send(['success' => true, 'data' => $settingsService->update($actor, $body)]);
     }
 
+    if ($action === 'company-theme' && in_array($method, ['GET', 'PUT'], true)) {
+        $actor = AuthGuard::requireAuthenticated();
+        if (($actor['type'] ?? '') !== 'user') JsonResponse::error('Action réservée à une entreprise.', 403);
+        $themeService = new CompanyThemeService(Database::connection());
+        if ($method === 'GET') {
+            JsonResponse::send(['success' => true, 'data' => $themeService->settings($actor)]);
+        }
+        $body = json_decode((string) file_get_contents('php://input'), true);
+        if (!is_array($body)) JsonResponse::error('Corps JSON invalide.', 400);
+        JsonResponse::send(['success' => true, 'data' => $themeService->update($actor, $body)]);
+    }
+
+    if ($action === 'user-interface-theme' && $method === 'PUT') {
+        $actor = AuthGuard::requireAuthenticated();
+        if (($actor['type'] ?? '') !== 'user') JsonResponse::error('Action réservée aux utilisateurs d’entreprise.', 403);
+        $body = json_decode((string) file_get_contents('php://input'), true);
+        if (!is_array($body) || !array_key_exists('theme_color', $body)) JsonResponse::error('Couleur d’interface invalide.', 400);
+        $themeService = new CompanyThemeService(Database::connection());
+        $theme = $themeService->updateUserTheme($actor, $body);
+        JsonResponse::send(['success' => true, 'data' => ['interface_theme' => $theme]]);
+    }
+
     if ($action === 'company-profile' && $method === 'POST') {
         $actor = AuthGuard::requireAuthenticated();
         if (($actor['type'] ?? '') !== 'user' || empty($actor['is_company_admin'])) {
@@ -593,7 +617,7 @@ try {
         if (!$actor || $actor['type'] !== 'user') JsonResponse::error('Action réservée à un utilisateur d’entreprise.', 403);
         Authorization::requirePermission($actor, 'creer_approvisionnements');
         $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
-        (new ProcurementService(Database::connection()))->updatePurchaseStatus($actor, (int) ($body['achat_id'] ?? 0), (string) ($body['status'] ?? ''));
+        (new ProcurementService(Database::connection()))->updatePurchaseStatus($actor, (int) ($body['achat_id'] ?? 0), (string) ($body['status'] ?? ''), isset($body['date_expiration']) ? (string) $body['date_expiration'] : null);
         JsonResponse::send(['success' => true, 'message' => 'Statut modifié.']);
     }
 

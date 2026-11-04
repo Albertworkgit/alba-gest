@@ -13,6 +13,14 @@ const views = {
   procurement: {label:"Approvisionnements", kicker:"ACHATS", title:"Vos <em>approvisionnements.</em>", description:"Enregistrez les entrées et sorties de stock fournisseur.", action:"+ Nouvel approvisionnement", html:`<div class="dashboard-grid procurement-summary"><article class="stat-card"><span class="stat-label">Quantités entrées (validées)</span><div class="stat-value" id="purchase-total-in">0</div></article><article class="stat-card"><span class="stat-label">Quantités sorties (validées)</span><div class="stat-value" id="purchase-total-out">0</div></article><article class="stat-card"><span class="stat-label">Solde net</span><div class="stat-value" id="purchase-balance">0</div></article></div><section class="panel"><div class="panel-header"><div><h2>Approvisionnements enregistr&eacute;s</h2><p class="panel-subtitle">Entr&eacute;es et sorties de stock par p&eacute;riode</p></div><button type="button" class="movement-report-button" data-stock-movement-report>Fiche de stock</button></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Référence</th><th>Motif</th><th>Date</th><th>Quantité</th><th>Quantité sortie</th><th>Quantité entrée</th><th>Solde du lot</th><th>Total</th><th>Statut</th><th>Bon</th></tr></thead><tbody id="purchase-rows"><tr><td colspan="10">Chargement…</td></tr></tbody></table></div></section>`},
   "client-order": {label:"Portail client", kicker:"ESPACE CLIENT", title:"Portail client", description:"Les commandes clients ne sont pas définies dans le schéma actuel.", action:"", html:`<p class="empty-note">Aucune donnée n’est disponible pour ce module.</p>`}
 };
+views['stock-risk'] = {
+  label:"Risques de stock",
+  kicker:"GESTION PRÉVISIONNELLE",
+  title:"Anticipez les <em>risques de stock.</em>",
+  description:"Analyse des sorties sur 90 jours, alertes de péremption et propositions d’approvisionnement.",
+  action:"",
+  html:`<section class="panel"><div class="filter-bar"><label>Succursale<select class="select-field" id="stock-risk-branch"></select></label><button type="button" class="text-button" data-risk-refresh>Actualiser l’analyse</button></div><p class="panel-subtitle">Le MAD/CMM utilisent les ventes et sorties validées des 90 derniers jours. Les transferts en attente ajustent le stock prévisionnel sans être comptés comme consommation. Les commandes proposées restent modifiables et ne changent pas le stock.</p></section><div class="dashboard-grid risk-summary-grid"><article class="stat-card"><span class="stat-label">Risque de rupture</span><div class="stat-value" id="risk-stockout-count">—</div></article><article class="stat-card"><span class="stat-label">Stock critique</span><div class="stat-value" id="risk-critical-count">—</div></article><article class="stat-card"><span class="stat-label">Surstock</span><div class="stat-value" id="risk-overstock-count">—</div></article><article class="stat-card"><span class="stat-label">Proche expiration</span><div class="stat-value" id="risk-expiry-count">—</div></article><article class="stat-card"><span class="stat-label">Faible rotation</span><div class="stat-value" id="risk-rotation-count">—</div></article><article class="stat-card"><span class="stat-label">À réapprovisionner</span><div class="stat-value" id="risk-order-count">—</div></article></div><section class="panel risk-treasury-panel" id="risk-treasury-panel"><div class="panel-header"><div><h2>Alerte trésorerie</h2><p class="panel-subtitle">Estimation des propositions au coût produit, comparée aux soldes des caisses ouvertes de la succursale.</p></div></div><div class="risk-treasury-content" id="risk-treasury-content"><p class="empty-note">Chargement…</p></div></section><section class="panel"><div class="panel-header"><div><h2>Propositions de réapprovisionnement</h2><p class="panel-subtitle">MAD : sorties moyennes par jour · CMM : sorties moyennes par mois · couverture visée : 30 jours.</p></div><button type="button" class="primary-button" data-risk-create-order>Créer un bon prévisionnel</button></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Sélection</th><th>Référence / produit</th><th>Stock</th><th>MAD</th><th>CMM</th><th>Recommandé</th><th>À commander</th><th>Fournisseur</th><th>Coût unitaire estimé</th></tr></thead><tbody id="risk-recommendation-rows"><tr><td colspan="9">Chargement…</td></tr></tbody></table></div></section><section class="panel"><div class="panel-header"><div><h2>État des risques</h2><p class="panel-subtitle">Le stock suffisant est indiqué explicitement; les lots à écouler en priorité sont signalés séparément.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Produit</th><th>Succursale</th><th>Stock</th><th>MAD / CMM</th><th>Jours estimés</th><th>Flux en attente</th><th>Risque</th><th>Approvisionnement</th></tr></thead><tbody id="risk-stock-rows"><tr><td colspan="8">Chargement…</td></tr></tbody></table></div></section><section class="panel"><div class="panel-header"><div><h2>Lots à écouler en priorité (FEFO)</h2><p class="panel-subtitle">Les lots sont classés par date d’expiration croissante pour suivre la rotation FEFO.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Produit</th><th>Lot</th><th>Date d’expiration</th><th>Jours restants</th><th>Quantité restante</th></tr></thead><tbody id="risk-expiry-rows"><tr><td colspan="5">Chargement…</td></tr></tbody></table></div></section><section class="panel"><div class="panel-header"><div><h2>Bons prévisionnels</h2><p class="panel-subtitle">La transmission crée des approvisionnements entrants en attente; aucune quantité n’est ajoutée au stock avant leur réception.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Référence</th><th>Succursale</th><th>Date</th><th>Articles</th><th>Estimation</th><th>Statut</th><th>Action</th></tr></thead><tbody id="risk-order-rows"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div></section>`
+};
 let activeBranchId = '';
 let branchOptions = [];
 const branchScopedResources = new Set(['stocks', 'achats', 'caisses', 'ventes', 'fournisseurs']);
@@ -23,6 +31,8 @@ let procurementChartRequest = 0;
 let salesChartTimer = null;
 let salesChartRequest = 0;
 let cashSearchTimer = null;
+let stockRiskData = null;
+let stockRiskRequest = 0;
 const selectedCashMovementReceipts = new Set();
 function canSelectCompanyBranches(user = sessionUser) {
   if (!user) return false;
@@ -49,6 +59,7 @@ const routes = {
   '/': 'dashboard',
   '/dashboard': 'dashboard',
   '/stock': 'stock',
+  '/risques-stock': 'stock-risk',
   '/approvisionnements': 'procurement',
   '/ventes': 'sales',
   '/caisse': 'cash',
@@ -67,8 +78,27 @@ const themePanel = document.getElementById('theme-panel');
 const themeChoices = document.querySelectorAll('[data-theme-choice]');
 const mobilePrimaryNavigation = document.getElementById('mobile-primary-nav');
 const themeStorageKey = 'westock-theme';
+const enterpriseThemes = [
+  {value:'green', label:'Vert'},
+  {value:'teal', label:'Turquoise'},
+  {value:'blue', label:'Bleu'},
+  {value:'navy', label:'Bleu marine'},
+  {value:'purple', label:'Violet'},
+  {value:'pink', label:'Rose'},
+  {value:'red', label:'Rouge'},
+  {value:'orange', label:'Orange'},
+  {value:'amber', label:'Jaune doré'},
+  {value:'black', label:'Noir'},
+  {value:'gray', label:'Gris'},
+];
+const activityTypeLabels = {
+  pharmaceutical:'Pharmaceutique',
+  commercial:'Commerciale',
+  other:'Autres',
+};
 let currentViewName = 'dashboard';
 let sessionUser = null;
+let stockRiskOrders = [];
 
 function applyTheme(choice) {
   const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -79,6 +109,11 @@ function applyTheme(choice) {
 function loadTheme() {
   const savedTheme = localStorage.getItem(themeStorageKey) || 'light';
   applyTheme(savedTheme);
+}
+function applyEnterpriseTheme(theme) {
+  const defaultTheme = sessionUser?.enterprise_activity_type === 'pharmaceutical' ? 'green' : 'teal';
+  const selectedTheme = enterpriseThemes.some(option => option.value === theme) ? theme : defaultTheme;
+  document.documentElement.dataset.enterpriseTheme = selectedTheme;
 }
 
 function showToast(message = 'Action enregistrée') { toast.textContent = message; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2200); }
@@ -179,7 +214,19 @@ function renderView(viewName) {
   const serviceSaleButton=container.querySelector('[data-new-service-sale]');if(serviceSaleButton)serviceSaleButton.hidden=true;
   if (viewName === 'settings') {
     const passwordPanel = container.querySelector('#password-form')?.closest('.panel');
+    if (passwordPanel && sessionUser?.is_company_admin) {
+      const themePanel = document.createElement('section');
+      themePanel.className = 'panel enterprise-theme-panel';
+      themePanel.innerHTML = `<h2>Thème de l’entreprise</h2><p class="panel-subtitle">Type d’activité : ${escapeHtml(activityTypeLabels[sessionUser.enterprise_activity_type] || 'Commerciale')}. Ce thème est la couleur par défaut de l’entreprise; un utilisateur peut choisir une couleur personnelle dans ses paramètres.</p><form id="enterprise-theme-form" class="entity-form"><label class="full">Couleur principale<select name="theme_color" required>${enterpriseThemes.map(option => `<option value="${option.value}">${option.label}</option>`).join('')}</select></label><div class="enterprise-theme-preview" aria-hidden="true">${enterpriseThemes.map(option => `<span class="enterprise-theme-swatch enterprise-theme-swatch-${option.value}" title="${option.label}"></span>`).join('')}</div><div class="entity-modal-actions full"><button class="modal-submit">Enregistrer le thème</button></div></form>`;
+      passwordPanel.before(themePanel);
+      themePanel.querySelector('[name="theme_color"]').value = sessionUser.enterprise_theme_color || (sessionUser.enterprise_activity_type === 'pharmaceutical' ? 'green' : 'teal');
+    }
     if (passwordPanel) {
+      const personalThemePanel = document.createElement('section');
+      personalThemePanel.className = 'panel enterprise-theme-panel';
+      personalThemePanel.innerHTML = `<h2>Ma couleur d’interface</h2><p class="panel-subtitle">Ce choix ne modifie que votre interface. Sans choix personnel, la couleur par défaut de l’entreprise est utilisée.</p><form id="user-interface-theme-form" class="entity-form"><label class="full">Couleur de mon interface<select name="theme_color" required><option value="">Couleur par défaut de l’entreprise</option>${enterpriseThemes.map(option => `<option value="${option.value}">${option.label}</option>`).join('')}</select></label><div class="enterprise-theme-preview" aria-hidden="true">${enterpriseThemes.map(option => `<span class="enterprise-theme-swatch enterprise-theme-swatch-${option.value}" title="${option.label}"></span>`).join('')}</div><div class="entity-modal-actions full"><button class="modal-submit" type="submit">Enregistrer ma couleur</button></div></form>`;
+      passwordPanel.before(personalThemePanel);
+      personalThemePanel.querySelector('[name="theme_color"]').value = sessionUser.interface_theme || '';
       passwordPanel.insertAdjacentHTML('beforebegin', '<section class="panel service-sales-settings-panel" id="service-sales-company-panel" hidden><h2>Autorisation de vente de services</h2><p class="panel-subtitle">Ce réglage concerne toute l’entreprise et ses succursales. Quand il est désactivé, aucune succursale ne peut vendre de services.</p><form id="company-service-sales-form" class="entity-form"><label class="full"><span>Autoriser la vente de services dans toute l’entreprise</span><input name="enterprise_enabled" type="checkbox" value="1"></label><div class="entity-modal-actions full"><button class="modal-submit">Enregistrer l’autorisation</button></div></form></section><section class="panel service-sales-settings-panel" id="service-sales-branch-panel" hidden><h2>Autorisation de vente de services de ma succursale</h2><p class="panel-subtitle">Ce réglage concerne uniquement cette succursale et reste soumis à l’autorisation de l’entreprise.</p><form id="branch-service-sales-form" class="entity-form"><label class="full"><span>Autoriser la vente de services dans ma succursale</span><input name="branch_enabled" type="checkbox" value="1"></label><div class="entity-modal-actions full"><button class="modal-submit">Enregistrer l’autorisation</button></div></form></section>');
     }
   }
@@ -273,6 +320,7 @@ function renderView(viewName) {
   if (viewName === 'branches') loadSimpleRows('succursales', 'branch-rows', 6, branchRowMarkup, 'Aucune succursale enregistrée.');
   if (viewName === 'clients') loadSimpleRows('clients', 'client-rows', 5, clientRowMarkup, 'Aucun client enregistr\u00e9.');
   if (viewName === 'procurement') { loadPurchaseRows(); loadProcurementTrends(); }
+  if (viewName === 'stock-risk') loadStockRiskDashboard();
   if (viewName === 'stock' && hasAccess('voir_approvisionnements')) loadProcurementTrends();
   if (viewName === 'branch-dashboard') { loadBranchDashboard(); if (hasAccess('voir_stock')) loadExpiringStock(); }
   if (viewName === 'stock' && hasAccess('voir_stock')) loadExpiringStock();
@@ -606,7 +654,7 @@ async function selectedReportNode(){
         totals.repaid+=Number(item.montant_rembourse||0);
         totals.balance+=Number(item.solde_restant||0);
       }
-      row.innerHTML=[item.beneficiaire,item.telephone||'—',...(showBranchColumn?[item.branch_name||'—']:[]),dateLabel(item.date_dette),item.description||'—',...currencies.flatMap(reportCurrency=>reportCurrency===currency?[moneyCurrencyLabel(item.montant,reportCurrency),moneyCurrencyLabel(item.montant_rembourse,reportCurrency),moneyCurrencyLabel(item.solde_restant,reportCurrency)]:['—','—','—']),statusLabel(item.statut)].map(value=>`<td>${escapeHtml(value)}</td>`).join('');
+      row.innerHTML=[item.beneficiaire,item.telephone||'—',...(showBranchColumn?[item.branch_name||'—']:[]),dateLabel(item.date_dette),item.description||'—',...currencies.flatMap(reportCurrency=>reportCurrency===currency?[moneyCurrencyLabel(item.montant,reportCurrency),moneyCurrencyLabel(item.montant_rembourse,reportCurrency),moneyCurrencyLabel(item.solde_restant,reportCurrency)]:['—','—','—'])].map(value=>`<td>${escapeHtml(value)}</td>`).join('')+`<td>${statusBadgeMarkup(item.statut)}</td>`;
     });
     if(!rows.length){const empty=body.insertRow();empty.innerHTML=`<td colspan="${5+(showBranchColumn?1:0)+currencies.length*3}">Aucune dette trouvée pour cette période et cette recherche.</td>`;}
     else{
@@ -957,7 +1005,11 @@ function accessRequirementAllowed(requirement, user) {
   return hasAccess(requirement, user);
 }
 function applyAccessVisibility(element, user, requirement = element.dataset.access) {
-  const allowed = requirement.split('|').some(permission => accessRequirementAllowed(permission, user));
+  const requiredEnterpriseModule = element.dataset.enterpriseModule;
+  const enterpriseModules = user?.modules_autorises;
+  const enterpriseModuleAllowed = !requiredEnterpriseModule
+    || (Array.isArray(enterpriseModules) && enterpriseModules.includes(requiredEnterpriseModule));
+  const allowed = enterpriseModuleAllowed && requirement.split('|').some(permission => accessRequirementAllowed(permission, user));
   element.hidden = !allowed;
   element.style.display = allowed ? '' : 'none';
 }
@@ -990,6 +1042,9 @@ function applyViewAccess(viewName, user) {
       ['[data-create-purchase]', 'creer_approvisionnements'],
       ['[data-stock-movement-report]', 'voir_stock|voir_approvisionnements'],
       ['[data-create-unit]', 'company_admin'],
+    ],
+    'stock-risk': [
+      ['[data-risk-create-order]', 'creer_approvisionnements'],
     ],
     users: [
       ['#user-rows', 'gerer_utilisateurs'],
@@ -1248,6 +1303,14 @@ const statusLabel = (value, overrides = {}) => {
   const key = String(value || '').toUpperCase();
   return overrides[key] || statusLabels[key] || value || '—';
 };
+const statusTone = value => {
+  const key = String(value || '').toUpperCase();
+  if (['PENDING', 'EN_ATTENTE', 'DRAFT', 'BROUILLON', 'CANCELLED', 'ANNULEE', 'REJECTED', 'REFUSEE', 'CLOSED', 'FERMEE', 'COMPLETED', 'INACTIVE', 'EXPIRED', 'LOW_STOCK', 'NOT_VALIDATED', 'NON_VALIDEE'].includes(key)) return 'danger';
+  if (['PARTIAL', 'EN_COURS', 'IN_PROGRESS'].includes(key)) return 'warning';
+  if (['PAID', 'RECEIVED', 'OPEN', 'OUVERTE', 'APPROVED', 'APPROUVEE', 'VALIDATED', 'VALIDEE', 'ACTIVE', 'REMBOURSEE'].includes(key)) return 'success';
+  return 'warning';
+};
+const statusBadgeMarkup = (value, label = statusLabel(value)) => `<span class="status ${statusTone(value)}">${escapeHtml(label)}</span>`;
 const saleStatusLabel = value => statusLabel(value, {PAID:'Payée', PARTIAL:'Partiellement payée', CANCELLED:'Annulée'});
 const purchaseStatusLabel = value => statusLabel(value, {RECEIVED:'Validé', CANCELLED:'Annulé'});
 function addUnitQuantity(totals, unit, quantity) {
@@ -1476,7 +1539,10 @@ async function loadSalesRows(page = 1) {
     const result = await fetchReportPage('sales-list', page);
     const sales = result.rows;
     document.getElementById('sales-count').textContent = `${result.pagination.total} vente${result.pagination.total === 1 ? '' : 's'} enregistrée${result.pagination.total === 1 ? '' : 's'}`;
-    body.innerHTML = sales.length ? sales.map(sale => {const unpaidPending=sale.status==='PENDING'&&Number(sale.amount_paid)<=0;const cancelable=sale.status!=='CANCELLED'&&(unpaidPending||Date.now()-new Date(sale.sale_date).getTime()<172800000);return `<tr data-report-date="${escapeHtml(String(sale.sale_date).slice(0, 10))}"><td>${escapeHtml(sale.invoice_no)}</td><td>${escapeHtml(sale.client_name||'Client comptoir')}</td><td${isCompanyWideReport()?'':' hidden'}>${escapeHtml(sale.branch_name||'—')}</td><td>${escapeHtml(sale.seller_name||sale.cashier||'—')}</td><td>${escapeHtml(dateLabel(sale.sale_date))}</td><td>${escapeHtml(sale.product_names||'—')}</td><td>${escapeHtml(saleCurrencyAmounts(sale,'total_amount'))}</td><td>${escapeHtml(saleCurrencyAmounts(sale,'amount_paid'))}</td><td>${escapeHtml(saleStatusLabel(sale.status))}</td><td><button type="button" title="Imprimer la pièce justificative" aria-label="Imprimer la pièce justificative" data-sale-receipt="${Number(sale.vente_id)}">Imprimer la pièce justificative</button>${cancelable&&hasAccess('modifier_ventes')?` <button type="button" data-sale-cancel="${Number(sale.vente_id)}">Annuler</button>`:''}</td></tr>`;}).join('') : '<tr><td colspan="10">Aucune vente enregistrée.</td></tr>';
+    body.innerHTML = sales.length ? sales.map(sale => {const unpaidPending=sale.status==='PENDING'&&Number(sale.amount_paid)<=0;const cancelable=sale.status!=='CANCELLED'&&(unpaidPending||Date.now()-new Date(sale.sale_date).getTime()<172800000);return `<tr data-report-date="${escapeHtml(String(sale.sale_date).slice(0, 10))}"><td>${escapeHtml(sale.invoice_no)}</td><td>${escapeHtml(sale.client_name||'Client comptoir')}</td><td${isCompanyWideReport()?'':' hidden'}>${escapeHtml(sale.branch_name||'—')}</td><td>${escapeHtml(sale.seller_name||sale.cashier||'—')}</td><td>${escapeHtml(dateLabel(sale.sale_date))}</td><td>${escapeHtml(sale.product_names||'—')}</td><td>${escapeHtml(saleCurrencyAmounts(sale,'total_amount'))}</td><td>${escapeHtml(saleCurrencyAmounts(sale,'amount_paid'))}</td><td>${statusBadgeMarkup(sale.status, saleStatusLabel(sale.status))}</td><td><button type="button" title="Imprimer la pièce justificative" aria-label="Imprimer la pièce justificative" data-sale-receipt="${Number(sale.vente_id)}">Imprimer la pièce justificative</button>${cancelable&&hasAccess('modifier_ventes')?` <button type="button" data-sale-cancel="${Number(sale.vente_id)}">Annuler</button>`:''}</td></tr>`;}).join('') : '<tr><td colspan="10">Aucune vente enregistrée.</td></tr>';
+    sales.forEach((sale, index) => {
+      if (body.rows[index]) body.rows[index].dataset.statusTone = statusTone(sale.status);
+    });
     labelSaleInvoiceButtons(body);
     filterCurrentReport();
     showPagination(body, 'sales', result.pagination, loadSalesRows);
@@ -1732,8 +1798,15 @@ async function loadCashRows(page = 1, movementPage = 1, externalPage = 1, debtPa
     const [result,movementResult,paymentResult,debtResult] = await Promise.all([fetchReportPage('cashboxes-list', page, searchParams),fetchReportPage('cash-movements',movementPage,searchParams),fetchReportPage('payment-journal',externalPage,searchParams),fetchReportPage('cash-debts',debtPage,searchParams)]);
     const externalPayments = paymentResult.rows;
     const cashboxes = result.rows;
-    body.innerHTML = cashboxes.length ? cashboxes.map(item => `<tr data-report-date="${escapeHtml(String(item.date_ouverture||'').slice(0,10))}" data-search-text="${escapeHtml([item.name,branchOptions.find(branch => Number(branch.succursale_id) === Number(item.succursale_id))?.name||'',item.currency_name,item.monais,item.payment_mode,item.bank_name||'',item.statut].join(' '))}"><td>${escapeHtml(item.name)}</td><td>${escapeHtml(branchOptions.find(branch => Number(branch.succursale_id) === Number(item.succursale_id))?.name || `ID ${Number(item.succursale_id)}`)}</td><td>${escapeHtml(item.currency_name)} (${escapeHtml(item.monais)}) · ${escapeHtml(item.payment_mode)}${item.bank_name?` · ${escapeHtml(item.bank_name)}`:``}</td><td>${escapeHtml(dateLabel(item.date_ouverture))}</td><td>${moneyCurrencyLabel(item.solde_ouverture,item.monais)}</td><td>${moneyCurrencyLabel(item.solde_courant,item.monais)}</td><td>${item.statut === 'FERMEE' ? moneyCurrencyLabel(item.solde_fermeture,item.monais) : '—'}</td><td>${escapeHtml(statusLabel(item.statut))}</td><td>${item.statut === 'OUVERTE' && hasAccess('modifier_caisse') ? `<button type="button" data-cash-close="${Number(item.caisse_id)}">Clôturer</button>` : item.statut === 'FERMEE' && hasAccess('creer_caisse') ? `<button type="button" data-cash-reopen="${Number(item.caisse_id)}" data-cash-name="${escapeHtml(item.name)}" data-cash-branch="${Number(item.succursale_id)}" data-cash-currency="${escapeHtml(item.monais)}" data-cash-mode="${Number(item.mode_paiement_id)}">Ouvrir</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="9">Aucune caisse enregistrée.</td></tr>';
-    cashboxes.forEach((item,index)=>{const row=body.rows[index];if(!row)return;const reopen=row.querySelector('[data-cash-reopen]');if(reopen)reopen.dataset.cashBank=String(item.banque_id||'');if(item.statut==='FERMEE'&&hasAccess('supprimer_caisse'))row.cells[row.cells.length-1].insertAdjacentHTML('beforeend',` <button type="button" class="icon-action-button" title="Supprimer la caisse" aria-label="Supprimer la caisse" data-cash-delete="${Number(item.caisse_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`);});
+    body.innerHTML = cashboxes.length ? cashboxes.map(item => `<tr data-report-date="${escapeHtml(String(item.date_ouverture||'').slice(0,10))}" data-search-text="${escapeHtml([item.name,branchOptions.find(branch => Number(branch.succursale_id) === Number(item.succursale_id))?.name||'',item.currency_name,item.monais,item.payment_mode,item.bank_name||'',item.statut].join(' '))}"><td>${escapeHtml(item.name)}</td><td>${escapeHtml(branchOptions.find(branch => Number(branch.succursale_id) === Number(item.succursale_id))?.name || `ID ${Number(item.succursale_id)}`)}</td><td>${escapeHtml(item.currency_name)} (${escapeHtml(item.monais)}) · ${escapeHtml(item.payment_mode)}${item.bank_name?` · ${escapeHtml(item.bank_name)}`:``}</td><td>${escapeHtml(dateLabel(item.date_ouverture))}</td><td>${moneyCurrencyLabel(item.solde_ouverture,item.monais)}</td><td>${moneyCurrencyLabel(item.solde_courant,item.monais)}</td><td>${item.statut === 'FERMEE' ? moneyCurrencyLabel(item.solde_fermeture,item.monais) : '—'}</td><td>${statusBadgeMarkup(item.statut)}</td><td>${item.statut === 'OUVERTE' && hasAccess('modifier_caisse') ? `<button type="button" data-cash-close="${Number(item.caisse_id)}">Clôturer</button>` : item.statut === 'FERMEE' && hasAccess('creer_caisse') ? `<button type="button" data-cash-reopen="${Number(item.caisse_id)}" data-cash-name="${escapeHtml(item.name)}" data-cash-branch="${Number(item.succursale_id)}" data-cash-currency="${escapeHtml(item.monais)}" data-cash-mode="${Number(item.mode_paiement_id)}">Ouvrir</button>` : '—'}</td></tr>`).join('') : '<tr><td colspan="9">Aucune caisse enregistrée.</td></tr>';
+    cashboxes.forEach((item,index)=>{
+      const row=body.rows[index];
+      if(!row)return;
+      row.dataset.statusTone=statusTone(item.statut);
+      const reopen=row.querySelector('[data-cash-reopen]');
+      if(reopen)reopen.dataset.cashBank=String(item.banque_id||'');
+      if(item.statut==='FERMEE'&&hasAccess('supprimer_caisse'))row.cells[row.cells.length-1].insertAdjacentHTML('beforeend',` <button type="button" class="icon-action-button" title="Supprimer la caisse" aria-label="Supprimer la caisse" data-cash-delete="${Number(item.caisse_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`);
+    });
     showPagination(body, 'cash', result.pagination, next=>loadCashRows(next,movementPage,externalPage,debtPage));
     const movementBody=document.getElementById('cash-movement-rows');if(movementBody){    movementBody.innerHTML=movementResult.rows.length?movementResult.rows.map(row=>`<tr data-report-date="${escapeHtml(String(row.movement_date).slice(0,10))}" data-search-text="${escapeHtml([row.cashier||'',row.branch_name||'',row.invoice_no||'',row.client_name||'',row.dette_beneficiaire||'',row.dette_telephone||'',row.dette_description||'',row.bank_reference||'',row.monais||''].join(' '))}"><td><input type="checkbox" data-cash-print-select="${Number(row.mouvement_id)}" aria-label="Sélectionner la pièce du mouvement ${Number(row.mouvement_id)}"${selectedCashMovementReceipts.has(Number(row.mouvement_id))?' checked':''}></td><td>${escapeHtml(dateLabel(row.movement_date))}</td><td>${escapeHtml(row.cash_name)}</td><td>${escapeHtml(row.type==='ENTREE'?'Entrée':'Sortie')}</td><td>${escapeHtml(row.payment_mode||'Caisse')}</td><td>${escapeHtml([row.reason||'—',row.client_name?`Client : ${row.client_name}`:'',row.dette_telephone?`Téléphone : ${row.dette_telephone}`:'',row.dette_description||'',row.dette_montant_impute?`Imputé sur la dette : ${moneyCurrencyLabel(row.dette_montant_impute,row.dette_monais)}`:''].filter(Boolean).join(' · '))}</td><td>${row.invoice_no?escapeHtml(row.invoice_no):row.reference_id?`#${Number(row.reference_id)}`:'—'}</td><td>${moneyCurrencyLabel(row.amount,row.monais)}</td></tr>`).join(''):'<tr><td colspan="8">Aucun mouvement de caisse enregistré.</td></tr>';const currencySummary=new Map((movementResult.summary||[]).map(item=>[item.monais,{entrees:Number(item.entrees),sorties:Number(item.sorties),operations:Number(item.operations)}]));let summaryBox=movementBody.closest('.panel').querySelector('#cash-currency-summary');if(!summaryBox){summaryBox=document.createElement('div');summaryBox.id='cash-currency-summary';summaryBox.style.overflow='auto';movementBody.closest('.panel').querySelector('.panel-header').after(summaryBox);}summaryBox.innerHTML=currencySummary.size?`<table class="data-table"><thead><tr><th>Monnaie</th><th>Total entrées</th><th>Total sorties</th><th>Solde net</th><th>Opérations</th></tr></thead><tbody>${[...currencySummary].map(([currency,item])=>`<tr><td>${escapeHtml(currency)}</td><td>${moneyCurrencyLabel(item.entrees,currency)}</td><td>${moneyCurrencyLabel(item.sorties,currency)}</td><td><strong>${moneyCurrencyLabel(item.entrees-item.sorties,currency)}</strong></td><td>${item.operations}</td></tr>`).join('')}</tbody></table>`:'<p class="panel-subtitle">Aucun mouvement enregistré.</p>';showPagination(movementBody,'cash-movements',movementResult.pagination,next=>loadCashRows(page,next,externalPage,debtPage));}const externalBody=document.getElementById('external-payment-rows');if(externalBody){externalBody.innerHTML=externalPayments.length?externalPayments.map(payment=>`<tr data-report-date="${escapeHtml(String(payment.payment_date).slice(0,10))}" data-search-text="${escapeHtml([payment.counterparty||'',payment.reference||'',payment.document_no||'',payment.payment_mode||'',payment.monais||''].join(' '))}"><td>${escapeHtml(dateLabel(payment.payment_date))}</td><td>${escapeHtml(payment.operation)}</td><td>${escapeHtml(payment.document_no)}</td><td>${escapeHtml(payment.counterparty||'—')}</td><td>${escapeHtml(payment.branch_name)}</td><td>${escapeHtml(payment.payment_mode)}</td><td>${escapeHtml(payment.reference||'—')}</td><td>${moneyCurrencyLabel(payment.amount,payment.monais)}</td></tr>`).join(''):'<tr><td colspan="8">Aucun paiement externe enregistré.</td></tr>';showPagination(externalBody,'external-payments',paymentResult.pagination,next=>loadCashRows(page,movementPage,next,debtPage)); }
     const debtBody=document.getElementById('cash-debt-rows');
@@ -1757,7 +1830,7 @@ async function loadCashRows(page = 1, movementPage = 1, externalPage = 1, debtPa
       const actionCell = row?.cells[row.cells.length - 1];
       if (!actionCell || !hasAccess('modifier_caisse') || movement.reference_id !== null || movement.dette_id !== null || movement.caisse_statut !== 'OUVERTE') return;
       if (movement.annulation_demande_id || movement.annulation_statut === 'EN_ATTENTE') {
-        actionCell.insertAdjacentHTML('beforeend', ' <span class="status warning">En attente</span>');
+        actionCell.insertAdjacentHTML('beforeend', ` ${statusBadgeMarkup('PENDING')}`);
         return;
       }
       if (movement.annulation_statut === 'APPROUVEE') {
@@ -2259,7 +2332,7 @@ function renderPurchaseRow(item, currencies = []) {
   const incoming = item.movement_type === 'IN' ? `${Number(item.total_quantity || 0).toLocaleString('fr-FR')} ${unit}`.trim() : '—';
   const reason = item.movement_type === 'OUT' ? (item.motif_sortie || 'Sortie stock') : (item.supplier_name || 'Approvisionnement');
   const canCancelValidated = item.status === 'RECEIVED' && item.validation_date && Date.now() - new Date(item.validation_date).getTime() < 172800000;
-  return `<tr data-report-date="${escapeHtml(String(item.validation_date || '').slice(0, 10))}" data-purchase-movement="${escapeHtml(item.movement_type)}" data-purchase-status="${escapeHtml(item.status)}" data-purchase-quantity="${Number(item.total_quantity || 0)}" data-purchase-amounts="${escapeHtml(JSON.stringify(movementAmounts))}" data-purchase-unit="${escapeHtml(unit)}"><td>${escapeHtml(item.purchase_no)}</td><td>${escapeHtml(reason)}</td><td>${escapeHtml(item.validation_date ? dateLabel(item.validation_date) : '—')}</td><td>${Number(item.total_quantity || 0).toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(quantityOut)}</td><td>${escapeHtml(incoming)}</td><td>${escapeHtml(remaining)}</td>${currencies.map(currency=>`<td>${amountsByCurrency.has(currency)?escapeHtml(moneyCurrencyLabel(amountsByCurrency.get(currency),currency)):'—'}</td>`).join('')}<td>${escapeHtml(purchaseStatusLabel(item.status))}${item.status === 'PENDING' ? ` <button type="button" data-purchase-validate="${Number(item.achat_id)}">Valider</button><button type="button" data-purchase-cancel="${Number(item.achat_id)}">Annuler</button>` : canCancelValidated ? ` <button type="button" data-purchase-cancel="${Number(item.achat_id)}">Annuler</button>` : ''}</td><td><button type="button" class="document-action-button purchase-voucher-button" title="Imprimer le bon" aria-label="Imprimer le bon" data-purchase-voucher="${Number(item.achat_id)}"><span>Bon</span></button></td></tr>`;
+  return `<tr data-report-date="${escapeHtml(String(item.validation_date || '').slice(0, 10))}" data-purchase-movement="${escapeHtml(item.movement_type)}" data-purchase-status="${escapeHtml(item.status)}" data-purchase-quantity="${Number(item.total_quantity || 0)}" data-purchase-amounts="${escapeHtml(JSON.stringify(movementAmounts))}" data-purchase-unit="${escapeHtml(unit)}"><td>${escapeHtml(item.purchase_no)}</td><td>${escapeHtml(reason)}</td><td>${escapeHtml(item.validation_date ? dateLabel(item.validation_date) : '—')}</td><td>${Number(item.total_quantity || 0).toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(quantityOut)}</td><td>${escapeHtml(incoming)}</td><td>${escapeHtml(remaining)}</td>${currencies.map(currency=>`<td>${amountsByCurrency.has(currency)?escapeHtml(moneyCurrencyLabel(amountsByCurrency.get(currency),currency)):'—'}</td>`).join('')}<td>${statusBadgeMarkup(item.status, purchaseStatusLabel(item.status))}${item.status === 'PENDING' ? ` <button type="button" data-purchase-validate="${Number(item.achat_id)}">Valider</button><button type="button" data-purchase-cancel="${Number(item.achat_id)}">Annuler</button>` : canCancelValidated ? ` <button type="button" data-purchase-cancel="${Number(item.achat_id)}">Annuler</button>` : ''}</td><td><button type="button" class="document-action-button purchase-voucher-button" title="Imprimer le bon" aria-label="Imprimer le bon" data-purchase-voucher="${Number(item.achat_id)}"><span>Bon</span></button></td></tr>`;
 }
 async function allPurchaseRows() {
   let result = await fetchReportPage('procurement-list', 1, {}, 100);
@@ -2317,8 +2390,11 @@ async function loadDashboardData() {
     const summary = stocksResult.value;
     document.getElementById('dash-products').textContent = Number(summary.products_count).toLocaleString('fr-FR');
     setQuantitySummary(document.getElementById('dash-quantity'), summary.branches.map(row => ({unit_abbreviation:row.unit_abbreviation, unit_name:row.unit_name, quantity:row.quantity})));
-    document.getElementById('dash-alerts').textContent = Number(summary.low_stock_count).toLocaleString('fr-FR');
-    lowRows.innerHTML = summary.low_stock_rows.length ? summary.low_stock_rows.map(item => { const unit = item.unit_abbreviation || item.unit_name || ''; return `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.branch_name || '—')}</td><td>${Number(item.quantity)} ${escapeHtml(unit)}</td><td>${Number(item.min_stock_level)} ${escapeHtml(unit)}</td></tr>`; }).join('') : '<tr><td colspan="4">Aucun produit sous son seuil minimum.</td></tr>';
+    const alertCount = Number(summary.low_stock_count);
+    const alertMetric = document.getElementById('dash-alerts');
+    alertMetric.textContent = alertCount.toLocaleString('fr-FR');
+    alertMetric.classList.toggle('has-alerts', alertCount > 0);
+    lowRows.innerHTML = summary.low_stock_rows.length ? summary.low_stock_rows.map(item => { const unit = item.unit_abbreviation || item.unit_name || ''; return `<tr class="status-danger-row"><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.branch_name || '—')}</td><td>${statusBadgeMarkup('LOW_STOCK', `${Number(item.quantity).toLocaleString('fr-FR')} ${unit}`)}</td><td>${Number(item.min_stock_level).toLocaleString('fr-FR')} ${escapeHtml(unit)}</td></tr>`; }).join('') : '<tr><td colspan="4">Aucun produit sous son seuil minimum.</td></tr>';
   } else if (stocksResult.status === 'rejected') {
     document.getElementById('dash-products').textContent = '—'; document.getElementById('dash-quantity').textContent = '—'; document.getElementById('dash-alerts').textContent = '—';
     showLoadError('dash-low-stock', stocksResult.reason, 4);
@@ -2470,7 +2546,7 @@ function renderAccountingAccountRow(account) {
   return `<tr><td>${escapeHtml(account.code)}</td><td>${escapeHtml(account.intitule)}</td><td>${Number(account.classe)}</td><td>${escapeHtml(account.nature)}</td><td>${escapeHtml(account.parent_code ? `${account.parent_code} — ${account.parent_intitule}` : '—')}</td><td>${Number(account.is_active) ? 'Actif' : 'Inactif'}</td><td>${Number(account.is_system) ? 'Système' : hasAccess('modifier_comptabilite') ? `<div class="user-action-group"><button type="button" class="icon-action-button" title="Modifier le compte ${escapeHtml(account.code)}" aria-label="Modifier le compte ${escapeHtml(account.code)}" data-account-edit="${Number(account.compte_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4 4M4 20l4.5-1L19 8.5 15.5 5 5 15.5 4 20Z"/></svg></button><button type="button" class="icon-action-button icon-action-danger" title="Supprimer le compte ${escapeHtml(account.code)}" aria-label="Supprimer le compte ${escapeHtml(account.code)}" data-account-delete="${Number(account.compte_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button></div>` : '—'}</td></tr>`;
 }
 function renderAccountingEntryRow(entry) {
-  return `<tr><td>${escapeHtml(dateLabel(entry.date_ecriture))}</td><td>${escapeHtml(entry.journal_code)}</td><td>${escapeHtml(entry.reference)}</td><td>${escapeHtml(entry.libelle)}</td><td>${Number(entry.line_count)}</td><td>${moneyCurrencyLabel(entry.debit_total, entry.monnaie)}</td><td>${moneyCurrencyLabel(entry.credit_total, entry.monnaie)}</td><td>${entry.annulation_demande_id ? '<span class="status warning">En attente</span>' : `<button type="button" class="icon-action-button icon-action-danger" title="Demander l’annulation de l’écriture ${escapeHtml(entry.reference)}" aria-label="Demander l’annulation de l’écriture ${escapeHtml(entry.reference)}" data-entry-cancellation-request="${Number(entry.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`}</td></tr>`;
+  return `<tr><td>${escapeHtml(dateLabel(entry.date_ecriture))}</td><td>${escapeHtml(entry.journal_code)}</td><td>${escapeHtml(entry.reference)}</td><td>${escapeHtml(entry.libelle)}</td><td>${Number(entry.line_count)}</td><td>${moneyCurrencyLabel(entry.debit_total, entry.monnaie)}</td><td>${moneyCurrencyLabel(entry.credit_total, entry.monnaie)}</td><td>${entry.annulation_demande_id ? statusBadgeMarkup('PENDING') : `<button type="button" class="icon-action-button icon-action-danger" title="Demander l’annulation de l’écriture ${escapeHtml(entry.reference)}" aria-label="Demander l’annulation de l’écriture ${escapeHtml(entry.reference)}" data-entry-cancellation-request="${Number(entry.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button>`}</td></tr>`;
 }
 function renderAccountingDraftRow(draft) {
   return `<tr><td>${escapeHtml(dateLabel(draft.date_ecriture))}</td><td>${escapeHtml(draft.journal_code)}</td><td>${escapeHtml(draft.reference)}</td><td>${escapeHtml(draft.libelle)}</td><td>${Number(draft.line_count)}</td><td>${escapeHtml(moneyCurrencyLabel(draft.debit_total, draft.monnaie))}</td><td>${escapeHtml(moneyCurrencyLabel(draft.credit_total, draft.monnaie))}</td><td>${hasAccess('creer_comptabilite') ? `<div class="user-action-group"><button type="button" class="icon-action-button" title="Modifier le brouillon" aria-label="Modifier le brouillon" data-accounting-draft-edit="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6 4 4M4 20l4.5-1L19 8.5 15.5 5 5 15.5 4 20Z"/></svg></button><button type="button" class="icon-action-button icon-action-success" title="Valider le brouillon" aria-label="Valider le brouillon" data-accounting-draft-validate="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg></button><button type="button" class="icon-action-button icon-action-danger" title="Supprimer le brouillon" aria-label="Supprimer le brouillon" data-accounting-draft-delete="${Number(draft.ecriture_id)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16m-14 0 1 14h10l1-14M9 7V4h6v3m-5 4v6m4-6v6"/></svg></button></div>` : '—'}</td></tr>`;
@@ -2938,7 +3014,7 @@ async function loadExpiringStock() {
       const today = Number(lot.days_remaining) === 0;
       const state = expired ? 'Expiré' : today ? 'Expire aujourd’hui' : `Dans ${Number(lot.days_remaining)} jour${Number(lot.days_remaining) === 1 ? '' : 's'}`;
       const unit = lot.unit_symbol || lot.unit_name || '';
-      return `<tr class="${expired || today ? 'expiration-urgent' : 'expiration-soon'}"><td>${escapeHtml(lot.product_name)} (${escapeHtml(lot.sku)})</td><td>${escapeHtml(lot.branch_name)}</td><td>${escapeHtml(lot.purchase_no)}</td><td>${escapeHtml(lot.date_expiration)}</td><td>${Number(lot.remaining_quantity).toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td><span class="status ${expired || today ? 'danger' : 'warning'}">${escapeHtml(state)}</span></td></tr>`;
+      return `<tr class="${expired || today ? 'expiration-urgent' : 'expiration-soon'}"><td>${escapeHtml(lot.product_name)} (${escapeHtml(lot.sku)})</td><td>${escapeHtml(lot.branch_name)}</td><td>${escapeHtml(lot.purchase_no)}</td><td>${escapeHtml(lot.date_expiration)}</td><td>${Number(lot.remaining_quantity).toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${statusBadgeMarkup('LOW_STOCK', state)}</td></tr>`;
     }).join('') : '<tr><td colspan="6">Aucun lot n’expire dans les 30 prochains jours.</td></tr>';
   } catch (error) {
     const panel = document.getElementById('expiring-stock-panel');
@@ -2954,6 +3030,7 @@ async function loadSession() {
     const user = result.data;
     if (user.type === 'super_admin') { window.location.replace('superadmin.html'); return; }
     sessionUser = user;
+    applyEnterpriseTheme(user.interface_theme || user.enterprise_theme_color);
     const localLanguage = localStorage.getItem('westock-language');
     const preferredLanguage = localLanguage || user.preferred_language || 'fr';
     window.setInterfaceLanguage?.(preferredLanguage);
@@ -3087,7 +3164,7 @@ function renderStockRows() {
 function renderStockProductRow(product, productStocks, unitOverride = '') {
   const quantity = productStocks.reduce((sum, stock) => sum + Number(stock.quantity || 0), 0);
   const threshold = productStocks.reduce((sum, stock) => sum + Number(stock.min_stock_level || 0), 0);
-  const status = quantity === 0 ? ['Rupture','danger'] : quantity <= threshold ? ['Stock bas','warning'] : ['En stock','success'];
+  const status = quantity === 0 ? ['Rupture','danger'] : quantity <= threshold ? ['Stock bas','danger'] : ['En stock','success'];
   const unit = unitOverride || product.unit_abbreviation || product.unit_name || '';
   const isSelected = Number(product.produit_id) === selectedStockProductId;
   return `<tr class="stock-product-card${isSelected ? ' selected' : ''}" data-stock-product-id="${Number(product.produit_id)}"><td class="stock-card-identity"><span class="stock-card-sku">${escapeHtml(product.sku)}</span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.category_name || 'Sans catégorie')}</small></td><td class="stock-card-quantity"><strong>${quantity.toLocaleString('fr-FR')} <small>${escapeHtml(unit)}</small></strong><span class="status ${status[1]}">${status[0]}</span></td><td class="stock-card-price"><span>Prix de vente</span><strong>${Number(product.unit_price || 0).toFixed(2)} ${escapeHtml(product.monais || '')}</strong></td><td class="stock-card-open"><button type="button" class="stock-card-select" data-select-stock-product="${Number(product.produit_id)}" aria-label="Afficher les détails de ${escapeHtml(product.name)}">Détails <span aria-hidden="true">›</span></button></td></tr>`;
@@ -3098,7 +3175,7 @@ function renderSelectedStockProduct(product, stocks, unitNames) {
   const productStocks = stocks.filter(stock => Number(stock.produit_id) === Number(product.produit_id));
   const quantity = productStocks.reduce((sum, stock) => sum + Number(stock.quantity || 0), 0);
   const threshold = productStocks.reduce((sum, stock) => sum + Number(stock.min_stock_level || 0), 0);
-  const status = quantity === 0 ? ['Rupture', 'danger'] : quantity <= threshold ? ['Stock bas', 'warning'] : ['En stock', 'success'];
+  const status = quantity === 0 ? ['Rupture', 'danger'] : quantity <= threshold ? ['Stock bas', 'danger'] : ['En stock', 'success'];
   const unit = unitNames[product.unite_de_mesure] || product.unit_abbreviation || product.unit_name || '';
   const stockCardButton = hasAccess('voir_stock') ? `<button type="button" class="stock-detail-action" data-stock-card="${Number(product.produit_id)}">Fiche de stock</button>` : '';
   const adjustButton = hasAccess('modifier_stock') ? `<button type="button" class="stock-detail-action stock-detail-primary" data-stock-edit="${Number(product.produit_id)}">Ajuster le stock</button>` : '';
@@ -4551,8 +4628,14 @@ document.addEventListener('click', async event => {
     const purchaseId = Number(cancelPurchaseButton?.dataset.purchaseCancel || validatePurchaseButton?.dataset.purchaseValidate);
     const nextStatus = cancelPurchaseButton ? 'CANCELLED' : 'RECEIVED';
     if (!window.confirm(cancelPurchaseButton ? 'Annuler cet approvisionnement ?' : 'Valider cet approvisionnement et appliquer le mouvement au stock ?')) return;
+    let expirationDate = null;
+    if (validatePurchaseButton && validatePurchaseButton.closest('tr')?.cells[0]?.textContent.trim().startsWith('PREV-')) {
+      const enteredExpiration = window.prompt('Date d’expiration du lot (AAAA-MM-JJ). Obligatoire pour les produits périssables; laissez vide sinon.', '');
+      if (enteredExpiration === null) return;
+      expirationDate = enteredExpiration.trim() || null;
+    }
     try {
-      const response = await fetch('../backend/public/auth.php?action=update-purchase-status', {method:'PATCH', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify({achat_id:purchaseId, status:nextStatus})});
+      const response = await fetch('../backend/public/auth.php?action=update-purchase-status', {method:'PATCH', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify({achat_id:purchaseId, status:nextStatus, date_expiration:expirationDate})});
       const result = await readJson(response);
       if (!response.ok || !result.success) throw new Error(result.message || 'Modification du statut impossible.');
       showToast('Statut de l’approvisionnement modifié.');
@@ -4688,6 +4771,54 @@ document.addEventListener('click', event => {
   cleanupToggle.textContent = form.hidden ? 'Nettoyer les données' : 'Fermer';
 });
 document.addEventListener('submit', async event => {
+  const personalThemeForm = event.target.closest('#user-interface-theme-form');
+  if (personalThemeForm) {
+    event.preventDefault();
+    const submitButton = personalThemeForm.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    try {
+      const response = await fetch('../backend/public/auth.php?action=user-interface-theme', {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        credentials:'include',
+        body:JSON.stringify({theme_color:personalThemeForm.elements.theme_color.value || null}),
+      });
+      const result = await readJson(response);
+      if (!response.ok || !result.success) throw new Error(result.message || 'Enregistrement de votre couleur impossible.');
+      sessionUser.interface_theme = result.data.interface_theme;
+      applyEnterpriseTheme(sessionUser.interface_theme || sessionUser.enterprise_theme_color);
+      showToast(sessionUser.interface_theme ? 'Votre couleur d’interface est enregistrée.' : 'La couleur par défaut de l’entreprise est appliquée.');
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      submitButton.disabled = false;
+    }
+    return;
+  }
+  const form = event.target.closest('#enterprise-theme-form');
+  if (!form) return;
+  event.preventDefault();
+  const submitButton = form.querySelector('button[type="submit"],button:not([type])');
+  if (submitButton) submitButton.disabled = true;
+  try {
+    const response = await fetch('../backend/public/auth.php?action=company-theme', {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body:JSON.stringify({theme_color:form.elements.theme_color.value}),
+    });
+    const result = await readJson(response);
+    if (!response.ok || !result.success) throw new Error(result.message || 'Enregistrement du thème impossible.');
+    sessionUser.enterprise_theme_color = result.data.theme_color;
+    applyEnterpriseTheme(sessionUser.interface_theme || result.data.theme_color);
+    showToast('Thème de l’entreprise enregistré.');
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    if (submitButton) submitButton.disabled = false;
+  }
+});
+document.addEventListener('submit', async event => {
   const companySettingsForm = event.target.closest('#company-service-sales-form');
   const branchSettingsForm = event.target.closest('#branch-service-sales-form');
   if (!companySettingsForm && !branchSettingsForm) return;
@@ -4803,7 +4934,7 @@ document.addEventListener('change', event => {
   paginationLoaders.get(pageSizeSelect.dataset.pageSizeKey)?.(1);
 });
 document.addEventListener('click', event => { if(event.target.closest('[data-new-service-sale]')){openServiceSaleForm();return;} const pageButton = event.target.closest('[data-page-key]'); if (pageButton && !pageButton.disabled) { const loader = paginationLoaders.get(pageButton.dataset.pageKey); if (loader) loader(Number(pageButton.dataset.page)); return; } if (event.target.closest('[data-create-role]')) openEntityForm('role'); if (event.target.closest('[data-create-category]')) openEntityForm('category'); if (event.target.closest('[data-create-unit]') && sessionUser?.is_company_admin) openUnitManager(); if (event.target.closest('[data-stock-movement-report]')) openStockMovementsReport(); });
-document.addEventListener('click', event => { if (event.target.closest('.text-button') && !event.target.closest('[data-product-edit],[data-product-delete],[data-category-edit],[data-category-delete],[data-branch-edit],[data-branch-delete],[data-stock-edit],[data-stock-card],[data-role-edit],[data-role-delete],[data-user-edit],[data-user-delete],[data-stock-section],[data-toggle-categories],[data-create-unit],[data-create-category],[data-create-supplier],[data-create-purchase],[data-supplier-edit],[data-supplier-delete],[data-purchase-voucher],[data-report-action],[data-report-close],[data-bank-form-open],[data-account-create-open],[data-account-edit],[data-account-delete],[data-account-report-print],#accounting-entry-add-line,#purchase-add-supplier')) showToast('Rapport mis à jour'); });
+document.addEventListener('click', event => { if (event.target.closest('.text-button') && !event.target.closest('[data-product-edit],[data-product-delete],[data-category-edit],[data-category-delete],[data-branch-edit],[data-branch-delete],[data-stock-edit],[data-stock-card],[data-role-edit],[data-role-delete],[data-user-edit],[data-user-delete],[data-stock-section],[data-toggle-categories],[data-create-unit],[data-create-category],[data-create-supplier],[data-create-purchase],[data-supplier-edit],[data-supplier-delete],[data-purchase-voucher],[data-report-action],[data-report-close],[data-bank-form-open],[data-account-create-open],[data-account-edit],[data-account-delete],[data-account-report-print],[data-risk-order-export],[data-risk-transmit],#accounting-entry-add-line,#purchase-add-supplier')) showToast('Rapport mis à jour'); });
 document.addEventListener('click', event => {
   const stockButton = event.target.closest('[data-stock-edit]');
   if (stockButton) {
@@ -4855,7 +4986,261 @@ window.addEventListener('interface-language-change', async event => {
 themeButton.addEventListener('click', event => { event.stopPropagation(); const isOpen = themePanel.classList.toggle('open'); themeButton.setAttribute('aria-expanded', isOpen); });
 themeChoices.forEach(option => option.addEventListener('click', () => { localStorage.setItem(themeStorageKey, option.dataset.themeChoice); applyTheme(option.dataset.themeChoice); themePanel.classList.remove('open'); themeButton.setAttribute('aria-expanded', 'false'); showToast(`Thème ${option.textContent.trim()} activé`); }));
 document.addEventListener('click', event => { if (!event.target.closest('.theme-control')) { themePanel.classList.remove('open'); themeButton.setAttribute('aria-expanded', 'false'); } });
+function riskQuantityLabel(value, unit = '') {
+  const amount = Number(value || 0).toLocaleString('fr-FR', {maximumFractionDigits:2});
+  return `${amount}${unit ? ` ${unit}` : ''}`;
+}
+function riskStatusMarkup(value, label) {
+  return `<span class="risk-status risk-status--${escapeHtml(value)}">${escapeHtml(label)}</span>`;
+}
+function renderRiskTreasury() {
+  const target = container.querySelector('#risk-treasury-content');
+  if (!target || !stockRiskData) return;
+  const estimates = new Map();
+  container.querySelectorAll('[data-risk-selected]:checked').forEach(check => {
+    const row = check.closest('[data-risk-product-row]');
+    const currency = row.dataset.currency || '';
+    const quantity = Number(row.querySelector('[data-risk-quantity]').value || 0);
+    const cost = Number(row.querySelector('[data-risk-cost]').value || 0);
+    if (currency && quantity > 0) estimates.set(currency, (estimates.get(currency) || 0) + quantity * cost);
+  });
+  const balances = stockRiskData.treasury?.cash_balances || {};
+  const blocks = [...estimates].map(([currency, amount]) => {
+    const available = Object.prototype.hasOwnProperty.call(balances, currency) ? Number(balances[currency]) : null;
+    const canViewTreasury = Boolean(stockRiskData.treasury?.access);
+    const shortfall = canViewTreasury && (available === null || available < amount);
+    const balanceLabel = !canViewTreasury
+      ? 'Solde masqué par les droits du compte'
+      : available === null ? 'Aucune caisse ouverte connue' : `Caisses ouvertes : ${escapeHtml(moneyCurrencyLabel(available, currency))}`;
+    return `<article class="risk-treasury-item${shortfall ? ' is-insufficient' : ''}"><strong>${shortfall ? 'Vérifier la trésorerie' : 'Trésorerie indicative'} · ${escapeHtml(currency)}</strong><span>Bon sélectionné : ${escapeHtml(moneyCurrencyLabel(amount, currency))}</span><span>${balanceLabel}</span>${shortfall ? '<span>Solde ouvert inférieur ou indisponible : vérifiez la trésorerie avant la commande.</span>' : ''}</article>`;
+  });
+  if (!blocks.length) blocks.push('<p class="empty-note">Sélectionnez des produits à commander pour estimer les besoins par monnaie.</p>');
+  const permissionNote = stockRiskData.treasury?.access ? '' : '<p class="risk-treasury-note">Votre rôle ne permet pas de consulter les soldes de caisse. Faites vérifier cette estimation par un utilisateur autorisé à consulter la trésorerie.</p>';
+  target.innerHTML = `${blocks.join('')}${permissionNote}<p class="risk-treasury-note">Aucune somme n’est réservée ni débitée. Cette comparaison est indicative et ne convertit pas les monnaies.</p>`;
+}
+function renderRiskOrders(orders) {
+  const body = container.querySelector('#risk-order-rows');
+  if (!body) return;
+  stockRiskOrders = orders || [];
+  if (!orders?.length) {
+    body.innerHTML = '<tr><td class="risk-empty" colspan="7">Aucun bon prévisionnel enregistré.</td></tr>';
+    return;
+  }
+  body.innerHTML = orders.map(order => {
+    const totals = Object.entries(order.estimated_totals || {}).map(([currency, amount]) => moneyCurrencyLabel(amount, currency)).join(' · ') || '—';
+    const lines = (order.items || []).map(item => `<li><strong>${escapeHtml(item.sku)} · ${escapeHtml(item.product_name)}</strong> — Stock ${riskQuantityLabel(item.stock_disponible)} · MAD ${riskQuantityLabel(item.mad)} · CMM ${riskQuantityLabel(item.cmm)} · recommandé ${riskQuantityLabel(item.quantite_recommandee)} · commandé ${riskQuantityLabel(item.quantite_commande)} · Fournisseur ${escapeHtml(item.supplier_name || '—')} · coût ${escapeHtml(moneyCurrencyLabel(item.unit_cost, item.monais))}</li>`).join('');
+    const status = order.status === 'DRAFT' ? riskStatusMarkup('warning', 'Brouillon') : order.status === 'TRANSMITTED' ? riskStatusMarkup('safe', 'Transmis') : riskStatusMarkup('neutral', order.status);
+    const exportActions = `<button type="button" class="text-button" data-risk-order-export="excel" data-risk-order-id="${Number(order.bon_previsionnel_id)}">Exporter Excel</button> <button type="button" class="text-button" data-risk-order-export="pdf" data-risk-order-id="${Number(order.bon_previsionnel_id)}">Exporter PDF</button>`;
+    const transmit = order.status === 'DRAFT' && hasAccess('creer_approvisionnements')
+      ? `<button type="button" class="text-button" data-risk-transmit="${Number(order.bon_previsionnel_id)}">Transmettre aux approvisionnements</button>`
+      : '';
+    return `<tr><td><strong>${escapeHtml(order.reference)}</strong><details class="risk-order-details"><summary>Détail (${Number(order.item_count)} produit(s))</summary><ul class="risk-order-lines">${lines}</ul></details></td><td>${escapeHtml(order.branch_name)}</td><td>${escapeHtml(dateLabel(order.created_at))}</td><td>${Number(order.item_count)}</td><td>${escapeHtml(totals)}</td><td>${status}</td><td>${exportActions}${transmit ? `<br>${transmit}` : ''}</td></tr>`;
+  }).join('');
+}
+function stockRiskOrderExportRows(order) {
+  const rows = [
+    ['Bon prévisionnel', order.reference],
+    ['Succursale', order.branch_name],
+    ['Date', dateLabel(order.created_at)],
+    ['Statut', order.status === 'DRAFT' ? 'Brouillon' : order.status === 'TRANSMITTED' ? 'Transmis' : order.status],
+    [],
+    ['Référence produit', 'Désignation', 'Stock disponible', 'MAD', 'CMM', 'Quantité recommandée', 'Quantité commandée', 'Fournisseur', 'Coût unitaire', 'Monnaie', 'Total estimé'],
+  ];
+  for (const item of order.items || []) {
+    const quantity = Number(item.quantite_commande);
+    const unitCost = Number(item.unit_cost);
+    rows.push([
+      item.sku,
+      item.product_name,
+      item.stock_disponible,
+      item.mad,
+      item.cmm,
+      item.quantite_recommandee,
+      quantity,
+      item.supplier_name || '',
+      unitCost.toFixed(2),
+      item.monais,
+      (quantity * unitCost).toFixed(2),
+    ]);
+  }
+  for (const [currency, amount] of Object.entries(order.estimated_totals || {})) rows.push(['Total', '', '', '', '', '', '', '', '', currency, Number(amount).toFixed(2)]);
+  return rows;
+}
+async function exportStockRiskOrder(orderId, format) {
+  const order = stockRiskOrders.find(item => Number(item.bon_previsionnel_id) === orderId);
+  if (!order) {
+    showToast('Bon prévisionnel introuvable pour l’export.');
+    return;
+  }
+  const rows = stockRiskOrderExportRows(order);
+  const filename = `bon-${String(order.reference).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9-]+/gi, '-').toLowerCase()}`;
+  if (format === 'excel') {
+    const escapeCell = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const table = rows.map((row, index) => `<tr>${row.map(cell => index === 5 ? `<th>${escapeCell(cell)}</th>` : `<td>${escapeCell(cell)}</td>`).join('')}</tr>`).join('');
+    const documentHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Bon prévisionnel</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table>${table}</table></body></html>`;
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob(['\ufeff', documentHtml], {type:'application/vnd.ms-excel;charset=utf-8'}));
+    link.download = `${filename}.xls`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    return;
+  }
+  if (format === 'pdf') {
+    const response = await fetch('../backend/public/pdf-report.php', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body:JSON.stringify({
+        title:`Bon prévisionnel ${order.reference}`,
+        report_context:'stock-risk',
+        succursale_id:stockRiskData?.branch_id || null,
+        tables:[
+          {headers:['Information', 'Valeur'], rows:rows.slice(0, 4).map(row => row.map(value => String(value ?? '')))},
+          {headers:rows[5].map(String), rows:rows.slice(6).filter(row => row.length).map(row => row.map(value => String(value ?? '')))},
+        ],
+      }),
+    });
+    if (!response.ok) {
+      const result = await readJson(response);
+      throw new Error(result.message || 'Export PDF impossible.');
+    }
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(await response.blob());
+    link.download = `${filename}.pdf`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+}
+async function loadStockRiskDashboard() {
+  const branchSelect = container.querySelector('#stock-risk-branch');
+  if (!branchSelect) return;
+  const requestId = ++stockRiskRequest;
+  const params = new URLSearchParams({action:'dashboard'});
+  if (branchSelect.value) params.set('succursale_id', branchSelect.value);
+  const rowsTarget = container.querySelector('#risk-stock-rows');
+  if (rowsTarget) rowsTarget.innerHTML = '<tr><td colspan="8">Analyse en cours…</td></tr>';
+  try {
+    const response = await fetch(`../backend/public/stock-risk.php?${params}`, {credentials:'include', cache:'no-store'});
+    const result = await readJson(response);
+    if (!response.ok || !result.success) throw new Error(result.message || 'Analyse des risques impossible.');
+    if (requestId !== stockRiskRequest || currentViewName !== 'stock-risk' || !branchSelect.isConnected) return;
+    stockRiskData = result.data;
+    branchSelect.innerHTML = (stockRiskData.branches || []).map(branch => `<option value="${Number(branch.succursale_id)}">${escapeHtml(branch.name)}</option>`).join('');
+    branchSelect.value = String(stockRiskData.branch_id);
+    const summary = stockRiskData.summary;
+    for (const [id, value] of Object.entries({
+      'risk-stockout-count':summary.stockout_risks,
+      'risk-critical-count':summary.critical_stock,
+      'risk-overstock-count':summary.overstock,
+      'risk-expiry-count':summary.near_expiry,
+      'risk-rotation-count':summary.low_rotation,
+      'risk-order-count':summary.recommended_products,
+    })) {
+      const node = container.querySelector(`#${id}`);
+      if (node) node.textContent = Number(value).toLocaleString('fr-FR');
+    }
+    const recommendations = stockRiskData.rows.filter(row => Number(row.recommended_quantity) > 0);
+    const recommendationBody = container.querySelector('#risk-recommendation-rows');
+    recommendationBody.innerHTML = recommendations.length ? recommendations.map(row => `<tr data-risk-product-row data-product-id="${Number(row.produit_id)}" data-currency="${escapeHtml(row.currency)}"><td><input class="risk-checkbox" type="checkbox" data-risk-selected checked aria-label="Inclure ${escapeHtml(row.name)}"></td><td><strong>${escapeHtml(row.sku)}</strong><br>${escapeHtml(row.name)}</td><td>${riskQuantityLabel(row.stock_available, row.unit_abbreviation || row.unit_name)}</td><td>${riskQuantityLabel(row.mad)}</td><td>${riskQuantityLabel(row.cmm)}</td><td>${riskQuantityLabel(row.recommended_quantity, row.unit_abbreviation || row.unit_name)}</td><td><input class="risk-input" type="number" min="1" step="1" value="${Number(row.recommended_quantity)}" data-risk-quantity aria-label="Quantité à commander pour ${escapeHtml(row.name)}"></td><td>${escapeHtml(row.supplier_name || '—')}</td><td><input class="risk-input" type="number" min="0" step="0.01" value="${Number(row.cost_price).toFixed(2)}" data-risk-cost aria-label="Coût estimé pour ${escapeHtml(row.name)}"> ${escapeHtml(row.currency)}</td></tr>`).join('') : '<tr><td class="risk-empty" colspan="9">Aucun approvisionnement proposé pour le moment.</td></tr>';
+    const statusRows = stockRiskData.rows.map(row => {
+      const riskMarkup = row.risk === 'urgent' ? riskStatusMarkup('urgent', row.critical ? 'Critique' : 'Urgent')
+        : row.risk === 'soon' ? riskStatusMarkup('warning', 'Prochainement')
+          : riskStatusMarkup('safe', 'Stock suffisant');
+      const signals = [row.overstock && riskStatusMarkup('neutral', 'Surstock'), row.low_rotation && riskStatusMarkup('warning', 'Faible rotation'), row.near_expiry && riskStatusMarkup('expired', 'Péremption')].filter(Boolean).join(' ');
+      const duration = row.days_remaining === null ? 'Données insuffisantes' : `${riskQuantityLabel(row.days_remaining)} j`;
+      const supply = row.recommended_quantity > 0 ? `À commander : ${riskQuantityLabel(row.recommended_quantity, row.unit_abbreviation || row.unit_name)}` : 'Aucun besoin estimé';
+      return `<tr><td><strong>${escapeHtml(row.sku)}</strong><br>${escapeHtml(row.name)}<br>${signals}</td><td>${escapeHtml(row.branch_name)}</td><td>${riskQuantityLabel(row.stock_available, row.unit_abbreviation || row.unit_name)}<br><small>Après transferts en attente : ${riskQuantityLabel(row.forecast_available_quantity, row.unit_abbreviation || row.unit_name)} · Minimum : ${riskQuantityLabel(row.min_stock_level)}</small></td><td>MAD ${riskQuantityLabel(row.mad)}<br>CMM ${riskQuantityLabel(row.cmm)}</td><td>${duration}</td><td>Entrées : ${riskQuantityLabel(row.pending_quantity, row.unit_abbreviation || row.unit_name)}<br>Sorties : ${riskQuantityLabel(row.pending_transfer_out_quantity, row.unit_abbreviation || row.unit_name)}</td><td>${riskMarkup}</td><td>${escapeHtml(supply)}</td></tr>`;
+    });
+    rowsTarget.innerHTML = statusRows.length ? statusRows.join('') : '<tr><td class="risk-empty" colspan="8">Aucun produit actif dans cette succursale.</td></tr>';
+    const expiryBody = container.querySelector('#risk-expiry-rows');
+    expiryBody.innerHTML = stockRiskData.expiring_lots.length ? stockRiskData.expiring_lots.map(lot => `<tr><td><strong>${escapeHtml(lot.sku)}</strong><br>${escapeHtml(lot.product_name)}</td><td>#${Number(lot.lot_id)}</td><td>${escapeHtml(dateLabel(lot.date_expiration))}</td><td class="${Number(lot.days_to_expiry) < 0 ? 'risk-expiry-overdue' : ''}">${Number(lot.days_to_expiry) < 0 ? `Dépassé de ${Math.abs(Number(lot.days_to_expiry))} j` : `${Number(lot.days_to_expiry)} j`}</td><td>${riskQuantityLabel(lot.quantity_remaining)}</td></tr>`).join('') : '<tr><td class="risk-empty" colspan="5">Aucun lot proche de l’expiration dans les 90 prochains jours.</td></tr>';
+    renderRiskTreasury();
+    if (hasAccess('voir_approvisionnements') || hasAccess('creer_approvisionnements')) {
+      const orderParams = new URLSearchParams({action:'orders', succursale_id:String(stockRiskData.branch_id)});
+      try {
+        const orderResponse = await fetch(`../backend/public/stock-risk.php?${orderParams}`, {credentials:'include', cache:'no-store'});
+        const orderResult = await readJson(orderResponse);
+        if (!orderResponse.ok || !orderResult.success) throw new Error(orderResult.message || 'Chargement des bons prévisionnels impossible.');
+        if (requestId !== stockRiskRequest || currentViewName !== 'stock-risk') return;
+        renderRiskOrders(orderResult.data);
+      } catch (error) {
+        container.querySelector('#risk-order-rows').innerHTML = `<tr><td class="risk-empty" colspan="7">${escapeHtml(error.message)}</td></tr>`;
+      }
+    } else {
+      container.querySelector('#risk-order-rows').innerHTML = '<tr><td class="risk-empty" colspan="7">Votre rôle ne permet pas de consulter les approvisionnements.</td></tr>';
+    }
+  } catch (error) {
+    if (requestId !== stockRiskRequest) return;
+    showToast(error.message);
+    if (rowsTarget) rowsTarget.innerHTML = `<tr><td class="risk-empty" colspan="8">${escapeHtml(error.message)}</td></tr>`;
+  }
+}
+async function createStockRiskOrder() {
+  if (!hasAccess('creer_approvisionnements')) {
+    showToast('Votre rôle ne permet pas de créer un bon prévisionnel.');
+    return;
+  }
+  const items = [...container.querySelectorAll('[data-risk-selected]:checked')].map(check => {
+    const row = check.closest('[data-risk-product-row]');
+    return {
+      product_id:Number(row.dataset.productId),
+      quantity:Number(row.querySelector('[data-risk-quantity]').value),
+      supplier_id:stockRiskData.rows.find(product => Number(product.produit_id) === Number(row.dataset.productId))?.supplier_id || null,
+      unit_cost:Number(row.querySelector('[data-risk-cost]').value),
+    };
+  });
+  if (!items.length) {
+    showToast('Sélectionnez au moins un produit à commander.');
+    return;
+  }
+  try {
+    const response = await fetch('../backend/public/stock-risk.php?action=orders', {
+      method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
+      body:JSON.stringify({succursale_id:Number(container.querySelector('#stock-risk-branch').value), items}),
+    });
+    const result = await readJson(response);
+    if (!response.ok || !result.success) throw new Error(result.message || 'Création du bon prévisionnel impossible.');
+    showToast(`Bon ${result.data.reference} enregistré en brouillon.`);
+    await loadStockRiskDashboard();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+async function transmitStockRiskOrder(orderId) {
+  if (!window.confirm('Transmettre ce bon aux approvisionnements ? Les lignes seront créées en attente; le stock ne changera qu’à leur réception.')) return;
+  try {
+    const response = await fetch('../backend/public/stock-risk.php?action=transmit', {
+      method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
+      body:JSON.stringify({bon_previsionnel_id:orderId}),
+    });
+    const result = await readJson(response);
+    if (!response.ok || !result.success) throw new Error(result.message || 'Transmission du bon impossible.');
+    showToast(`${result.data.purchase_count} approvisionnement(s) transmis.`);
+    await loadStockRiskDashboard();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+document.addEventListener('change', event => {
+  if (event.target.matches('#stock-risk-branch')) loadStockRiskDashboard();
+  if (event.target.matches('[data-risk-selected]')) renderRiskTreasury();
+});
+document.addEventListener('input', event => {
+  if (event.target.matches('[data-risk-quantity],[data-risk-cost]')) renderRiskTreasury();
+});
+document.addEventListener('click', event => {
+  if (event.target.closest('[data-risk-refresh]')) loadStockRiskDashboard();
+  if (event.target.closest('[data-risk-create-order]')) createStockRiskOrder();
+  const exportButton = event.target.closest('[data-risk-order-export]');
+  if (exportButton) {
+    exportStockRiskOrder(Number(exportButton.dataset.riskOrderId), exportButton.dataset.riskOrderExport)
+      .catch(error => showToast(error.message));
+  }
+  const transmitButton = event.target.closest('[data-risk-transmit]');
+  if (transmitButton) transmitStockRiskOrder(Number(transmitButton.dataset.riskTransmit));
+});
 setInterval(()=>{if(currentViewName==='cash'&&hasAccess('modifier_caisse'))loadPendingSales();},20000);
+setInterval(()=>{if(currentViewName==='stock-risk')loadStockRiskDashboard();},60000);
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if ((localStorage.getItem(themeStorageKey) || 'light') === 'auto') applyTheme('auto'); });
 window.addEventListener('hashchange', () => renderView(routeFromHash()));
 loadTheme();

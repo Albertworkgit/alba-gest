@@ -231,7 +231,7 @@ final class AuthService
     // Retourne toutes les entreprises visibles par le super administrateur.
     public function enterprises(): array
     {
-        $result = $this->db->query('SELECT e.entreprise_id, e.name, e.email, e.phone, e.is_active, e.created_at, e.max_succursales, (SELECT COUNT(*) FROM succursales s WHERE s.entreprise_id = e.entreprise_id) AS succursales_count, d.modules_autorises FROM entreprises e LEFT JOIN entreprise_droits_modules d ON d.entreprise_id = e.entreprise_id ORDER BY e.entreprise_id DESC');
+        $result = $this->db->query('SELECT e.entreprise_id, e.name, e.activity_type, e.email, e.phone, e.is_active, e.created_at, e.max_succursales, (SELECT COUNT(*) FROM succursales s WHERE s.entreprise_id = e.entreprise_id) AS succursales_count, d.modules_autorises FROM entreprises e LEFT JOIN entreprise_droits_modules d ON d.entreprise_id = e.entreprise_id ORDER BY e.entreprise_id DESC');
         $enterprises = $result->fetch_all(MYSQLI_ASSOC);
         foreach ($enterprises as &$enterprise) {
             $modules = $enterprise['modules_autorises'] !== null
@@ -319,7 +319,7 @@ final class AuthService
         $logoColumn = $companyColumn('logo', 'enterprise_logo');
         $stampColumn = $companyColumn('cachet', 'enterprise_cachet');
         // Charge le nom de l'entreprise et de la succursale depuis la base, pas depuis le navigateur.
-        $statement = $this->db->prepare('SELECT u.full_name, u.username, u.email, u.succursale_id, u.preferred_language, s.est_sucursal_mere AS is_main_branch, s.vente_services_autorisee AS branch_service_sales_enabled, r.role_name, r.permissions, e.name AS enterprise_name, e.email AS enterprise_email, e.phone AS enterprise_phone, e.address AS enterprise_address, e.vente_services_autorisee AS enterprise_service_sales_enabled, ' . $rccmColumn . ', ' . $postalBoxColumn . ', ' . $logoColumn . ', ' . $stampColumn . ', s.name AS branch_name, (SELECT MIN(first_user.user_id) FROM users first_user WHERE first_user.entreprise_id = u.entreprise_id) AS first_user_id FROM users u INNER JOIN roles r ON r.role_id = u.role_id AND r.entreprise_id = u.entreprise_id INNER JOIN entreprises e ON e.entreprise_id = u.entreprise_id LEFT JOIN succursales s ON s.succursale_id = u.succursale_id AND s.entreprise_id = u.entreprise_id WHERE u.user_id = ? AND u.entreprise_id = ? AND u.is_active = 1 AND e.is_active = 1 LIMIT 1');
+        $statement = $this->db->prepare('SELECT u.full_name, u.username, u.email, u.succursale_id, u.preferred_language, u.interface_theme, s.est_sucursal_mere AS is_main_branch, s.vente_services_autorisee AS branch_service_sales_enabled, r.role_name, r.permissions, e.name AS enterprise_name, e.activity_type AS enterprise_activity_type, e.theme_color AS enterprise_theme_color, e.email AS enterprise_email, e.phone AS enterprise_phone, e.address AS enterprise_address, e.vente_services_autorisee AS enterprise_service_sales_enabled, ' . $rccmColumn . ', ' . $postalBoxColumn . ', ' . $logoColumn . ', ' . $stampColumn . ', s.name AS branch_name, (SELECT MIN(first_user.user_id) FROM users first_user WHERE first_user.entreprise_id = u.entreprise_id) AS first_user_id FROM users u INNER JOIN roles r ON r.role_id = u.role_id AND r.entreprise_id = u.entreprise_id INNER JOIN entreprises e ON e.entreprise_id = u.entreprise_id LEFT JOIN succursales s ON s.succursale_id = u.succursale_id AND s.entreprise_id = u.entreprise_id WHERE u.user_id = ? AND u.entreprise_id = ? AND u.is_active = 1 AND e.is_active = 1 LIMIT 1');
         $statement->bind_param('ii', $userId, $enterpriseId);
         $statement->execute();
         $profile = $statement->get_result()->fetch_assoc() ?: [];
@@ -773,12 +773,16 @@ final class AuthService
         $email = trim((string) ($data['email'] ?? ''));
         $phone = PhoneNumberNormalizer::normalize((string) ($data['phone'] ?? ''));
         $address = trim((string) ($data['address'] ?? ''));
+        $activityType = (string) ($data['activity_type'] ?? '');
         $fullName = trim((string) ($data['full_name'] ?? ''));
         $username = trim((string) ($data['username'] ?? ''));
         $password = (string) ($data['password'] ?? '');
 
         if ($name === '' || $email === '' || $fullName === '' || $username === '' || strlen($password) < 6) {
             throw new RuntimeException('Tous les champs sont obligatoires et le mot de passe doit contenir au moins 6 caractères.');
+        }
+        if (!in_array($activityType, ['pharmaceutical', 'commercial', 'other'], true)) {
+            throw new RuntimeException('Le type d’entreprise sélectionné est invalide.');
         }
         $language = (string) ($data['preferred_language'] ?? 'fr');
         if (!in_array($language, ['fr', 'en', 'sw', 'ln', 'kn'], true)) throw new RuntimeException('Langue d’affichage non prise en charge.');
@@ -789,8 +793,9 @@ final class AuthService
         $this->db->begin_transaction();
         try {
             // L’entreprise est inactive jusqu’à l’approbation du super administrateur.
-            $enterprise = $this->db->prepare('INSERT INTO entreprises (name, email, phone, address, is_active) VALUES (?, ?, ?, ?, 0)');
-            $enterprise->bind_param('ssss', $name, $email, $phone, $address);
+            $themeColor = $activityType === 'pharmaceutical' ? 'green' : 'teal';
+            $enterprise = $this->db->prepare('INSERT INTO entreprises (name, activity_type, theme_color, email, phone, address, is_active) VALUES (?, ?, ?, ?, ?, ?, 0)');
+            $enterprise->bind_param('ssssss', $name, $activityType, $themeColor, $email, $phone, $address);
             $enterprise->execute();
             $enterpriseId = (int) $this->db->insert_id;
 

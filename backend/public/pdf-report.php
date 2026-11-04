@@ -115,12 +115,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
 
 try {
     $user = AuthGuard::requireAuthenticated();
-    Authorization::requireAnyPermission($user, ['voir_rapports', 'voir_comptabilite']);
+    $body = json_decode((string) file_get_contents('php://input'), true);
+    $reportContext = is_array($body) ? (string) ($body['report_context'] ?? '') : '';
+    if ($reportContext === 'stock-risk') {
+        if (($user['type'] ?? '') !== 'user') JsonResponse::error('Action réservée aux utilisateurs d’entreprise.', 403);
+        Authorization::requireModule($user, 'stock_risk');
+        Authorization::requirePermission($user, 'voir_stock');
+    } else {
+        if ($reportContext !== '') JsonResponse::error('Contexte de rapport invalide.', 422);
+        Authorization::requireAnyPermission($user, ['voir_rapports', 'voir_comptabilite']);
+    }
     if (!class_exists(FPDF::class)) {
         JsonResponse::error('La bibliothèque FPDF est absente. Exécutez composer install dans le dossier du projet.', 503);
     }
 
-    $body = json_decode((string) file_get_contents('php://input'), true);
     $title = is_array($body) ? trim((string) ($body['title'] ?? '')) : '';
     $tables = is_array($body) ? ($body['tables'] ?? null) : null;
     if ($title === '' || strlen($title) > 160 || !is_array($tables) || $tables === [] || count($tables) > 15) {

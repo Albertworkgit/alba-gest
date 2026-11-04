@@ -9,6 +9,7 @@ final class Authorization
 {
     private const MODULES = [
         'stock' => 'Stock',
+        'stock_risk' => 'Gestion des risques de stock',
         'approvisionnements' => 'Approvisionnements',
         'ventes' => 'Ventes',
         'caisse' => 'Caisse',

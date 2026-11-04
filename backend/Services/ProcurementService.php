@@ -190,7 +190,7 @@ final class ProcurementService
     }
 
     // fonction pour mettre à jour le statut d'un approvisionnement existant
-    public function updatePurchaseStatus(array $actor, int $purchaseId, string $newStatus): void
+    public function updatePurchaseStatus(array $actor, int $purchaseId, string $newStatus, ?string $expirationDate = null): void
     {
         if (!in_array($newStatus, ['PENDING', 'RECEIVED', 'CANCELLED'], true)) throw new RuntimeException('Statut invalide.');
         $enterpriseId = (int) $actor['entreprise_id'];
@@ -219,6 +219,18 @@ final class ProcurementService
                 $q->bind_param('ii', $enterpriseId, $purchaseId); $q->execute(); $d = $q->get_result()->fetch_assoc();
                 if (!$d) throw new RuntimeException('Détail d’approvisionnement introuvable.');
                 $branch=(int)$purchase['succursale_id']; $product=(int)$d['produit_id']; $quantity=(int)$d['quantity']; $user=(int)$actor['id'];
+                if ((int)$d['est_perisable'] === 1 && $purchase['movement_type'] === 'IN' && empty($d['date_expiration'])) {
+                    $validExpiration = is_string($expirationDate)
+                        && preg_match('/^\d{4}-\d{2}-\d{2}$/', $expirationDate) === 1
+                        && checkdate((int) substr($expirationDate, 5, 2), (int) substr($expirationDate, 8, 2), (int) substr($expirationDate, 0, 4))
+                        && $expirationDate >= date('Y-m-d');
+                    if (!$validExpiration) throw new RuntimeException('Saisissez une date d’expiration valide pour réceptionner ce lot périssable.');
+                    $saveExpiration = $this->db->prepare('UPDATE achat_details SET date_expiration = ? WHERE achat_detail_id = ? AND entreprise_id = ? AND date_expiration IS NULL');
+                    $detailId = (int) $d['achat_detail_id'];
+                    $saveExpiration->bind_param('sii', $expirationDate, $detailId, $enterpriseId);
+                    $saveExpiration->execute();
+                    $d['date_expiration'] = $expirationDate;
+                }
                 if ((int)$d['est_perisable']===1 && $purchase['movement_type']==='IN' && (empty($d['date_expiration']) || $d['date_expiration'] < date('Y-m-d'))) throw new RuntimeException('Date d’expiration absente ou dépassée.');
                 $allocations=[];
                 if ((int)$d['est_perisable']===1 && $purchase['movement_type']==='OUT') {

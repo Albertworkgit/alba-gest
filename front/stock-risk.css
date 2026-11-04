@@ -1,0 +1,26 @@
+.risk-summary-grid{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.risk-treasury-panel{border-left:4px solid #d59b28}
+.risk-treasury-content{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+.risk-treasury-item{padding:12px;border:1px solid var(--line,#e6ebe7);border-radius:8px;background:var(--surface,#fff)}
+.risk-treasury-item strong,.risk-treasury-item span{display:block}
+.risk-treasury-item strong{margin-bottom:5px}
+.risk-treasury-item.is-insufficient{border-color:#e4a5a0;background:#fff3f1;color:#9e3e38}
+.risk-treasury-note{grid-column:1/-1;color:var(--muted,#73807b);font-size:12px}
+.risk-input{width:88px;min-width:76px;padding:7px;border:1px solid var(--line,#dfe7e2);border-radius:5px;background:var(--surface,#fff);color:inherit}
+.risk-checkbox{width:18px;height:18px;accent-color:var(--teal,#198754)}
+.risk-status{display:inline-flex;padding:4px 8px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.risk-status--urgent,.risk-status--expired{background:#fde8e4;color:#ad3932}
+.risk-status--soon,.risk-status--warning{background:#fff1d8;color:#8d5b00}
+.risk-status--safe{background:#e8f5ed;color:#176b45}
+.risk-status--neutral{background:#eef1ef;color:#53645d}
+.risk-order-details{min-width:330px;max-width:620px;white-space:normal}
+.risk-order-details summary{cursor:pointer;color:var(--teal-dark,#146f45);font-weight:700}
+.risk-order-lines{margin:8px 0 0;padding-left:18px;font-size:12px}
+.risk-order-lines li{padding:3px 0}
+.risk-empty{text-align:center;color:var(--muted,#73807b);padding:16px}
+.risk-expiry-overdue{color:#ad3932;font-weight:700}
+.dark-theme .risk-treasury-item.is-insufficient{background:#472e2c;color:#ffc2ba;border-color:#80504b}
+.dark-theme .risk-status--urgent,.dark-theme .risk-status--expired{background:#542f2c;color:#ffc2ba}
+.dark-theme .risk-status--soon,.dark-theme .risk-status--warning{background:#4b3b22;color:#f5d28e}
+.dark-theme .risk-status--safe{background:#294b36;color:#a8dfbd}
+@media(max-width:720px){.risk-order-details{min-width:260px}}

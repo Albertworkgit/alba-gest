@@ -53,6 +53,16 @@ function RegisterPage() {
               Nom de l'entreprise
               <input name="enterprise_name" autoComplete="organization" required />
             </label>
+            <label className="register-field full">
+              Type d'entreprise
+              <select name="activity_type" defaultValue="" required>
+                <option value="" disabled>Choisir le type d'activité</option>
+                <option value="pharmaceutical">Pharmaceutique</option>
+                <option value="commercial">Commerciale</option>
+                <option value="other">Autres</option>
+              </select>
+              <small>Le thème vert est appliqué par défaut aux entreprises pharmaceutiques. L’administrateur pourra le modifier dans les paramètres.</small>
+            </label>
             <label className="register-field">
               Téléphone de l'entreprise
               <input name="phone" type="tel" autoComplete="tel" />

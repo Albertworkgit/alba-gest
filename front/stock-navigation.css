@@ -96,7 +96,7 @@
 .logout-button:disabled { opacity: .65; cursor: progress; }
 .logout-button span { width: 18px; font-size: 17px; text-align: center; }
 .expiration-urgent { background: #fff1ef; }
-.expiration-soon { background: #fff8e7; }
+.expiration-soon { background: #fff1ef; }
 .perishable-allocation-preview { margin-top: 7px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); font-size: 12px; font-weight: 400; }
 .perishable-allocation-preview ul { margin: 7px 0 0; padding-left: 20px; }
 .perishable-allocation-preview li { margin: 3px 0; }
@@ -106,7 +106,7 @@
 .dark-theme .purchase-voucher-button { border-color: #416e61; background: #294b41; color: #a8dfcd; }
 .dark-theme .purchase-voucher-button:hover:not(:disabled) { background: #345a4f; }
 .dark-theme .expiration-urgent { background: #4d302d; }
-.dark-theme .expiration-soon { background: #4a422d; }
+.dark-theme .expiration-soon { background: #4d302d; }
 .dark-theme .company-scope select { border-color: var(--line); }
 
 .supplier-suggestions { display: grid; max-height: 190px; overflow-y: auto; margin-top: -7px; border: 1px solid #dce8e0; border-radius: 6px; background: #fff; box-shadow: 0 8px 18px rgb(24 59 53 / 12%); }

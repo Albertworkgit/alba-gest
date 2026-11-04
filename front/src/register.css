@@ -79,7 +79,8 @@ body.auth-page:has(.register-layout) {
   font-weight: 700;
 }
 
-.register-field input {
+.register-field input,
+.register-field select {
   min-height: 40px;
   margin-top: 0;
   padding: 10px;
@@ -90,7 +91,19 @@ body.auth-page:has(.register-layout) {
   font: inherit;
 }
 
-.register-field input:focus {
+.register-field select {
+  cursor: pointer;
+}
+
+.register-field small {
+  color: #73807b;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.register-field input:focus,
+.register-field select:focus {
   border-color: #67a997;
   background: #fff;
   box-shadow: 0 0 0 3px #147c701a;
@@ -170,6 +183,7 @@ body.auth-page:has(.register-layout) {
 .register-field:nth-child(7) { animation-delay: 440ms; }
 
 .register-field input,
+.register-field select,
 .register-submit,
 .register-card .auth-form-footer a {
   transition:
@@ -180,7 +194,8 @@ body.auth-page:has(.register-layout) {
     color 180ms ease;
 }
 
-.register-field input:focus {
+.register-field input:focus,
+.register-field select:focus {
   transform: translateY(-1px);
 }
 
@@ -201,6 +216,7 @@ body.auth-page:has(.register-layout) {
   }
 
   .register-field input,
+  .register-field select,
   .register-submit,
   .register-card .auth-form-footer a {
     transition: none;
