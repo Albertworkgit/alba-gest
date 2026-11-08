@@ -24,9 +24,10 @@ try {
     $method = $_SERVER['REQUEST_METHOD'];
     $action = (string) ($_GET['action'] ?? 'dashboard');
     $requestedBranch = isset($_GET['succursale_id']) ? (int) $_GET['succursale_id'] : null;
+    $periodDays = isset($_GET['period_days']) ? (int) $_GET['period_days'] : 30;
 
     if ($method === 'GET' && $action === 'dashboard') {
-        JsonResponse::send(['success' => true, 'data' => $service->dashboard($actor, $requestedBranch)]);
+        JsonResponse::send(['success' => true, 'data' => $service->dashboard($actor, $requestedBranch, $periodDays)]);
     }
     if ($method === 'GET' && $action === 'orders') {
         Authorization::requireAnyPermission($actor, ['voir_risques_stock', 'voir_approvisionnements', 'creer_approvisionnements']);
@@ -38,6 +39,20 @@ try {
         if (!is_array($body) || !is_array($body['items'] ?? null)) JsonResponse::error('Contenu du bon prévisionnel invalide.', 400);
         $result = $service->createOrder($actor, (int) ($body['succursale_id'] ?? 0), $body['items']);
         JsonResponse::send(['success' => true, 'data' => $result], 201);
+    }
+    if ($method === 'PUT' && $action === 'orders') {
+        Authorization::requirePermission($actor, 'creer_approvisionnements');
+        $body = json_decode((string) file_get_contents('php://input'), true);
+        if (!is_array($body) || !is_array($body['items'] ?? null)) JsonResponse::error('Contenu du bon prévisionnel invalide.', 400);
+        $service->updateOrder($actor, (int) ($body['bon_previsionnel_id'] ?? 0), $body['items']);
+        JsonResponse::send(['success' => true]);
+    }
+    if ($method === 'DELETE' && $action === 'orders') {
+        Authorization::requirePermission($actor, 'creer_approvisionnements');
+        $body = json_decode((string) file_get_contents('php://input'), true);
+        if (!is_array($body)) JsonResponse::error('Contenu du bon prévisionnel invalide.', 400);
+        $service->deleteOrder($actor, (int) ($body['bon_previsionnel_id'] ?? 0));
+        JsonResponse::send(['success' => true]);
     }
     if ($method === 'POST' && $action === 'transmit') {
         Authorization::requirePermission($actor, 'creer_approvisionnements');

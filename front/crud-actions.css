@@ -280,3 +280,12 @@ button[data-purchase-voucher]:focus-visible { outline: 2px solid #147c70; outlin
 .service-sale-total { margin-top:0; padding:13px 15px!important; border:1px solid #dcece3; border-radius:9px; background:#f3faf6; }
 .service-sale-dialog .entity-modal-actions { padding-top:8px; }
 @media (max-width:600px) { .service-sale-hero { padding:16px; } .service-sale-steps { gap:6px; font-size:9px; } .service-sale-steps i { width:12px; } }
+.product-barcode-field { min-width:0; }
+.product-barcode-control { display:grid; grid-template-columns:minmax(0,1fr) 40px; gap:6px; }
+.barcode-scan-button { display:grid; width:40px; height:40px; place-items:center; border:1px solid #cfe3da; border-radius:6px; background:#edf7f2; color:#147c70; }
+.barcode-scan-button svg,.cash-manual-actions [data-cash-scan-invoice] svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.scanner-dialog { width:min(480px,100%); }
+.scanner-dialog [data-scanner-video] { display:block; width:100%; aspect-ratio:4/3; margin:0 0 12px; border-radius:7px; background:#111916; object-fit:cover; }
+.scanner-dialog [data-scanner-video][hidden] { display:none; }
+.scanner-dialog [data-scanner-status] { margin:0 0 12px; }
+.dark-theme .barcode-scan-button { border-color:#416e61; background:#294b41; color:#a8dfcd; }

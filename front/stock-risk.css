@@ -22,11 +22,42 @@
 .risk-order-details{min-width:330px;max-width:620px;white-space:normal}
 .risk-order-details summary{cursor:pointer;color:var(--teal-dark,#146f45);font-weight:700}
 .risk-order-lines{margin:8px 0 0;padding-left:18px;font-size:12px}
-.risk-order-lines li{padding:3px 0}
+.risk-order-lines li{padding:2px 0;line-height:1.15}
+.risk-report-actions{display:flex;align-items:center;column-gap:8px;row-gap:4px;flex-wrap:wrap}
+.risk-custom-period{display:flex;align-items:center;gap:6px}
+.risk-custom-period input{width:72px;min-width:72px;padding:7px;border:1px solid var(--line,#dfe7e2);border-radius:5px;background:var(--surface,#fff);color:inherit}
+.risk-custom-period[hidden]{display:none}
+#risk-stock-rows td,#risk-expiry-rows td,#risk-recommendation-rows td,#risk-order-rows td,.risk-forecast-table td,.risk-forecast-table th{padding:3px 6px;line-height:1.15;font-size:12px}
+.risk-forecast-table{min-width:900px}
+.risk-product-filter{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px;padding:7px 10px;border:1px solid var(--line);border-radius:5px;background:var(--surface)}
+.risk-product-filter details{position:relative;flex:1;min-width:0}
+.risk-product-filter summary{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:420px;min-height:34px;padding:7px 10px;border:1px solid var(--line);border-radius:4px;background:var(--canvas);color:var(--ink);cursor:pointer;font-size:12px;font-weight:600;list-style:none}
+.risk-product-filter summary::-webkit-details-marker{display:none}
+.risk-product-filter summary::after{width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;content:"";transform:rotate(45deg);transition:transform .15s ease}
+.risk-product-filter details[open] summary::after{transform:rotate(225deg)}
+.risk-product-filter summary:focus-visible{outline:2px solid var(--teal,#198754);outline-offset:2px}
+.risk-product-filter-panel{display:grid;gap:9px;position:absolute;z-index:5;top:calc(100% + 6px);left:0;width:min(420px,calc(100vw - 48px));padding:11px;border:1px solid var(--line);border-radius:5px;background:var(--surface);box-shadow:0 10px 24px rgba(20,40,32,.16)}
+.risk-product-select-all,.risk-product-options label{display:flex;align-items:center;gap:8px;min-width:0;font-size:12px}
+.risk-product-select-all{padding:7px 8px;border-radius:3px;background:var(--canvas);font-weight:600}
+.risk-product-filter-panel>label:not(.risk-product-select-all){display:grid;gap:4px;color:var(--muted);font-size:11px}
+.risk-product-filter-panel input[type="search"]{width:100%;min-height:34px;padding:7px 9px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--ink);font:inherit}
+.risk-product-filter-panel input[type="search"]:focus{border-color:var(--teal);outline:2px solid color-mix(in srgb,var(--teal) 25%,transparent)}
+.risk-product-filter-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:2px 0}
+.risk-product-filter-actions button{padding:2px 0;border:0;background:transparent;color:var(--teal-dark,#146f45);font-size:11px;font-weight:600;text-align:left;text-decoration:underline;text-underline-offset:2px}
+.risk-product-filter-actions button:hover,.risk-product-filter-actions button:focus-visible{color:var(--ink);outline:2px solid var(--teal,#198754);outline-offset:2px}
+.risk-product-filter-actions small{margin-left:auto;color:var(--muted);font-size:11px}
+.risk-product-options{display:grid;gap:1px;max-height:220px;overflow:auto;border-top:1px solid var(--line)}
+.risk-product-options label{padding:6px 5px;border-bottom:1px solid var(--line);cursor:pointer}
+.risk-product-options label:hover{background:var(--canvas)}
+.risk-product-options label[hidden]{display:none}
+.risk-product-options label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.risk-product-options input,.risk-product-select-all input{flex:0 0 auto;accent-color:var(--teal,#198754)}
+.risk-product-filter>small{flex:0 0 auto;color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}
+.risk-report-actions button{flex:0 0 auto;min-height:26px;padding:2px 12px;font-size:12px;line-height:1.2;white-space:nowrap}
 .risk-empty{text-align:center;color:var(--muted,#73807b);padding:16px}
 .risk-expiry-overdue{color:#ad3932;font-weight:700}
 .dark-theme .risk-treasury-item.is-insufficient{background:#472e2c;color:#ffc2ba;border-color:#80504b}
 .dark-theme .risk-status--urgent,.dark-theme .risk-status--expired{background:#542f2c;color:#ffc2ba}
 .dark-theme .risk-status--soon,.dark-theme .risk-status--warning{background:#4b3b22;color:#f5d28e}
 .dark-theme .risk-status--safe{background:#294b36;color:#a8dfbd}
-@media(max-width:720px){.risk-order-details{min-width:260px}.risk-order-actions{min-width:150px}}
+@media(max-width:720px){.risk-order-details{min-width:220px}.risk-order-actions{min-width:140px}.risk-report-actions{width:100%;justify-content:flex-start}.risk-report-actions button{flex:0 0 auto}.risk-product-filter{align-items:stretch;flex-direction:column;gap:5px}.risk-product-filter summary{max-width:none}.risk-product-filter-panel{position:fixed;top:12vh;left:12px;width:calc(100vw - 24px);max-height:76vh;overflow:auto}.risk-product-options{max-height:45vh}.risk-product-filter-actions small{margin-left:0}.risk-custom-period{width:100%}.risk-custom-period select{min-width:0;max-width:100%}}

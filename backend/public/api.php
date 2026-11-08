@@ -54,6 +54,7 @@ try {
     }
     if ($resource === 'succursales' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
         $body['partager_produits_mere'] = !empty($body['partager_produits_mere']) ? 1 : 0;
+        $body['qr_codes_enabled'] = !empty($body['qr_codes_enabled']) ? 1 : 0;
     }
 
     // Les unités sont un référentiel de l'entreprise, administré par son compte propriétaire.
@@ -148,6 +149,25 @@ try {
         if (!$branchCheck->get_result()->fetch_assoc()) JsonResponse::error('La succursale du fournisseur ne correspond pas à votre entreprise.', 422);
     }
     if ($resource === 'produits' && in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
+        if ($method === 'POST' || array_key_exists('code_barre', $body)) {
+            $barcode = trim((string) ($body['code_barre'] ?? ''));
+            if (mb_strlen($barcode, 'UTF-8') > 100) JsonResponse::error('Le code-barres ne peut pas dépasser 100 caractères.', 422);
+            if ($barcode !== '') {
+                $barcodeQuery = AlbaStock\Core\Database::connection()->prepare('SELECT produit_id FROM produits WHERE entreprise_id = ? AND code_barre = ? AND produit_id <> ? LIMIT 1');
+                $excludingProductId = $method === 'POST' ? 0 : (int) ($id ?? 0);
+                $barcodeQuery->bind_param('isi', $enterpriseId, $barcode, $excludingProductId);
+                $barcodeQuery->execute();
+                if ($barcodeQuery->get_result()->fetch_assoc()) JsonResponse::error('Ce code-barres est déjà attribué à un autre produit.', 409);
+            }
+            $body['code_barre'] = $barcode === '' ? null : $barcode;
+        }
+        if ($method === 'POST' || array_key_exists('quantite_fractionnaire', $body)) {
+            $fractionalQuantity = filter_var($body['quantite_fractionnaire'] ?? 0, FILTER_VALIDATE_INT);
+            if ($fractionalQuantity === false || !in_array($fractionalQuantity, [0, 1], true)) {
+                JsonResponse::error('Choisissez un mode de quantité valide.', 422);
+            }
+            $body['quantite_fractionnaire'] = $fractionalQuantity;
+        }
         if ($method === 'POST') {
             $originBranchId = Authorization::canSeeAllBranches($authenticatedUser)
                 ? (int) ($authenticatedUser['main_branch_id'] ?? 0)

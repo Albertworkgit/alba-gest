@@ -20,6 +20,7 @@ export default defineConfig({
         login: fileURLToPath(new URL('./src/login.jsx', import.meta.url)),
         register: fileURLToPath(new URL('./src/register.jsx', import.meta.url)),
         superadminLogin: fileURLToPath(new URL('./src/superadmin-login.jsx', import.meta.url)),
+        qrCode: fileURLToPath(new URL('./src/qr-code.js', import.meta.url)),
       },
       name: 'AlbaStockLogin',
       formats: ['es'],

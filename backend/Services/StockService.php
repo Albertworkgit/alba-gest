@@ -15,7 +15,7 @@ final class StockService
     /** Retourne les produits et leurs quantités, y compris ceux sans ligne de stock. */
     public function list(int $enterpriseId, ?int $branchId = null, ?int $page = null, int $perPage = 20, ?array $productOrigins = null): array
     {
-        $sql = 'SELECT p.produit_id, p.sku, p.name, p.description, p.category_id, c.name AS category_name, p.fournisseur_id, p.unite_de_mesure, u.name AS unit_name, u.symbole AS unit_abbreviation, p.unit_price, p.cost_price, p.monais, p.is_active, st.stock_id, st.succursale_id, b.name AS branch_name, COALESCE(st.quantity, 0) AS quantity, COALESCE(st.min_stock_level, 5) AS min_stock_level, st.updated_at FROM produits p LEFT JOIN categories c ON c.category_id = p.category_id AND c.entreprise_id = p.entreprise_id LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id LEFT JOIN stocks st ON st.produit_id = p.produit_id AND st.entreprise_id = p.entreprise_id' . ($branchId !== null ? ' AND st.succursale_id = ?' : '') . ' LEFT JOIN succursales b ON b.succursale_id = st.succursale_id AND b.entreprise_id = p.entreprise_id';
+        $sql = 'SELECT p.produit_id, p.sku, p.code_barre, p.name, p.description, p.category_id, c.name AS category_name, p.fournisseur_id, p.unite_de_mesure, p.quantite_fractionnaire, u.name AS unit_name, u.symbole AS unit_abbreviation, p.unit_price, p.cost_price, p.monais, p.is_active, st.stock_id, st.succursale_id, b.name AS branch_name, COALESCE(st.quantity, 0) AS quantity, COALESCE(st.min_stock_level, 5) AS min_stock_level, st.updated_at FROM produits p LEFT JOIN categories c ON c.category_id = p.category_id AND c.entreprise_id = p.entreprise_id LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id LEFT JOIN stocks st ON st.produit_id = p.produit_id AND st.entreprise_id = p.entreprise_id' . ($branchId !== null ? ' AND st.succursale_id = ?' : '') . ' LEFT JOIN succursales b ON b.succursale_id = st.succursale_id AND b.entreprise_id = p.entreprise_id';
         $values = [];
         if ($branchId !== null) $values[] = $branchId;
         if ($page !== null) {
@@ -95,15 +95,15 @@ final class StockService
     }
 
     /** Ajoute, retire ou définit une quantité en une transaction. */
-    public function adjust(int $enterpriseId, int $branchId, int $productId, string $operation, int $quantity, ?int $minimum = null, int $userId = 0, ?array $productOrigins = null): array
+    public function adjust(int $enterpriseId, int $branchId, int $productId, string $operation, float $quantity, ?int $minimum = null, int $userId = 0, ?array $productOrigins = null): array
     {
-        if ($branchId < 1 || $productId < 1 || $quantity < 0 || !in_array($operation, ['increase', 'decrease', 'set'], true)) {
+        if ($branchId < 1 || $productId < 1 || !is_finite($quantity) || $quantity < 0 || abs($quantity - round($quantity, 3)) > 0.0000001 || !in_array($operation, ['increase', 'decrease', 'set'], true)) {
             throw new RuntimeException('Succursale, produit, opération ou quantité invalide.');
         }
 
         $this->db->begin_transaction();
         try {
-            $ownershipSql = 'SELECT (SELECT COUNT(*) FROM succursales WHERE succursale_id = ? AND entreprise_id = ?) AS branch_ok, (SELECT COUNT(*) FROM produits WHERE produit_id = ? AND entreprise_id = ? AND is_active = 1';
+            $ownershipSql = 'SELECT (SELECT COUNT(*) FROM succursales WHERE succursale_id = ? AND entreprise_id = ?) AS branch_ok, (SELECT quantite_fractionnaire FROM produits WHERE produit_id = ? AND entreprise_id = ? AND is_active = 1';
             $values = [$branchId, $enterpriseId, $productId, $enterpriseId];
             $ownershipSql .= $this->originCondition($productOrigins, $values, 'succursale_origine_id');
             $ownershipSql .= ') AS product_ok';
@@ -111,15 +111,18 @@ final class StockService
             $this->bindValues($ownership, $values);
             $ownership->execute();
             $valid = $ownership->get_result()->fetch_assoc();
-            if (!$valid || (int) $valid['branch_ok'] !== 1 || (int) $valid['product_ok'] !== 1) {
+            if (!$valid || (int) $valid['branch_ok'] !== 1 || $valid['product_ok'] === null) {
                 throw new RuntimeException('Le produit ou la succursale ne correspond pas à votre entreprise.');
+            }
+            if ((int) $valid['product_ok'] !== 1 && floor($quantity) !== $quantity) {
+                throw new RuntimeException('Ce produit se gère uniquement en quantité entière.');
             }
 
             $lookup = $this->db->prepare('SELECT stock_id, quantity, min_stock_level FROM stocks WHERE entreprise_id = ? AND succursale_id = ? AND produit_id = ? FOR UPDATE');
             $lookup->bind_param('iii', $enterpriseId, $branchId, $productId);
             $lookup->execute();
             $current = $lookup->get_result()->fetch_assoc();
-            $oldQuantity = (int) ($current['quantity'] ?? 0);
+            $oldQuantity = (float) ($current['quantity'] ?? 0);
             $newQuantity = match ($operation) {
                 'increase' => $oldQuantity + $quantity,
                 'decrease' => $oldQuantity - $quantity,
@@ -132,11 +135,11 @@ final class StockService
             if ($current) {
                 $update = $this->db->prepare('UPDATE stocks SET quantity = ?, min_stock_level = ? WHERE stock_id = ? AND entreprise_id = ?');
                 $stockId = (int) $current['stock_id'];
-                $update->bind_param('iiii', $newQuantity, $minimumLevel, $stockId, $enterpriseId);
+                $update->bind_param('diii', $newQuantity, $minimumLevel, $stockId, $enterpriseId);
                 $update->execute();
             } else {
                 $insert = $this->db->prepare('INSERT INTO stocks (entreprise_id, succursale_id, produit_id, quantity, min_stock_level) VALUES (?, ?, ?, ?, ?)');
-                $insert->bind_param('iiiii', $enterpriseId, $branchId, $productId, $newQuantity, $minimumLevel);
+                $insert->bind_param('iiidi', $enterpriseId, $branchId, $productId, $newQuantity, $minimumLevel);
                 $insert->execute();
             }
 
@@ -146,7 +149,7 @@ final class StockService
             $movementType = 'AJUSTEMENT';
             $movement = $this->db->prepare('INSERT INTO mouvements_stock (entreprise_id, succursale_id, produit_id, user_id, movement_type, quantity_before, quantity_moved, quantity_after, reference_type, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
             $referenceType = 'AJUSTEMENT';
-            $movement->bind_param('iiiisiiiss', $enterpriseId, $branchId, $productId, $userId, $movementType, $oldQuantity, $movedQuantity, $newQuantity, $referenceType, $note);
+            $movement->bind_param('iiiisdddss', $enterpriseId, $branchId, $productId, $userId, $movementType, $oldQuantity, $movedQuantity, $newQuantity, $referenceType, $note);
             $movement->execute();
 
             $this->db->commit();

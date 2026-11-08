@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../Core/Database.php';
+require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../Core/PhoneNumberNormalizer.php';
 require_once __DIR__ . '/../Core/JsonResponse.php';
 require_once __DIR__ . '/../Core/Session.php';
@@ -617,7 +618,7 @@ try {
         if (!$actor || $actor['type'] !== 'user') JsonResponse::error('Action réservée à un utilisateur d’entreprise.', 403);
         Authorization::requirePermission($actor, 'creer_approvisionnements');
         $body = json_decode((string) file_get_contents('php://input'), true) ?: [];
-        $quantityReceived = isset($body['quantity_received']) ? filter_var($body['quantity_received'], FILTER_VALIDATE_INT) : null;
+        $quantityReceived = isset($body['quantity_received']) ? filter_var($body['quantity_received'], FILTER_VALIDATE_FLOAT) : null;
         $receivedUnitCost = isset($body['unit_cost']) ? filter_var($body['unit_cost'], FILTER_VALIDATE_FLOAT) : null;
         if ($quantityReceived === false || $receivedUnitCost === false) JsonResponse::error('La quantité reçue ou le coût unitaire est invalide.', 422);
         (new ProcurementService(Database::connection()))->updatePurchaseStatus(

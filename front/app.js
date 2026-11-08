@@ -33,6 +33,8 @@ let salesChartRequest = 0;
 let cashSearchTimer = null;
 let stockRiskData = null;
 let stockRiskRequest = 0;
+let stockRiskSelectedProducts = null;
+let stockRiskProductSearch = '';
 const selectedCashMovementReceipts = new Set();
 function canSelectCompanyBranches(user = sessionUser) {
   if (!user) return false;
@@ -279,6 +281,20 @@ function renderView(viewName) {
         companyPanel.append(cleanup);
       }
       addPhoneNormalizationHints(companyPanel);
+      const companyForm = companyPanel.querySelector('#company-profile-form');
+      let qrSetting = companyPanel.querySelector('[data-enterprise-qr-setting]');
+      if (!qrSetting) {
+        qrSetting = document.createElement('label');
+        qrSetting.className = 'full qr-feature-setting';
+        qrSetting.dataset.enterpriseQrSetting = '';
+        qrSetting.innerHTML = '<span>Autoriser les QR codes sur les pièces justificatives</span><span class="qr-feature-choice"><input type="hidden" name="qr_codes_enabled" value="0"><input type="checkbox" data-enterprise-qr-toggle><span>Activé pour l’entreprise</span></span><small>Les QR ne seront imprimés que si la succursale concernée est aussi autorisée.</small>';
+        companyForm.querySelector('.entity-modal-actions')?.before(qrSetting);
+        const toggle = qrSetting.querySelector('[data-enterprise-qr-toggle]');
+        toggle.addEventListener('change', () => { qrSetting.querySelector('[name="qr_codes_enabled"]').value = toggle.checked ? '1' : '0'; });
+      }
+      const qrToggle = qrSetting.querySelector('[data-enterprise-qr-toggle]');
+      qrToggle.checked = Boolean(sessionUser.enterprise_qr_codes_enabled);
+      qrSetting.querySelector('[name="qr_codes_enabled"]').value = qrToggle.checked ? '1' : '0';
       companyPanel.querySelector('[data-company-name]').value = sessionUser.enterprise_name || '';
       companyPanel.querySelector('[data-company-email]').value = sessionUser.enterprise_email || '';
       companyPanel.querySelector('[data-company-phone]').value = sessionUser.enterprise_phone || '';
@@ -1401,12 +1417,12 @@ async function openSaleForm() {
   let catalog=null;
   const loadCatalog=async()=>{linesBox.querySelectorAll('[data-sale-product]').forEach(select=>{select.disabled=true;select.innerHTML='<option value="">Chargement…</option>';});try{catalog=await fetchReportData('sale-catalog',{succursale_id:branchSelect.value});clientSelect.innerHTML='<option value="">Client comptoir</option>'+catalog.clients.map(c=>`<option value="${Number(c.client_id)}">${escapeHtml(c.name)}</option>`).join('');syncCounterClientField();linesBox.querySelectorAll('[data-sale-line]').forEach(fillSaleProducts);linesBox.querySelectorAll('[data-sale-product]').forEach(select=>{select.disabled=false;if(select.options.length===1)select.options[0].textContent='Aucun produit disponible';});refreshSaleTotal();}catch(error){linesBox.querySelectorAll('[data-sale-product]').forEach(select=>{select.disabled=true;select.innerHTML=`<option value="">${escapeHtml(error.message||'Chargement impossible')}</option>`;});showToast(error.message);}};
   const refreshSaleAvailability=row=>{const select=row.querySelector('[data-sale-product]'),hint=row.querySelector('[data-sale-available-stock]'),option=select.selectedOptions[0];if(!option?.value){hint.textContent='Stock disponible : —';return;}const available=Number(option.dataset.quantity||0),requested=Number(row.querySelector('[data-sale-quantity]').value||0),unit=option.dataset.unit||'';hint.textContent=`Stock disponible dans cette succursale : ${available} ${unit}${requested>available?' · Quantité demandée supérieure au stock':''}`;};
-  const fillSaleProducts=row=>{const select=row.querySelector('[data-sale-product]');if(!catalog)return;const previous=select.value,currency='';select.innerHTML='<option value="">Choisir un produit</option>'+catalog.products.filter(p=>!currency||p.monais===currency).map(p=>`<option value="${Number(p.produit_id)}" data-price="${Number(p.unit_price)}" data-currency="${escapeHtml(p.monais)}" data-quantity="${Number(p.quantity)}" data-unit="${escapeHtml(p.unit_symbol||p.unit_name||'')}" data-perishable="${Number(p.est_perisable)}">${escapeHtml(p.name)} · ${escapeHtml(p.sku)} · ${Number(p.quantity)} ${escapeHtml(p.unit_symbol||p.unit_name||'')} · ${escapeHtml(p.monais)}</option>`).join('');select.value=previous;refreshSaleAvailability(row);};
+  const fillSaleProducts=row=>{const select=row.querySelector('[data-sale-product]');if(!catalog)return;const previous=select.value,currency='';select.innerHTML='<option value="">Choisir un produit</option>'+catalog.products.filter(p=>!currency||p.monais===currency).map(p=>`<option value="${Number(p.produit_id)}" data-price="${Number(p.unit_price)}" data-currency="${escapeHtml(p.monais)}" data-quantity="${Number(p.quantity)}" data-unit="${escapeHtml(p.unit_symbol||p.unit_name||'')}" data-perishable="${Number(p.est_perisable)}" data-fractional="${Number(p.quantite_fractionnaire)}">${escapeHtml(p.name)} · ${escapeHtml(p.sku)} · ${Number(p.quantity)} ${escapeHtml(p.unit_symbol||p.unit_name||'')} · ${escapeHtml(p.monais)}</option>`).join('');select.value=previous;refreshSaleAvailability(row);};
   const refreshSaleLinePrice=row=>{const option=row.querySelector('[data-sale-product]').selectedOptions[0],field=row.querySelector('[data-sale-price-field]'),input=row.querySelector('[data-sale-price]'),manual=Boolean(option?.value)&&Number(option.dataset.price||0)<=0;field.hidden=!manual;field.style.display=manual?'':'none';input.disabled=!manual;input.required=manual;if(!manual)input.value='';};
-  const addLine=()=>{const row=document.createElement('div');row.dataset.saleLine='';row.className='sale-line';row.innerHTML='<label>Produit<select data-sale-product required><option value="">Chargement…</option></select><small data-sale-available-stock role="status">Stock disponible : —</small></label><label>Quantité<input type="number" min="1" step="1" value="1" data-sale-quantity required></label><label data-sale-price-field hidden>Prix de vente<input type="number" min="0.01" step="0.01" data-sale-price disabled></label><label class="sale-discount-toggle"><input type="checkbox" data-sale-discount> Réduction</label><label data-sale-discount-field hidden>Réduction (montant)<input type="number" min="0" step="0.01" value="0" data-sale-discount-amount disabled></label><strong data-sale-line-total>—</strong><button type="button" data-sale-remove aria-label="Retirer le produit">×</button>';linesBox.appendChild(row);fillSaleProducts(row);refreshSaleLinePrice(row);refreshSaleTotal();};
+  const addLine=()=>{const row=document.createElement('div');row.dataset.saleLine='';row.className='sale-line';row.innerHTML='<label>Produit<select data-sale-product required><option value="">Chargement…</option></select><small data-sale-available-stock role="status">Stock disponible : —</small></label><label>Quantité<input type="number" min="0.001" step="any" value="1" data-sale-quantity required></label><label data-sale-price-field hidden>Prix de vente<input type="number" min="0.01" step="0.01" data-sale-price disabled></label><label class="sale-discount-toggle"><input type="checkbox" data-sale-discount> Réduction</label><label data-sale-discount-field hidden>Réduction (montant)<input type="number" min="0" step="0.01" value="0" data-sale-discount-amount disabled></label><strong data-sale-line-total>—</strong><button type="button" data-sale-remove aria-label="Retirer le produit">×</button>';linesBox.appendChild(row);fillSaleProducts(row);refreshSaleLinePrice(row);refreshSaleTotal();};
   function refreshSaleTotal(){const totals=new Map();linesBox.querySelectorAll('[data-sale-line]').forEach(row=>{const option=row.querySelector('[data-sale-product]').selectedOptions[0],savedPrice=Number(option?.dataset.price||0),price=savedPrice>0?savedPrice:Number(row.querySelector('[data-sale-price]').value||0),qty=Number(row.querySelector('[data-sale-quantity]').value||0),gross=price*qty,reduced=row.querySelector('[data-sale-discount]').checked,discount=reduced?Math.min(gross,Number(row.querySelector('[data-sale-discount-amount]').value||0)):0,line=Math.max(0,gross-discount),currency=option?.dataset.currency||'';if(currency)totals.set(currency,(totals.get(currency)||0)+line);row.querySelector('[data-sale-line-total]').textContent=moneyCurrencyLabel(line,currency);});const summary=[...totals].map(([currency,total])=>moneyCurrencyLabel(total,currency)).join(' · ')||moneyCurrencyLabel(0,'');const itemCount=[...linesBox.querySelectorAll('[data-sale-line]')].reduce((count,row)=>count+Number(row.querySelector('[data-sale-quantity]').value||0),0);modal.querySelector('[data-sale-total]').textContent=`Totaux par monnaie : ${summary} · ${itemCount} article(s)`;}
-  addLine();await loadCatalog();branchSelect.addEventListener('change',loadCatalog);modal.querySelector('[data-sale-add-line]').addEventListener('click',addLine);linesBox.addEventListener('input',event=>{if(event.target.matches('[data-sale-quantity]'))refreshSaleAvailability(event.target.closest('[data-sale-line]'));if(event.target.matches('[data-sale-quantity],[data-sale-price],[data-sale-discount-amount]'))refreshSaleTotal();});linesBox.addEventListener('change',event=>{const row=event.target.closest('[data-sale-line]');if(event.target.matches('[data-sale-discount]')){const field=row.querySelector('[data-sale-discount-field]'),input=row.querySelector('[data-sale-discount-amount]');field.hidden=!event.target.checked;input.disabled=!event.target.checked;if(!event.target.checked)input.value='0';}if(event.target.matches('[data-sale-product]')){refreshSaleAvailability(row);refreshSaleLinePrice(row);}refreshSaleTotal();});linesBox.addEventListener('click',event=>{if(event.target.closest('[data-sale-remove]')){event.target.closest('[data-sale-line]').remove();refreshSaleTotal();}});modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());
-  form.addEventListener('submit',async event=>{event.preventDefault();const items=[...linesBox.querySelectorAll('[data-sale-line]')].map(row=>({produit_id:Number(row.querySelector('[data-sale-product]').value),quantity:Number(row.querySelector('[data-sale-quantity]').value),unit_price:Number(row.querySelector('[data-sale-price]').value||0),discount_enabled:row.querySelector('[data-sale-discount]').checked?1:0,discount_amount:Number(row.querySelector('[data-sale-discount-amount]').value||0)}));if(items.some(item=>!item.produit_id)){showToast('Choisissez un produit sur chaque ligne.');return;}if([...linesBox.querySelectorAll('[data-sale-line]')].some(row=>{const option=row.querySelector('[data-sale-product]').selectedOptions[0];return Number(option?.dataset.price||0)<=0&&Number(row.querySelector('[data-sale-price]').value||0)<=0;})){showToast('Saisissez un prix de vente positif pour chaque produit concerné.');return;}const body={invoice_no:form.elements.namedItem('invoice_no').value.trim(),succursale_id:Number(branchSelect.value),caisse_id:null,client_id:clientSelect.value||null,client_comptoir_name:clientSelect.value?'':counterClientInput.value.trim(),items};try{const response=await fetch('../backend/public/auth.php?action=create-sale',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Enregistrement de la vente impossible.');modal.remove();showToast('Vente enregistrée. La facture est disponible dans la liste.');loadSalesRows();loadCashRows();loadStock();}catch(error){showToast(error.message);}});
+  addLine();await loadCatalog();branchSelect.addEventListener('change',loadCatalog);modal.querySelector('[data-sale-add-line]').addEventListener('click',addLine);linesBox.addEventListener('input',event=>{if(event.target.matches('[data-sale-quantity]'))refreshSaleAvailability(event.target.closest('[data-sale-line]'));if(event.target.matches('[data-sale-quantity],[data-sale-price],[data-sale-discount-amount]'))refreshSaleTotal();});linesBox.addEventListener('change',event=>{const row=event.target.closest('[data-sale-line]');if(event.target.matches('[data-sale-discount]')){const field=row.querySelector('[data-sale-discount-field]'),input=row.querySelector('[data-sale-discount-amount]');field.hidden=!event.target.checked;input.disabled=!event.target.checked;if(!event.target.checked)input.value='0';}if(event.target.matches('[data-sale-product]')){const quantityInput=row.querySelector('[data-sale-quantity]'),fractional=event.target.selectedOptions[0]?.dataset.fractional==='1';quantityInput.min='0.001';quantityInput.step='any';if(!fractional&&!Number.isInteger(Number(quantityInput.value)))quantityInput.value='1';refreshSaleAvailability(row);refreshSaleLinePrice(row);}refreshSaleTotal();});linesBox.addEventListener('click',event=>{if(event.target.closest('[data-sale-remove]')){event.target.closest('[data-sale-line]').remove();refreshSaleTotal();}});modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());
+  form.addEventListener('submit',async event=>{event.preventDefault();const rows=[...linesBox.querySelectorAll('[data-sale-line]')];if(rows.some(row=>!row.querySelector('[data-sale-product]').value)){showToast('Choisissez un produit sur chaque ligne.');return;}if(rows.some(row=>{const option=row.querySelector('[data-sale-product]').selectedOptions[0],quantity=Number(row.querySelector('[data-sale-quantity]').value);return option.dataset.fractional!=='1'&&Number.isFinite(quantity)&&!Number.isInteger(quantity);})){showToast('Ce produit est suivi individuellement. Saisissez un nombre entier, sans virgule (ex. 1, 2 ou 3).');return;}if(rows.some(row=>{const quantity=Number(row.querySelector('[data-sale-quantity]').value);return !Number.isFinite(quantity)||quantity<=0;})){showToast('Saisissez une quantité supérieure à zéro.');return;}const items=rows.map(row=>({produit_id:Number(row.querySelector('[data-sale-product]').value),quantity:Number(row.querySelector('[data-sale-quantity]').value),unit_price:Number(row.querySelector('[data-sale-price]').value||0),discount_enabled:row.querySelector('[data-sale-discount]').checked?1:0,discount_amount:Number(row.querySelector('[data-sale-discount-amount]').value||0)}));if(rows.some(row=>{const option=row.querySelector('[data-sale-product]').selectedOptions[0];return Number(option?.dataset.price||0)<=0&&Number(row.querySelector('[data-sale-price]').value||0)<=0;})){showToast('Saisissez un prix de vente positif pour chaque produit concerné.');return;}const body={invoice_no:form.elements.namedItem('invoice_no').value.trim(),succursale_id:Number(branchSelect.value),caisse_id:null,client_id:clientSelect.value||null,client_comptoir_name:clientSelect.value?'':counterClientInput.value.trim(),items};try{const response=await fetch('../backend/public/auth.php?action=create-sale',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)});const result=await readJson(response);if(!response.ok||!result.success)throw new Error(result.message||'Enregistrement de la vente impossible.');modal.remove();showToast('Vente enregistrée. La facture est disponible dans la liste.');loadSalesRows();loadCashRows();loadStock();}catch(error){showToast(error.message);}});
 }
 async function openServiceSaleForm() {
   if (!hasAccess('creer_ventes')) return;
@@ -1814,6 +1830,25 @@ async function loadExchangeRates() {
 }
 async function loadCashRows(page = 1, movementPage = 1, externalPage = 1, debtPage = 1) {
   const body = document.getElementById('cash-rows'); if (!body) return;
+  const manualActions = container.querySelector('.cash-manual-actions');
+  const activeCashBranchId = activeBranchId || (!canSelectCompanyBranches() ? sessionUser?.succursale_id : null);
+  const activeCashBranchAllowsQr = activeCashBranchId
+    ? qrCodesAllowedAtBranch(activeCashBranchId)
+    : branchOptions.some(branch => qrCodesAllowedAtBranch(branch.succursale_id));
+  const canScanInvoice = hasAccess('modifier_caisse') && activeCashBranchAllowsQr;
+  if (!canScanInvoice) manualActions?.querySelector('[data-cash-scan-invoice]')?.remove();
+  if (manualActions && canScanInvoice && !manualActions.querySelector('[data-cash-scan-invoice]')) {
+    manualActions.insertAdjacentHTML('beforeend', '<button type="button" class="cash-action-button cash-action-in" data-cash-scan-invoice aria-label="Scanner une facture pour enregistrer son paiement"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3m8 0h3a1 1 0 0 1 1 1v3M4 16v3a1 1 0 0 0 1 1h3m8 0h3a1 1 0 0 0 1-1v-3"/><path d="M8 12h8m-7-3v6m6-6v6"/></svg><span>Scanner une facture</span></button>');
+    manualActions.querySelector('[data-cash-scan-invoice]').addEventListener('click', () => openCameraCodeScanner({
+      title: 'Scanner une facture',
+      placeholder: 'Code QR de facture ou identifiant de vente',
+      onCode: async value => {
+        const saleId = scannedInvoiceId(value);
+        if (!saleId) { showToast('Ce code ne contient pas une facture reconnue.'); return; }
+        await openSalePaymentById(saleId);
+      },
+    }));
+  }
   try {
     const {from,to,search}=reportFilterValues();
     const searchParams = {...(search ? {recherche:search} : {}),...(from ? {date_debut:from} : {}),...(to ? {date_fin:to} : {})};
@@ -2251,7 +2286,9 @@ function cashMovementReceiptMarkup(movement, compact = false) {
     ? `<p><strong>Dette N° :</strong> ${Number(movement.dette_id)}</p><p><strong>Payé par :</strong> ${escapeHtml(movement.dette_beneficiaire || '—')}</p>${movement.dette_description ? `<p><strong>Description de la dette :</strong> ${escapeHtml(movement.dette_description)}</p>` : ''}`
     : '';
   const heading = isOut ? 'BON DE SORTIE DE CAISSE' : isDebtRepayment ? 'REÇU DE PAIEMENT' : 'REÇU D’ENTRÉE EN CAISSE';
-  return `<section class="cash-movement-voucher cash-movement-voucher--${isOut?'out':'in'}${compact?' cash-receipt-card':''}"><div class="cash-movement-heading"><div class="cash-movement-company">${companyLogoMarkup()}<div><h1>${heading}</h1><p>${escapeHtml(movement.enterprise_name || sessionUser?.enterprise_name || 'ALBA-GEST')}</p></div></div><strong>N° ${Number(movement.mouvement_id)}</strong></div><div class="cash-movement-details"><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}${debtDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason || '—')}</p>${debtConversion}<p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p></div><div class="cash-movement-amount">Montant ${isOut ? 'sorti' : 'reçu'} : ${moneyCurrencyLabel(movement.amount, movement.monais)}</div>${signatures}</section>`;
+  const qrPayload = {type:heading, numero:Number(movement.mouvement_id), date:movement.movement_date, caisse:movement.cash_name, succursale:movement.branch_name, mode:movement.payment_mode || 'Caisse', banque:movement.bank_name || null, reference_bancaire:movement.bank_reference || null, montant:Number(movement.amount), monnaie:movement.monais, motif:movement.reason || '', caissier:movement.cashier || ''};
+  const qr = documentQrMarkup(movement.branch_id, qrPayload);
+  return `<section class="cash-movement-voucher cash-movement-voucher--${isOut?'out':'in'}${compact?' cash-receipt-card':''}"><div class="cash-movement-heading"><div class="cash-movement-company">${companyLogoMarkup()}<div><h1>${heading}</h1><p>${escapeHtml(movement.enterprise_name || sessionUser?.enterprise_name || 'ALBA-GEST')}</p></div></div><strong>N° ${Number(movement.mouvement_id)}</strong></div><div class="cash-movement-details"><p><strong>Date :</strong> ${escapeHtml(dateLabel(movement.movement_date))}</p><p><strong>Caisse :</strong> ${escapeHtml(movement.cash_name)} · ${escapeHtml(movement.monais)}</p><p><strong>Succursale :</strong> ${escapeHtml(movement.branch_name)}</p><p><strong>Mode de paiement :</strong> ${escapeHtml(movement.payment_mode || 'Caisse')}</p>${bankDetails}${debtDetails}<p><strong>Motif :</strong> ${escapeHtml(movement.reason || '—')}</p>${debtConversion}<p><strong>Caissier :</strong> ${escapeHtml(movement.cashier || '—')}</p></div><div class="cash-movement-amount">Montant ${isOut ? 'sorti' : 'reçu'} : ${moneyCurrencyLabel(movement.amount, movement.monais)}</div>${qr}${signatures}</section>`;
 }
 async function printCashMovementReceipt(movementId, printWindow) {
   if (movementId < 1) throw new Error('Identifiant du mouvement invalide.');
@@ -2358,7 +2395,7 @@ function renderPurchaseRow(item, currencies = []) {
   const supplierLabel = item.movement_type === 'OUT' ? '' : (item.supplier_name || 'Fournisseur non défini');
   const pendingAction = isForecastPurchase
     ? hasAccess('creer_approvisionnements')
-      ? `<button type="button" data-purchase-receive="${Number(item.achat_id)}" data-quantity="${Number(item.total_quantity || 0)}" data-unit-cost="${Number(item.unit_cost || 0)}" data-expiration="${escapeHtml(item.date_expiration || '')}" data-perishable="${item.is_perishable ? '1' : '0'}">Réceptionner</button>`
+      ? `<button type="button" data-purchase-receive="${Number(item.achat_id)}" data-quantity="${Number(item.total_quantity || 0)}" data-unit-cost="${Number(item.unit_cost || 0)}" data-expiration="${escapeHtml(item.date_expiration || '')}" data-perishable="${item.is_perishable ? '1' : '0'}" data-fractional="${item.quantite_fractionnaire ? '1' : '0'}">Réceptionner</button>`
       : 'Réception en attente'
     : '<button type="button" data-purchase-validate="' + Number(item.achat_id) + '">Valider</button>';
   const statusLabel = isForecastPurchase && item.status === 'PENDING' ? 'Prévisionnel · en attente' : purchaseStatusLabel(item.status);
@@ -2392,9 +2429,10 @@ function openForecastPurchaseReceipt(button) {
   const quantity = Number(button.dataset.quantity || 0);
   const unitCost = Number(button.dataset.unitCost || 0);
   const isPerishable = button.dataset.perishable === '1';
+  const isFractional = button.dataset.fractional === '1';
   const modal = document.createElement('div');
   modal.className = 'entity-modal';
-  modal.innerHTML = `<section class="entity-dialog"><h2>Réceptionner l’approvisionnement</h2><p>Vérifiez les quantités reçues et le coût réel. Le stock ne sera mis à jour qu’après confirmation.</p><form class="entity-form"><label>Quantité reçue<input name="quantity_received" type="number" min="1" step="1" value="${quantity}" required></label><label>Coût d’entrée unitaire<input name="unit_cost" type="number" min="0.01" step="0.01" value="${unitCost}" required></label><label class="full">Date d’expiration ${isPerishable ? '<span aria-hidden="true">*</span>' : '<span>(facultative)</span>'}<input name="date_expiration" type="date" ${isPerishable ? 'required' : ''} value="${escapeHtml(button.dataset.expiration || '')}"></label><p class="panel-subtitle full">${isPerishable ? 'La date d’expiration est obligatoire pour ce produit périssable.' : 'Renseignez une date uniquement si le lot porte une date d’expiration.'}</p><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button type="submit" class="modal-submit">Enregistrer la réception</button></div></form></section>`;
+  modal.innerHTML = `<section class="entity-dialog"><h2>Réceptionner l’approvisionnement</h2><p>Vérifiez les quantités reçues et le coût réel. Le stock ne sera mis à jour qu’après confirmation.</p><form class="entity-form"><label>Quantité reçue<input name="quantity_received" type="number" min="0.001" step="any" value="${quantity}" required></label><label>Coût d’entrée unitaire<input name="unit_cost" type="number" min="0.01" step="0.01" value="${unitCost}" required></label><label class="full">Date d’expiration ${isPerishable ? '<span aria-hidden="true">*</span>' : '<span>(facultative)</span>'}<input name="date_expiration" type="date" ${isPerishable ? 'required' : ''} value="${escapeHtml(button.dataset.expiration || '')}"></label><p class="panel-subtitle full">${isPerishable ? 'La date d’expiration est obligatoire pour ce produit périssable.' : 'Renseignez une date uniquement si le lot porte une date d’expiration.'}</p><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button type="submit" class="modal-submit">Enregistrer la réception</button></div></form></section>`;
   document.body.appendChild(modal);
   modal.querySelector('.modal-cancel').addEventListener('click', () => modal.remove());
   modal.addEventListener('click', event => { if (event.target === modal) modal.remove(); });
@@ -2405,7 +2443,11 @@ function openForecastPurchaseReceipt(button) {
     const quantityReceived = Number(formData.get('quantity_received'));
     const receivedUnitCost = Number(formData.get('unit_cost'));
     const expirationDate = String(formData.get('date_expiration') || '').trim() || null;
-    if (!Number.isInteger(quantityReceived) || quantityReceived < 1 || !Number.isFinite(receivedUnitCost) || receivedUnitCost <= 0) {
+    if (!isFractional && Number.isFinite(quantityReceived) && !Number.isInteger(quantityReceived)) {
+      showToast('Ce produit est suivi individuellement. Saisissez un nombre entier, sans virgule (ex. 1, 2 ou 3).');
+      return;
+    }
+    if (!Number.isFinite(quantityReceived) || quantityReceived < (isFractional ? 0.001 : 1) || (!isFractional && !Number.isInteger(quantityReceived)) || !Number.isFinite(receivedUnitCost) || receivedUnitCost <= 0) {
       showToast('Saisissez une quantité reçue et un coût unitaire supérieurs à zéro.');
       return;
     }
@@ -3142,7 +3184,13 @@ async function loadSession() {
     document.querySelectorAll('[data-settings-role]').forEach(node => node.textContent = user.role_name || 'Utilisateur');
     applyMenuAccess(user);
     await configureCompanyScope(user);
-    navigate(routeFromHash(), true);
+    const paymentInvoiceId = Number(new URLSearchParams(window.location.search).get('payment_invoice') || 0);
+    if (Number.isSafeInteger(paymentInvoiceId) && paymentInvoiceId > 0) {
+      navigate('cash', true);
+      await openSalePaymentById(paymentInvoiceId);
+    } else {
+      navigate(routeFromHash(), true);
+    }
   } catch (error) { showToast(`Problème de session : ${error.message}`); }
 }
 async function configureCompanyScope(user) {
@@ -3150,7 +3198,7 @@ async function configureCompanyScope(user) {
   const select = document.getElementById('company-scope');
   if (!control || !select) return;
   if (!canSelectCompanyBranches(user)) {
-    branchOptions = user.succursale_id ? [{succursale_id:user.succursale_id, name:user.branch_name || 'Ma succursale'}] : [];
+    branchOptions = user.succursale_id ? [{succursale_id:user.succursale_id, name:user.branch_name || 'Ma succursale', qr_codes_enabled:user.branch_qr_codes_enabled}] : [];
     control.hidden = true;
     return;
   }
@@ -3224,7 +3272,7 @@ function renderStockRows() {
   const unitNames = Object.fromEntries((stockData.units || []).map(unit => [unit.unite_mesure_id, unit.symbole || unit.name]));
   const stocks = stockData.stocks.filter(stock => !branchId || stock.stock_id === null || Number(stock.succursale_id) === Number(branchId));
   const categoryId = document.getElementById('stock-category-filter')?.value || '';
-  const products = stockData.products.filter(product => Number(product.is_active ?? 1) === 1 && `${product.name} ${product.sku}`.toLocaleLowerCase().includes(search) && (!categoryId || Number(product.category_id) === Number(categoryId)));
+  const products = stockData.products.filter(product => Number(product.is_active ?? 1) === 1 && `${product.name} ${product.sku} ${product.code_barre || ''}`.toLocaleLowerCase().includes(search) && (!categoryId || Number(product.category_id) === Number(categoryId)));
   const filteredProducts = products.filter(product => {
     const productStocks = stocks.filter(stock => Number(stock.produit_id) === Number(product.produit_id));
     const quantity = productStocks.reduce((sum, stock) => sum + Number(stock.quantity || 0), 0);
@@ -3248,7 +3296,7 @@ function renderStockProductRow(product, productStocks, unitOverride = '') {
   const status = quantity === 0 ? ['Rupture','danger'] : quantity <= threshold ? ['Stock bas','danger'] : ['En stock','success'];
   const unit = unitOverride || product.unit_abbreviation || product.unit_name || '';
   const isSelected = Number(product.produit_id) === selectedStockProductId;
-  return `<tr class="stock-product-card${isSelected ? ' selected' : ''}" data-stock-product-id="${Number(product.produit_id)}"><td class="stock-card-identity"><span class="stock-card-sku">${escapeHtml(product.sku)}</span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.category_name || 'Sans catégorie')}</small></td><td class="stock-card-quantity"><strong>${quantity.toLocaleString('fr-FR')} <small>${escapeHtml(unit)}</small></strong><span class="status ${status[1]}">${status[0]}</span></td><td class="stock-card-price"><span>Prix de vente</span><strong>${Number(product.unit_price || 0).toFixed(2)} ${escapeHtml(product.monais || '')}</strong></td><td class="stock-card-open"><button type="button" class="stock-card-select" data-select-stock-product="${Number(product.produit_id)}" aria-label="Afficher les détails de ${escapeHtml(product.name)}">Détails <span aria-hidden="true">›</span></button></td></tr>`;
+  return `<tr class="stock-product-card${isSelected ? ' selected' : ''}" data-stock-product-id="${Number(product.produit_id)}"><td class="stock-card-identity"><span class="stock-card-sku">${escapeHtml(product.sku)}</span><strong>${escapeHtml(product.name)}</strong><small>${escapeHtml(product.category_name || 'Sans catégorie')}${product.code_barre ? ` · CB ${escapeHtml(product.code_barre)}` : ''}</small></td><td class="stock-card-quantity"><strong>${quantity.toLocaleString('fr-FR')} <small>${escapeHtml(unit)}</small></strong><span class="status ${status[1]}">${status[0]}</span></td><td class="stock-card-price"><span>Prix de vente</span><strong>${Number(product.unit_price || 0).toFixed(2)} ${escapeHtml(product.monais || '')}</strong></td><td class="stock-card-open"><button type="button" class="stock-card-select" data-select-stock-product="${Number(product.produit_id)}" aria-label="Afficher les détails de ${escapeHtml(product.name)}">Détails <span aria-hidden="true">›</span></button></td></tr>`;
 }
 function renderSelectedStockProduct(product, stocks, unitNames) {
   const details = document.getElementById('stock-product-details');
@@ -3262,7 +3310,7 @@ function renderSelectedStockProduct(product, stocks, unitNames) {
   const adjustButton = hasAccess('modifier_stock') ? `<button type="button" class="stock-detail-action stock-detail-primary" data-stock-edit="${Number(product.produit_id)}">Ajuster le stock</button>` : '';
   const editButton = hasAccess('modifier_produit') ? `<button type="button" class="stock-detail-action" data-product-edit="${Number(product.produit_id)}">Modifier le produit</button>` : '';
   const deleteButton = hasAccess('supprimer_produit') ? `<button type="button" class="stock-detail-action stock-detail-danger" data-product-delete="${Number(product.produit_id)}">Supprimer</button>` : '';
-  details.innerHTML = `<p class="kicker">PRODUIT SÉLECTIONNÉ</p><div class="stock-detail-heading"><span class="stock-detail-mark" aria-hidden="true">▦</span><div><h2>${escapeHtml(product.name)}</h2><p>${escapeHtml(product.sku)} · ${escapeHtml(product.category_name || 'Sans catégorie')}</p></div></div><div class="stock-detail-status"><span class="status ${status[1]}">${status[0]}</span><span>Seuil : ${threshold.toLocaleString('fr-FR')} ${escapeHtml(unit)}</span></div><div class="stock-detail-quantity"><span>Quantité disponible</span><strong>${quantity.toLocaleString('fr-FR')} <small>${escapeHtml(unit)}</small></strong></div><dl class="stock-detail-facts"><div><dt>Prix de vente</dt><dd>${Number(product.unit_price || 0).toFixed(2)} ${escapeHtml(product.monais || '')}</dd></div><div><dt>Prix d’achat</dt><dd>${Number(product.cost_price || 0).toFixed(2)} ${escapeHtml(product.monais || '')}</dd></div><div><dt>Unité de mesure</dt><dd>${escapeHtml(product.unit_name || unit || '—')}</dd></div></dl>${product.description ? `<p class="stock-detail-description">${escapeHtml(product.description)}</p>` : ''}<div class="stock-detail-actions">${adjustButton}${stockCardButton}${editButton}${deleteButton}</div>`;
+  details.innerHTML = `<p class="kicker">PRODUIT SÉLECTIONNÉ</p><div class="stock-detail-heading"><span class="stock-detail-mark" aria-hidden="true">▦</span><div><h2>${escapeHtml(product.name)}</h2><p>${escapeHtml(product.sku)} · ${escapeHtml(product.category_name || 'Sans catégorie')}</p></div></div><div class="stock-detail-status"><span class="status ${status[1]}">${status[0]}</span><span>Seuil : ${threshold.toLocaleString('fr-FR')} ${escapeHtml(unit)}</span></div><div class="stock-detail-quantity"><span>Quantité disponible</span><strong>${quantity.toLocaleString('fr-FR')} <small>${escapeHtml(unit)}</small></strong></div><dl class="stock-detail-facts">${product.code_barre ? `<div><dt>Code-barres</dt><dd>${escapeHtml(product.code_barre)}</dd></div>` : ''}<div><dt>Prix de vente</dt><dd>${Number(product.unit_price || 0).toFixed(2)} ${escapeHtml(product.monais || '')}</dd></div><div><dt>Prix d’achat</dt><dd>${Number(product.cost_price || 0).toFixed(2)} ${escapeHtml(product.monais || '')}</dd></div><div><dt>Unité de mesure</dt><dd>${escapeHtml(product.unit_name || unit || '—')}</dd></div></dl>${product.description ? `<p class="stock-detail-description">${escapeHtml(product.description)}</p>` : ''}<div class="stock-detail-actions">${adjustButton}${stockCardButton}${editButton}${deleteButton}</div>`;
 }
 async function allStockProductRows() {
   const branchId = document.getElementById('stock-branch')?.value || '';
@@ -3325,9 +3373,9 @@ function openUnitManager() {
 }
 function openEntityForm(type, entity = null) {
   const definitions = {
-    product: {title: 'Créer un produit', endpoint: '../backend/public/api.php?resource=produits', fields: '<label>Référence du produit<input name="sku" required></label><label>Nom du produit<input name="name" required></label><label>Catégorie<select name="category_id" id="product-category"><option value="">Sans catégorie</option></select></label><label>Prix de vente<input name="unit_price" type="number" min="0" step="0.01" required></label><label>Prix d’achat<input name="cost_price" type="number" min="0" step="0.01" value="0" required></label><label>Seuil d’alerte du stock<input name="min_stock_level" type="number" min="0" step="1" value="5" required><small>Une alerte s’affiche lorsque le stock atteint ce niveau.</small></label><label>Unit&eacute; de mesure<select name="unite_de_mesure" id="product-unit" required><option value="">Chargement...</option></select></label><label>Monnaie du prix<select name="monais" id="product-currency" required><option value="">Chargement des monnaies…</option></select></label><label><span>Produit périssable</span><input name="est_perisable" type="checkbox" value="1" id="perishable-field"></label><label class="full">Description<textarea name="description"></textarea></label>'},
+    product: {title: 'Créer un produit', endpoint: '../backend/public/api.php?resource=produits', fields: '<label>Référence du produit<input name="sku" required></label><label>Nom du produit<input name="name" required></label><label>Catégorie<select name="category_id" id="product-category"><option value="">Sans catégorie</option></select></label><label>Prix de vente<input name="unit_price" type="number" min="0" step="0.01" required></label><label>Prix d’achat<input name="cost_price" type="number" min="0" step="0.01" value="0" required></label><label>Seuil d’alerte du stock<input name="min_stock_level" type="number" min="0" step="1" value="5" required><small>Une alerte s’affiche lorsque le stock atteint ce niveau.</small></label><label>Unit&eacute; de mesure<select name="unite_de_mesure" id="product-unit" required><option value="">Chargement...</option></select></label><label>Type de quantité<select name="quantite_fractionnaire"><option value="0">Entière (ex. motos)</option><option value="1">Fractionnaire (ex. poids ou volume)</option></select></label><label>Monnaie du prix<select name="monais" id="product-currency" required><option value="">Chargement des monnaies…</option></select></label><label><span>Produit périssable</span><input name="est_perisable" type="checkbox" value="1" id="perishable-field"></label><label class="full">Description<textarea name="description"></textarea></label>'},
     unit: {title: 'Enregistrer une unit&eacute; de mesure', endpoint: '../backend/public/api.php?resource=unites_mesure', fields: '<label>Unit&eacute; de mesure<input name="name" required maxlength="50" placeholder="Ex. Kilogramme"></label><label>Symbole<input name="symbole" required maxlength="15" placeholder="Ex. kg"></label>'},
-    branch: {title:'Créer une succursale', endpoint:'../backend/public/api.php?resource=succursales', fields:'<label>Nom de la succursale<input name="name" required maxlength="100"></label><label>Code unique<input name="code" required maxlength="20" placeholder="Ex. MAG-01"></label><label class="full"><span>Définir comme succursale mère</span><input name="est_sucursal_mere" type="checkbox" value="1"></label><label class="full"><span>Partager les produits du catalogue de la succursale mère</span><input name="partager_produits_mere" type="checkbox" value="1" checked><small>Le stock reste propre à cette succursale.</small></label><label class="full">Adresse<textarea name="address"></textarea></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"></label>'},
+    branch: {title:'Créer une succursale', endpoint:'../backend/public/api.php?resource=succursales', fields:'<label>Nom de la succursale<input name="name" required maxlength="100"></label><label>Code unique<input name="code" required maxlength="20" placeholder="Ex. MAG-01"></label><label class="full"><span>Définir comme succursale mère</span><input name="est_sucursal_mere" type="checkbox" value="1"></label><label class="full"><span>Partager les produits du catalogue de la succursale mère</span><input name="partager_produits_mere" type="checkbox" value="1" checked><small>Le stock reste propre à cette succursale.</small></label><label class="full"><span>Autoriser les QR codes dans cette succursale</span><input name="qr_codes_enabled" type="checkbox" value="1"><small>Les QR nécessitent aussi l’autorisation de l’entreprise.</small></label><label class="full">Adresse<textarea name="address"></textarea></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"></label>'},
     client: {title:'Cr\u00e9er un client', endpoint:'../backend/public/api.php?resource=clients', fields:'<label>Nom du client<input name="name" required maxlength="100"></label><label>Adresse \u00e9lectronique<input name="email" type="email" maxlength="100"></label><label>T\u00e9l\u00e9phone<input name="phone" maxlength="20"></label><label class="full">Adresse<textarea name="address"></textarea></label>'},
     supplier: {title:'Créer un fournisseur', endpoint:'../backend/public/api.php?resource=fournisseurs', fields:'<label>Nom du fournisseur<input name="name" required maxlength="100"></label><label>Personne de contact<input name="contact_name" maxlength="100"></label><label>Adresse électronique<input name="email" type="email" maxlength="100"></label><label>Téléphone<input name="phone" data-company-phone maxlength="20"><small>Un numéro qui commence par 0 sera enregistré avec +243 à la place du premier 0.</small></label><label class="full">Adresse<textarea name="address"></textarea></label>'},
     user: {title: 'Créer un utilisateur', endpoint: '../backend/public/auth.php?action=create-user', fields: '<label>Nom complet<input name="full_name" required></label><label>Nom d’utilisateur<input name="username" required></label><label>Adresse électronique<input name="email" type="email" required></label><label>Mot de passe<input name="password" type="password" minlength="4" data-password-feedback required></label><label>Rôle d’accès<select name="role_id" id="user-role" required><option value="">Chargement des rôles…</option></select></label><label>Succursale<select name="succursale_id" id="user-branch"><option value="">Entreprise mère (sans succursale)</option></select></label><label class="full"><span>Compte actif</span><input name="is_active" type="checkbox" value="1" checked></label>'},
@@ -3344,12 +3392,31 @@ function openEntityForm(type, entity = null) {
   modal.className = 'entity-modal';
   const entityTitle = type === 'unit' && entity ? 'Modifier une unit&eacute; de mesure' : (entity ? definition.title.replace('Créer', 'Modifier') : definition.title);
   modal.innerHTML = `<section class="entity-dialog"><h2>${entityTitle}</h2><p>${modalHint}</p><form class="entity-form">${definition.fields}<div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">${entity ? 'Enregistrer les modifications' : 'Enregistrer'}</button></div></form></section>`;
+  if (type === 'product') {
+    const trackingLabel = modal.querySelector('[name="quantite_fractionnaire"]').closest('label');
+    trackingLabel.outerHTML = '<fieldset class="product-tracking-type"><legend>Type de suivi</legend><label><input type="radio" name="quantite_fractionnaire" value="0" required> Individuel</label><label><input type="radio" name="quantite_fractionnaire" value="1" required> Quantité</label></fieldset>';
+    const barcodeLabel = document.createElement('label');
+    barcodeLabel.className = 'product-barcode-field';
+    barcodeLabel.innerHTML = `<span>Code-barres (facultatif)</span><div class="product-barcode-control"><input name="code_barre" maxlength="100" autocomplete="off" value="${escapeHtml(entity?.code_barre || '')}" placeholder="Saisir ou scanner le code"><button type="button" class="barcode-scan-button" data-product-barcode-scan aria-label="Scanner le code-barres"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3m8 0h3a1 1 0 0 1 1 1v3M4 16v3a1 1 0 0 0 1 1h3m8 0h3a1 1 0 0 0 1-1v-3"/><path d="M8 12h8m-7-3v6m6-6v6"/></svg></button></div>`;
+    modal.querySelector('[name="sku"]').closest('label').after(barcodeLabel);
+  }
   if (type === 'purchase') {
     modal.querySelector('#purchase-add-supplier')?.remove();
     modal.querySelector('#purchase-new-supplier')?.remove();
   }
   document.body.appendChild(modal);
   const form = modal.querySelector('form');
+  if (type === 'product') {
+    modal.querySelector('[data-product-barcode-scan]').addEventListener('click', () => openCameraCodeScanner({
+      title: 'Scanner un code-barres produit',
+      placeholder: 'Code-barres du produit',
+      onCode: value => { form.elements.namedItem('code_barre').value = value; },
+    }));
+  }
+  if (type === 'purchase') {
+    form.elements.namedItem('quantity').min = '0.001';
+    form.elements.namedItem('quantity').step = 'any';
+  }
   const formMessage = document.createElement('div');
   formMessage.className = 'entity-form-message full';
   formMessage.setAttribute('role', 'alert');
@@ -3566,6 +3633,7 @@ function openEntityForm(type, entity = null) {
 
         currencySelect.value = entity.monais || '';
         unitSelect.value = entity.unite_de_mesure || '';
+        modal.querySelectorAll('input[name="quantite_fractionnaire"]').forEach(radio => { radio.checked = Number(radio.value) === Number(entity.quantite_fractionnaire || 0); });
       }
     }).catch(error => showToast(error.message));
   }
@@ -3644,8 +3712,14 @@ function openEntityForm(type, entity = null) {
         productSelect.value = selected ? String(selected.produit_id) : '';
         productSelect.dataset.costPrice = selected ? String(Number(selected.cost_price || 0)) : '';
         productSelect.dataset.perishable = selected ? String(Number(selected.est_perisable || 0)) : '0';
+        productSelect.dataset.fractional = selected ? String(Number(selected.quantite_fractionnaire || 0)) : '0';
         const selectedUnit = selected ? units.find(item => Number(item.unite_mesure_id) === Number(selected.unite_de_mesure)) : null;
-        productSearch.closest('form').elements.namedItem('quantity').closest('label').firstChild.textContent = selected ? `Quantité (${selectedUnit?.symbole || selectedUnit?.name || 'unité'})` : 'Quantité';
+        const quantityField = productSearch.closest('form').elements.namedItem('quantity');
+        quantityField.closest('label').firstChild.textContent = selected ? `Quantité (${selectedUnit?.symbole || selectedUnit?.name || 'unité'})` : 'Quantité';
+        const fractionalQuantity = Number(selected?.quantite_fractionnaire) === 1;
+        quantityField.min = '0.001';
+        quantityField.step = 'any';
+        if (selected && !fractionalQuantity && !Number.isInteger(Number(quantityField.value))) quantityField.value = '1';
         expirationInput.value = '';
         refreshPerishableFields();
         const useSavedCost = modal.querySelector('#purchase-use-product-cost');
@@ -3682,6 +3756,10 @@ function openEntityForm(type, entity = null) {
       data.unit_cost_mode = outgoing ? 'NONE' : (modal.querySelector('#purchase-use-product-cost').checked ? 'PRODUCT' : 'CUSTOM');
       if (outgoing) data.unit_cost = 0;
       if (!data.produit_id) { showFormError('Choisissez un produit dans les résultats proposés.'); return; }
+      const quantity = Number(data.quantity);
+      const fractionalQuantity = modal.querySelector('#purchase-product').dataset.fractional === '1';
+      if (!Number.isFinite(quantity) || quantity <= 0) { showFormError('Saisissez une quantité supérieure à zéro.'); return; }
+      if (!fractionalQuantity && !Number.isInteger(quantity)) { showFormError('Ce produit est suivi individuellement. Saisissez un nombre entier, sans virgule (ex. 1, 2 ou 3).'); return; }
       const selectedProductIsPerishable = Number(modal.querySelector('#purchase-product').dataset.perishable) === 1;
       if (selectedProductIsPerishable && !outgoing && !data.date_expiration) {
         expirationLabel.hidden = false;
@@ -3698,8 +3776,9 @@ function openEntityForm(type, entity = null) {
     if (type === 'branch') {
       data.est_sucursal_mere = form.elements.namedItem('est_sucursal_mere').checked ? 1 : 0;
       data.partager_produits_mere = form.elements.namedItem('partager_produits_mere').checked ? 1 : 0;
+      data.qr_codes_enabled = form.elements.namedItem('qr_codes_enabled').checked ? 1 : 0;
     }
-    if (type === 'product') { data.est_perisable = data.est_perisable ? 1 : 0; data.category_id = data.category_id || null; delete data.fournisseur_id; data.unite_de_mesure = Number(data.unite_de_mesure); }
+    if (type === 'product') { data.est_perisable = data.est_perisable ? 1 : 0; data.quantite_fractionnaire = Number(data.quantite_fractionnaire || 0); data.category_id = data.category_id || null; delete data.fournisseur_id; data.unite_de_mesure = Number(data.unite_de_mesure); }
     const submitButton = form.querySelector('button[type="submit"], button:not([type])');
     const submitLabel = submitButton?.innerHTML;
     try {
@@ -4098,6 +4177,33 @@ function printReportInWindow(printWindow, title, content, note = '', orientation
   const startPrinting = async () => {
     if (printStarted || printWindow.closed) return;
     printStarted = true;
+    const qrPlaceholders = [...printWindow.document.querySelectorAll('[data-document-qr]')];
+    for (const placeholder of qrPlaceholders) {
+      if (!qrCodesAllowedAtBranch(Number(placeholder.dataset.qrBranch))) {
+        placeholder.remove();
+        continue;
+      }
+      if (!window.AlbaStockQr) {
+        placeholder.textContent = 'QR indisponible';
+        continue;
+      }
+      let payload = {};
+      try { payload = JSON.parse(placeholder.dataset.qrPayload || '{}'); } catch {}
+      if (Number(placeholder.dataset.invoiceQr) > 0) {
+        payload.payment_url = invoicePaymentUrl(Number(placeholder.dataset.invoiceQr));
+      }
+      const image = printWindow.document.createElement('img');
+      try {
+        image.src = await window.AlbaStockQr.toDataUrl(JSON.stringify(payload, null, 2));
+      } catch {
+        placeholder.textContent = 'QR trop volumineux pour cette pièce';
+        continue;
+      }
+      image.alt = 'QR contenant les informations de la pièce';
+      const label = printWindow.document.createElement('span');
+      label.textContent = 'Informations de la pièce';
+      placeholder.replaceChildren(image, label);
+    }
     const images = [...printWindow.document.images];
     await Promise.all(images.map(image => image.complete ? Promise.resolve() : new Promise(resolve => {
       image.addEventListener('load', resolve, {once:true});
@@ -4123,6 +4229,8 @@ function printReportInWindow(printWindow, title, content, note = '', orientation
   printWindow.addEventListener('load', startPrinting, {once:true});
   printWindow.document.open();
   let documentHtml = reportDocument(title, content, note, orientation);
+  documentHtml = documentHtml.replace('</style>', '@media print{.print-controls{display:none!important}main{width:100%;max-width:100%;overflow:visible}.report-table,.data-table{width:100%;max-width:100%;table-layout:fixed;break-inside:auto;page-break-inside:auto}thead{display:table-header-group}tfoot{display:table-footer-group}tr{break-inside:avoid;page-break-inside:avoid}th,td{overflow-wrap:anywhere;vertical-align:top}h1,h2,h3{break-after:avoid;page-break-after:avoid}.stat-card,.signature-row,.report-note{break-inside:avoid;page-break-inside:avoid}.sale-invoice-qr{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:9px}.sale-invoice-qr img{width:72px;height:72px}img{max-width:100%;height:auto}}</style>');
+  documentHtml = documentHtml.replace('</style>', '@media print{.document-qr{display:flex;align-items:center;justify-content:center;gap:6px;margin:7px 0;font-size:8px;text-align:center;overflow-wrap:anywhere;break-inside:avoid;page-break-inside:avoid}.document-qr img{display:block;width:64px;height:64px;flex:0 0 64px}.cash-receipt-card .document-qr{gap:2px;margin:2px 0}.cash-receipt-card .document-qr img{width:34px;height:34px;flex-basis:34px}.cash-receipt-card .document-qr span{display:none}}</style>');
   if (content.includes('cash-receipt-sheet')) {
     documentHtml = documentHtml.replace('<body>', '<body class="cash-receipt-print">');
   }
@@ -4295,6 +4403,7 @@ function printReportInWindow(printWindow, title, content, note = '', orientation
   if (content.includes('cash-receipt-sheet')) documentHtml = documentHtml.replace('</style>', '@page{size:A4 landscape;margin:5mm}body.cash-receipt-print>header,body.cash-receipt-print>.report-company-footer{display:none}body.cash-receipt-print>main{margin:0;padding:0}.cash-receipt-sheet{height:198mm;width:100%;display:flex;flex-direction:column;overflow:hidden}.cash-receipt-sheet-heading{flex:0 0 auto;text-align:center;margin:0 0 2mm}.cash-receipt-sheet-heading h2{font-size:12px;margin:0 0 2px}.cash-receipt-sheet-heading p{font-size:8px;margin:0}.cash-receipt-grid-viewport{flex:1 1 auto;min-height:0;overflow:hidden;position:relative}.cash-receipt-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:2mm;transform-origin:top left}.cash-receipt-card{border:1px solid #9aa9a1;padding:2mm;break-inside:avoid;page-break-inside:avoid}.cash-receipt-card h2{font-size:10px;margin:1mm 0}.cash-receipt-card p{font-size:8px;margin:1mm 0}.cash-receipt-card .signature-row{margin-top:4mm;gap:2mm}.cash-receipt-card .signature-row div{font-size:7px;padding-top:1mm}</style>');
   if (content.includes('cash-receipt-sheet')) documentHtml = documentHtml.replace('</style>', '.cash-receipt-card .cash-movement-heading{gap:4px;padding-bottom:3px}.cash-receipt-card .cash-movement-heading h1{font-size:9px}.cash-receipt-card .cash-movement-heading p,.cash-receipt-card .cash-movement-heading strong{font-size:7px}.cash-receipt-card .cash-movement-details{margin:2px 0}.cash-receipt-card .cash-movement-details p{padding:1px 0;font-size:7px}.cash-receipt-card .cash-movement-amount{margin:3px 0;padding:3px;font-size:8px}.cash-movement-voucher.cash-receipt-card .signature-row{margin-top:4px}</style>');
   if (orientation === 'landscape') documentHtml = documentHtml.replace('</style>', '@media print{.stock-card-report .dashboard-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.stock-card-report .stat-card{margin:0}.stock-card-report .report-table th,.stock-card-report .report-table td{padding:4px;font-size:9px}.stock-card-report .report-table{table-layout:fixed}.stock-card-report .report-table th,.stock-card-report .report-table td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.stock-card-page{display:flex;flex-direction:column;break-after:page;page-break-after:always;min-height:184mm;break-inside:avoid}.stock-card-page--first{min-height:126mm}.stock-card-page:last-child{break-after:auto;page-break-after:auto}.stock-page-footer{margin-top:auto;break-inside:avoid}.stock-page-footer p{margin:3px 0;padding:4px;background:#eaf3ee}.stock-carryover{padding:5px;background:#fff6dc}}</style>');
+  if (content.includes('sale-invoice-qr')) documentHtml = documentHtml.replace('</style>', '@media print{.sale-invoice-summary{display:grid;grid-template-columns:minmax(0,1fr) 92px;align-items:center;gap:10px}.sale-invoice-summary>.document-qr{display:flex;flex-direction:column;align-items:center;gap:4px;margin:0;text-align:center}.sale-invoice-summary>.document-qr img{width:76px;height:76px}.sale-invoice-summary>.document-qr span{font-size:7px}}</style>');
   const logo = companyLogoMarkup();
   if (logo) documentHtml = documentHtml.replace('<header>', `<header>${logo}`);
   documentHtml = documentHtml.replace('</style>', '.report-company-logo{position:absolute;left:0;top:0;width:76px;height:76px;object-fit:contain}.company-stamp-image{display:block;width:150px;height:90px;object-fit:contain;margin:10px 0 0}.stamp-signature{min-height:120px}</style>');
@@ -4321,7 +4430,8 @@ function purchaseVoucherMarkup(data) {
     ? `<div><strong>Motif de sortie</strong><p>${escapeHtml(purchase.motif_sortie || '—')}</p></div>`
     : `<div><strong>Fournisseur</strong><p>${escapeHtml(purchase.supplier_name || 'Non renseigné')}</p><p>${escapeHtml(contact)}</p></div>`;
   const content = `<article class="purchase-voucher purchase-voucher--${purchase.movement_type === 'OUT' ? 'out' : 'in'}"><header class="purchase-voucher-heading"><div class="purchase-voucher-company">${companyLogoMarkup()}<div><h2>${escapeHtml(sessionUser?.enterprise_name || 'ALBA-GEST')}</h2><p>${escapeHtml(sessionUser?.enterprise_address || '')}</p><p>${escapeHtml(sessionUser?.enterprise_phone || '')}</p></div></div><div><h1>${movement}</h1><p class="purchase-voucher-reference">N° ${escapeHtml(purchase.purchase_no)}</p><p>${escapeHtml(purchaseStatusLabel(purchase.status))}</p></div></header><section class="purchase-voucher-meta">${partyDetails}<div><strong>Détails du mouvement</strong><p><b>Date :</b> ${escapeHtml(dateLabel(purchase.purchase_date))}</p><p><b>Succursale :</b> ${escapeHtml(purchase.branch_name || '—')}</p></div></section>${detailsHtml}</article>`;
-  return {title:movement, content, orientation:perishable ? 'landscape' : 'portrait'};
+  const qr = documentQrMarkup(purchase.branch_id, {type:movement, numero:purchase.purchase_no, date:purchase.purchase_date, statut:purchaseStatusLabel(purchase.status), succursale:purchase.branch_name, fournisseur:purchase.supplier_name || null, motif:purchase.motif_sortie || null, total:Number(purchase.total_amount), monnaie:details[0]?.monais || '', produits:details.map(row=>({reference:row.sku, nom:row.product_name, quantite:Number(row.quantity), cout_unitaire:Number(row.unit_cost), total:Number(row.subtotal), monnaie:row.monais, expiration:row.date_expiration || null}))});
+  return {title:movement, content:content.replace('<div class="signature-row">', `${qr}<div class="signature-row">`), orientation:perishable ? 'landscape' : 'portrait'};
 }
 async function printPurchaseVoucher(button) {
   if (button.disabled) return;
@@ -4355,6 +4465,126 @@ async function confirmSalePayment(button){
   if(balances.length===1){await startSalePayment({saleId,amount:Number(balances[0].due),currency:balances[0].monais,branchId,invoice});return;}
   const modal=document.createElement('div');modal.className='entity-modal';modal.innerHTML=`<section class="entity-dialog"><h2>Payer la facture ${escapeHtml(invoice)}</h2><p class="panel-subtitle">Sélectionnez le total dans la monnaie que le client règle.</p><form class="entity-form"><label class="full">Monnaie à régler<select name="monais" required>${balances.map(balance=>`<option value="${escapeHtml(balance.monais)}" data-due="${Number(balance.due)}">${escapeHtml(balance.monais)} · Reste ${moneyCurrencyLabel(balance.due,balance.monais)}</option>`).join('')}</select></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Annuler</button><button class="modal-submit">Continuer vers la caisse</button></div></form></section>`;document.body.appendChild(modal);
   const form=modal.querySelector('form'),currencySelect=form.elements.namedItem('monais');modal.querySelector('.modal-cancel').addEventListener('click',()=>modal.remove());form.addEventListener('submit',async event=>{event.preventDefault();const balance=balances.find(item=>item.monais===currencySelect.value);if(!balance)return;modal.remove();await startSalePayment({saleId,amount:Number(balance.due),currency:balance.monais,branchId,invoice});});
+}
+async function openSalePaymentById(saleId) {
+  if (!hasAccess('modifier_caisse')) {
+    showToast('Votre rôle ne permet pas d’enregistrer un paiement en caisse.');
+    return;
+  }
+  try {
+    const response = await fetch(`../backend/public/report-data.php?action=sale-receipt&vente_id=${encodeURIComponent(saleId)}`, {credentials:'include'});
+    const result = await readJson(response);
+    if (!response.ok || !result.success) throw new Error(result.message || 'Facture introuvable ou inaccessible.');
+    const data = result.data;
+    const sale = data.sale;
+    const balances = saleCurrencyDueBalances(sale).filter(balance => Number(balance.due) > 0);
+    if (sale.status === 'CANCELLED' || !balances.length) {
+      showToast(sale.status === 'CANCELLED' ? 'Cette facture est annulée.' : 'Cette facture est déjà réglée.');
+      return;
+    }
+    const paymentButton = document.createElement('button');
+    paymentButton.dataset.salePayCash = String(sale.vente_id);
+    paymentButton.dataset.saleBranch = String(sale.succursale_id);
+    paymentButton.dataset.saleInvoiceNo = sale.invoice_no;
+    paymentButton.dataset.saleBalances = JSON.stringify(balances);
+    await confirmSalePayment(paymentButton);
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+function scannedInvoiceId(value) {
+  try {
+    const payload = JSON.parse(value);
+    const id = Number(payload.sale_id || payload.vente_id);
+    if (Number.isSafeInteger(id) && id > 0) return id;
+  } catch {}
+  try {
+    const url = new URL(value);
+    const id = Number(url.searchParams.get('payment_invoice') || url.searchParams.get('vente_id'));
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  } catch {
+    const match = String(value).trim().match(/^(?:ALBA[-_ ]?)?(?:FACTURE|INVOICE)[:/#= ]*(\d+)$/i) || String(value).trim().match(/^\d+$/);
+    const id = Number(match?.[1] || match?.[0]);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  }
+}
+function qrCodesAllowedAtBranch(branchId) {
+  if (!sessionUser?.enterprise_qr_codes_enabled || !branchId) return false;
+  const branch = branchOptions.find(option => Number(option.succursale_id) === Number(branchId));
+  const branchEnabled = branch
+    ? Boolean(Number(branch.qr_codes_enabled))
+    : Number(branchId) === Number(sessionUser.succursale_id) && Boolean(sessionUser.branch_qr_codes_enabled);
+  return branchEnabled;
+}
+function documentQrMarkup(branchId, payload, saleId = 0) {
+  if (!qrCodesAllowedAtBranch(branchId)) return '';
+  return `<div class="document-qr" data-document-qr data-qr-branch="${Number(branchId)}" data-qr-payload="${escapeHtml(JSON.stringify(payload))}"${saleId ? ` data-invoice-qr="${Number(saleId)}"` : ''}></div>`;
+}
+function invoicePaymentUrl(saleId) {
+  const baseUrl = sessionUser?.app_base_url || window.location.href;
+  const url = new URL(baseUrl, window.location.href);
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('payment_invoice', String(saleId));
+  return url.toString();
+}
+async function openCameraCodeScanner({title, placeholder, onCode}) {
+  const modal = document.createElement('div');
+  modal.className = 'entity-modal';
+  modal.innerHTML = `<section class="entity-dialog scanner-dialog"><h2>${escapeHtml(title)}</h2><p data-scanner-status>Autorisez la caméra ou saisissez le code manuellement.</p><video data-scanner-video playsinline muted></video><form class="entity-form"><label class="full">Code<input name="code" autocomplete="off" placeholder="${escapeHtml(placeholder)}" required autofocus></label><div class="entity-modal-actions full"><button type="button" class="modal-cancel">Fermer</button><button class="modal-submit">Utiliser ce code</button></div></form></section>`;
+  document.body.appendChild(modal);
+  const video = modal.querySelector('[data-scanner-video]');
+  const status = modal.querySelector('[data-scanner-status]');
+  const form = modal.querySelector('form');
+  let stream = null;
+  let active = true;
+  let completed = false;
+  let frameRequest = 0;
+  const stop = () => {
+    active = false;
+    cancelAnimationFrame(frameRequest);
+    stream?.getTracks().forEach(track => track.stop());
+    modal.remove();
+  };
+  const finish = async value => {
+    if (completed) return;
+    completed = true;
+    stop();
+    await onCode(String(value).trim());
+  };
+  modal.querySelector('.modal-cancel').addEventListener('click', stop);
+  form.addEventListener('submit', event => { event.preventDefault(); finish(form.elements.namedItem('code').value); });
+  if (!window.BarcodeDetector || !navigator.mediaDevices?.getUserMedia) {
+    video.hidden = true;
+    status.textContent = 'Caméra non prise en charge ici. Saisissez le code ou utilisez un lecteur USB.';
+    return;
+  }
+  try {
+    const supported = await window.BarcodeDetector.getSupportedFormats();
+    const formats = ['qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf'].filter(format => supported.includes(format));
+    if (!formats.length) throw new Error('Aucun format de code pris en charge par ce navigateur.');
+    const detector = new window.BarcodeDetector({formats});
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}, audio:false});
+    if (!active) { stream.getTracks().forEach(track => track.stop()); return; }
+    video.srcObject = stream;
+    await video.play();
+    status.textContent = 'Placez le code dans le cadre de la caméra.';
+    const scanFrame = async () => {
+      if (!active) return;
+      if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        try {
+          const codes = await detector.detect(video);
+          if (codes[0]?.rawValue) { await finish(codes[0].rawValue); return; }
+        } catch { status.textContent = 'Lecture impossible. Saisissez le code manuellement.'; }
+      }
+      frameRequest = requestAnimationFrame(scanFrame);
+    };
+    scanFrame();
+  } catch (error) {
+    video.hidden = true;
+    stream?.getTracks().forEach(track => track.stop());
+    status.textContent = `${error.message || 'Caméra inaccessible.'} Vous pouvez saisir le code manuellement.`;
+  }
 }
 async function viewPendingSale(button) {
   try {
@@ -4403,8 +4633,12 @@ async function printSaleInvoice(button){
       const due=dueByCurrency.get(normalizedCurrency)||0;
       return `<div class="sale-invoice-totals"><div class="sale-invoice-total sale-invoice-total--amount"><span>Total à payer</span><strong>${formatInvoiceMoney(balance.total_amount,currency)}</strong></div><div class="sale-invoice-total sale-invoice-total--paid"><span>Montant payé</span><strong>${formatInvoiceMoney(paid,currency)}</strong></div><div class="sale-invoice-total sale-invoice-total--due"><span>Reste à payer</span><strong>${formatInvoiceMoney(due,currency)}</strong></div></div>`;
     }).join('');
-    const content=`<article class="sale-invoice">${saleDocumentHeaderMarkup(sale,'FACTURE',sale.invoice_no,saleStatusLabel(sale.status))}<div class="sale-invoice-table-title">FACTURE N° ${escapeHtml(sale.invoice_no)}</div><table class="report-table sale-invoice-table" data-skip-report-totals="true"><thead><tr><th>#</th><th>Description</th><th>Quantité</th><th>Prix unit.</th><th>Remise</th><th>Montant</th></tr></thead><tbody>${rows||'<tr><td colspan="6">Aucun détail disponible</td></tr>'}</tbody></table><section class="sale-invoice-summary"><div>${totals}</div></section>${saleDocumentSignatureMarkup()}</article>`;
-    printReportInWindow(printWindow,`Facture ${sale.invoice_no}`,content);
+    const signature = saleDocumentSignatureMarkup();
+    const content=`<article class="sale-invoice">${saleDocumentHeaderMarkup(sale,'FACTURE',sale.invoice_no,saleStatusLabel(sale.status))}<div class="sale-invoice-table-title">FACTURE N° ${escapeHtml(sale.invoice_no)}</div><table class="report-table sale-invoice-table" data-skip-report-totals="true"><thead><tr><th>#</th><th>Description</th><th>Quantité</th><th>Prix unit.</th><th>Remise</th><th>Montant</th></tr></thead><tbody>${rows||'<tr><td colspan="6">Aucun détail disponible</td></tr>'}</tbody></table><section class="sale-invoice-summary"><div>${totals}</div></section>${signature}</article>`;
+    const qrPayload = {type:'FACTURE', sale_id:Number(sale.vente_id), numero:sale.invoice_no, date:sale.sale_date, client:sale.client_name || 'Client comptoir', succursale:sale.branch_name, total:saleCurrencyBalances(sale).map(balance=>({montant:Number(balance.total_amount), monnaie:balance.monais})), paye:salePaidCurrencyBalances(sale).map(balance=>({montant:Number(balance.amount_paid), monnaie:balance.monais})), reste:saleCurrencyDueBalances(sale).map(balance=>({montant:Number(balance.due), monnaie:balance.monais}))};
+    const qrPlaceholder = documentQrMarkup(sale.succursale_id, qrPayload, sale.vente_id);
+    const printableContent = content.replace('</div></section>' + signature, `${qrPlaceholder}</div></section>${signature}`);
+    printReportInWindow(printWindow,`Facture ${sale.invoice_no}`,printableContent);
   }catch(error){printWindow.close();showToast(`Impression de la facture impossible : ${error.message}`);}
 }
 async function printSalePaymentReceipt(button, existingPrintWindow = null, existingSaleData = null){
@@ -4462,7 +4696,9 @@ async function printSalePaymentReceipt(button, existingPrintWindow = null, exist
     const generatedAt=new Date().toLocaleString('fr-FR');
     const paymentDetails=`<p><strong>Date :</strong> ${escapeHtml(receiptDateLabel)}</p><p><strong>${escapeHtml(paymentLocation.label)} :</strong> ${escapeHtml(paymentLocation.name)}</p><p><strong>Mode :</strong> ${escapeHtml(paymentMode)}</p><p><strong>Vente N° :</strong> ${escapeHtml(sale.invoice_no)}</p><p><strong>Motif :</strong> Paiement vente crédit N°${escapeHtml(sale.invoice_no)}</p>`;
     const content=`<article class="sale-invoice sale-invoice--payment sale-invoice--payment-receipt">${saleDocumentHeaderMarkup(sale,'REÇU DE PAIEMENT',receiptNumber,'ENCAISSEMENT',paymentDate,paymentDetails,'Payé par','Détails du reçu',false)}<section class="sale-payment-confirmation"><h2>✓ Paiement reçu</h2><p>Nous accusons réception de la somme de</p><strong>${escapeHtml(receivedAmount)}</strong><p>Mode de paiement : ${escapeHtml(paymentMode)}</p></section><section class="sale-payment-balance"><div class="sale-payment-balance-row"><span>Montant total de la vente :</span><strong>${escapeHtml(moneyCurrencyLabel(invoiceTotal,selectedInvoiceCurrency))}</strong></div><div class="sale-payment-balance-row"><span>Montant restant avant ce paiement :</span><strong>${escapeHtml(moneyCurrencyLabel(balanceBefore,selectedInvoiceCurrency))}</strong></div><div class="sale-payment-balance-row sale-payment-balance-row--paid"><span>Montant de ce paiement :</span><strong>${escapeHtml(moneyCurrencyLabel(selectedAmountApplied,selectedInvoiceCurrency))}</strong></div><div class="sale-payment-balance-row sale-payment-balance-row--after"><span>Montant restant après ce paiement :</span><strong>${escapeHtml(moneyCurrencyLabel(balanceAfter,selectedInvoiceCurrency))}</strong></div></section><section class="sale-payment-notes"><h3>Notes et références</h3><p>Motif : Paiement vente crédit N°${escapeHtml(sale.invoice_no)}</p>${reference?`<p>Référence : ${escapeHtml(reference)}</p>`:''}${conversionSummary||''}</section><section class="sale-payment-signatures"><div>Le client<div class="sale-payment-signature-line sale-payment-signature-line--client"></div>Signature</div><div class="sale-payment-company-signature">Pour l’entreprise<div class="sale-payment-stamp-slot">${stamp}</div><div class="sale-payment-signature-line"></div>Signature et cachet</div></section><p class="sale-payment-generated">Merci pour votre confiance !<small>Reçu généré le ${escapeHtml(generatedAt)}</small></p></article>`;
-    printReportInWindow(printWindow,`Reçu de paiement ${sale.invoice_no}`,content);
+    const qr = documentQrMarkup(sale.succursale_id, {type:'RECU_PAIEMENT', numero:receiptNumber, facture:sale.invoice_no, date:paymentDate, montant:Number(selectedAmountApplied), monnaie:currency, mode:paymentMode, emplacement:paymentLocation.name, reference:reference || '', solde_avant:Number(balanceBefore), solde_apres:Number(balanceAfter)});
+    const printableContent = content.replace('<section class="sale-payment-signatures">', `${qr}<section class="sale-payment-signatures">`);
+    printReportInWindow(printWindow,`Reçu de paiement ${sale.invoice_no}`,printableContent);
   }catch(error){
     if(ownsPrintWindow){printWindow.close();showToast(`Impression du reçu impossible : ${error.message}`);}
     else throw error;
@@ -4479,7 +4715,9 @@ async function printSaleReceipt(button){
     const rows=data.details.map((row,index)=>{const unit=row.unit_symbol||row.unit_name||'';const quantity=Number(row.quantity).toLocaleString('fr-FR',{maximumFractionDigits:3});return `<tr><td>${index+1}</td><td><strong>${escapeHtml(row.product_name)}</strong>${row.sku?`<small>Réf. ${escapeHtml(row.sku)}</small>`:''}</td><td>${quantity} ${escapeHtml(unit)}</td><td>${escapeHtml(moneyCurrencyLabel(row.unit_price,row.monais))}</td><td>${Number(row.discount_percent)>0?escapeHtml(moneyCurrencyLabel(row.discount_amount,row.monais)):'—'}</td><td><strong>${escapeHtml(moneyCurrencyLabel(row.subtotal,row.monais))}</strong></td></tr>`;}).join('');
     const totals=saleCurrencyBalances(sale).map(balance=>{const currency=String(balance.monais||'').trim();const paid=paidByCurrency.has(currency.toUpperCase())?paidByCurrency.get(currency.toUpperCase()):Number(balance.amount_paid||0);const due=Math.max(0,Number(balance.total_amount||0)-paid);return `<div class="sale-invoice-totals"><div class="sale-invoice-total sale-invoice-total--amount"><span>Total facture</span><strong>${escapeHtml(moneyCurrencyLabel(balance.total_amount,currency))}</strong></div><div class="sale-invoice-total sale-invoice-total--paid"><span>Montant payé</span><strong>${escapeHtml(moneyCurrencyLabel(paid,currency))}</strong></div><div class="sale-invoice-total sale-invoice-total--due"><span>Reste à payer</span><strong>${escapeHtml(moneyCurrencyLabel(due,currency))}</strong></div></div>`;}).join('');
     const content=`<article class="sale-invoice sale-invoice--sale-receipt">${saleDocumentHeaderMarkup(sale,'REÇU DE VENTE',sale.invoice_no,saleStatusLabel(sale.status))}<div class="sale-invoice-table-title">DÉTAILS DE LA VENTE N° ${escapeHtml(sale.invoice_no)}</div><table class="report-table sale-invoice-table" data-skip-report-totals="true"><thead><tr><th>#</th><th>Description</th><th>Quantité</th><th>Prix unit.</th><th>Remise</th><th>Montant</th></tr></thead><tbody>${rows}</tbody></table><section class="sale-invoice-summary"><div>${totals}</div></section>${paymentSummary?`<h3 class="sale-invoice-section-title">Historique des règlements</h3>${paymentSummary.replace('<table class="report-table">','<table class="report-table sale-invoice-table" data-skip-report-totals="true">')}`:''}${saleDocumentSignatureMarkup()}<p class="sale-invoice-section-title">${escapeHtml('Les marchandises vendues ne peuvent pas être reprises.')}</p></article>`;
-    printReportInWindow(printWindow,`Reçu de vente — ${sale.invoice_no}`,content,'Les marchandises vendues ne peuvent pas être reprises.');
+    const qr = documentQrMarkup(sale.succursale_id, {type:'RECU_VENTE', numero:sale.invoice_no, date:sale.sale_date, client:sale.client_name || 'Client comptoir', succursale:sale.branch_name, statut:saleStatusLabel(sale.status), total:saleCurrencyBalances(sale).map(balance=>({montant:Number(balance.total_amount), monnaie:balance.monais})), paye:salePaidCurrencyBalances(sale).map(balance=>({montant:Number(balance.amount_paid), monnaie:balance.monais})), reste:saleCurrencyDueBalances(sale).map(balance=>({montant:Number(balance.due), monnaie:balance.monais}))});
+    const printableContent = content.replace('<section class="sale-invoice-signature">', `${qr}<section class="sale-invoice-signature">`);
+    printReportInWindow(printWindow,`Reçu de vente — ${sale.invoice_no}`,printableContent,'Les marchandises vendues ne peuvent pas être reprises.');
   }catch(error){printWindow.close();showToast(`Impression du reçu impossible : ${error.message}`);}
 }
 async function printStockCard(button) {
@@ -4514,6 +4752,10 @@ async function printStockCard(button) {
       ? Math.max(1, Math.floor((Date.parse(`${periodEnd}T00:00:00Z`) - Date.parse(`${periodStart}T00:00:00Z`)) / 86400000) + 1)
       : 1;
     const averageConsumption = exitTotals.quantity / periodDays;
+    const mad = Number(data.mad || 0);
+    const cmm = Number(data.cmm || 0);
+    const madPeriodDays = Number(data.mad_period_days || 90);
+    const coverageDays = data.coverage_days;
     const minimumStock = data.balances.reduce((sum, row) => sum + Number(row.min_stock_level || 0), 0);
     const movementRows = movements;
     const pageGroups = [];
@@ -4550,7 +4792,8 @@ async function printStockCard(button) {
         return `<tr><td>${escapeHtml(row.reference_id ? `#${Number(row.reference_id)}` : row.reference_type || '—')}</td><td>${escapeHtml(row.note || '—')}</td><td>${escapeHtml(dateLabel(row.movement_date))}</td><td>${quantity} ${escapeHtml(unit)}</td><td>${row.movement_type === 'SORTIE' ? `${quantity} ${escapeHtml(unit)}` : '—'}</td><td>${row.movement_type === 'ENTREE' ? `${quantity} ${escapeHtml(unit)}` : '—'}</td><td>${Number(row.quantity_after)} ${escapeHtml(unit)}</td><td>${escapeHtml(moneyCurrencyLabel(row.unit_cost ?? product.cost_price, product.monais))}</td><td>${escapeHtml(moneyCurrencyLabel(amount, product.monais))}</td><td>${escapeHtml(row.movement_type)}</td></tr>`;
       }).join('') || '<tr><td colspan="10">Aucun mouvement historique enregistré depuis l’activation du suivi.</td></tr>';
       const carryover = firstPage ? '' : `<p class="stock-carryover"><strong>Cumul reporté des pages précédentes :</strong> ${formatRunningTotals(previousTotals)}</p>`;
-      const summary = firstPage ? `<p><strong>Produit :</strong> ${escapeHtml(product.name)} · <strong>Référence :</strong> ${escapeHtml(product.sku)} · <strong>Unité :</strong> ${escapeHtml(unit || '—')}</p><div class="dashboard-grid"><div class="stat-card"><span class="stat-label">Consommation moyenne / jour</span><div class="stat-value">${averageConsumption.toLocaleString('fr-FR', {maximumFractionDigits:2})} ${escapeHtml(unit)}</div></div><div class="stat-card"><span class="stat-label">Stock maximum observé</span><div class="stat-value">${Number(data.stock_max || 0).toLocaleString('fr-FR')} ${escapeHtml(unit)}</div></div><div class="stat-card"><span class="stat-label">Stock minimum (seuil configuré)</span><div class="stat-value">${minimumStock.toLocaleString('fr-FR')} ${escapeHtml(unit)}</div></div></div><p class="report-note">Les stocks antérieurs à l’activation du suivi figurent dans la situation actuelle, sans détail. Le maximum est calculé sur l’historique disponible; le minimum correspond au seuil configuré.</p>` : `<p><strong>Fiche de stock — ${escapeHtml(product.name)} (${escapeHtml(product.sku)})</strong></p>`;
+      const coverageLabel = coverageDays === null ? 'Indéterminée' : `${Number(coverageDays).toLocaleString('fr-FR', {maximumFractionDigits:1})} jours`;
+      const summary = firstPage ? `<p><strong>Produit :</strong> ${escapeHtml(product.name)} · <strong>Référence :</strong> ${escapeHtml(product.sku)} · <strong>Unité :</strong> ${escapeHtml(unit || '—')}</p><div class="dashboard-grid"><div class="stat-card"><span class="stat-label">Consommation moyenne sur la période</span><div class="stat-value">${averageConsumption.toLocaleString('fr-FR', {maximumFractionDigits:2})} ${escapeHtml(unit)}</div></div><div class="stat-card"><span class="stat-label">MAD · moyenne / jour (${madPeriodDays} jours)</span><div class="stat-value">${mad.toLocaleString('fr-FR', {maximumFractionDigits:2})} ${escapeHtml(unit)}</div></div><div class="stat-card"><span class="stat-label">CMM · moyenne / mois</span><div class="stat-value">${cmm.toLocaleString('fr-FR', {maximumFractionDigits:2})} ${escapeHtml(unit)}</div></div><div class="stat-card"><span class="stat-label">Couverture estimée du stock</span><div class="stat-value">${escapeHtml(coverageLabel)}</div></div><div class="stat-card"><span class="stat-label">Stock maximum observé</span><div class="stat-value">${Number(data.stock_max || 0).toLocaleString('fr-FR')} ${escapeHtml(unit)}</div></div><div class="stat-card"><span class="stat-label">Stock minimum (seuil configuré)</span><div class="stat-value">${minimumStock.toLocaleString('fr-FR')} ${escapeHtml(unit)}</div></div></div><p class="report-note">Le MAD et le CMM sont calculés à partir des ventes et sorties validées sur la période choisie (${madPeriodDays} jours). La couverture estime le nombre de jours pendant lesquels le stock actuel peut répondre à cette consommation moyenne. Les stocks antérieurs à l’activation du suivi figurent dans la situation actuelle, sans détail.</p>` : `<p><strong>Fiche de stock — ${escapeHtml(product.name)} (${escapeHtml(product.sku)})</strong></p>`;
       const overallTotals = lastPage ? `<h2>Total général</h2><table class="report-table stock-grand-total" data-skip-report-totals="true"><thead><tr><th>Type</th><th>Quantité totale</th><th>Valeur totale au coût d’achat</th></tr></thead><tbody><tr><td>Entrées</td><td>${entryTotals.quantity.toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(moneyCurrencyLabel(entryTotals.amount, product.monais))}</td></tr><tr><td>Sorties</td><td>${exitTotals.quantity.toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(moneyCurrencyLabel(exitTotals.amount, product.monais))}</td></tr><tr class="report-total-row"><td>Cumul des entrées + sorties</td><td>${(entryTotals.quantity + exitTotals.quantity).toLocaleString('fr-FR')} ${escapeHtml(unit)}</td><td>${escapeHtml(moneyCurrencyLabel(entryTotals.amount + exitTotals.amount, product.monais))}</td></tr></tbody></table>` : '';
       return `<section class="stock-card-page${firstPage ? ' stock-card-page--first' : ''}"><div class="stock-card-page-content stock-card-report">${summary}${carryover}<h2>Historique des mouvements${firstPage ? '' : ' (suite)'}</h2><table class="report-table" data-skip-report-totals="true"><thead><tr><th>Référence</th><th>Motif</th><th>Date</th><th>Quantité</th><th>Quantité sortie</th><th>Quantité entrée</th><th>Solde du stock</th><th>Coût unitaire</th><th>Total mouvement</th><th>Statut</th></tr></thead><tbody>${rowsMarkup}</tbody></table></div><footer class="stock-page-footer"><p><strong>Sous-total page ${pageIndex + 1} :</strong> ${formatRunningTotals(pageTotals)}</p><p><strong>Cumul après page ${pageIndex + 1} :</strong> ${formatRunningTotals(runningTotals)}</p>${overallTotals}</footer></section>`;
     }).join('');
@@ -5033,11 +5276,13 @@ document.addEventListener('click', event => {
     if (!branchId) { showToast('Choisissez une succursale pour ajuster son stock.'); return; }
     const productId = Number(stockButton.dataset.stockEdit);
     const stock = stockData.stocks.find(item => Number(item.produit_id) === productId && Number(item.succursale_id) === Number(branchId));
+    const product = stockData.products.find(item => Number(item.produit_id) === productId);
+    const fractional = Number(product?.quantite_fractionnaire) === 1;
     const unit = stock?.unit_abbreviation || stock?.unit_name || '';
     const nextQuantity = window.prompt(`Nouvelle quantité en stock${unit ? ` (${unit})` : ''} :`, String(stock?.quantity ?? 0));
     if (nextQuantity === null) return;
-    if (!/^\d+$/.test(nextQuantity)) { showToast('Saisissez une quantité entière positive ou nulle.'); return; }
-    const payload = {produit_id:productId, succursale_id:Number(branchId), operation:'set', quantity:Number(nextQuantity), min_stock_level:Number(stock?.min_stock_level ?? 5)};
+    if (!(fractional ? /^\d+(?:[.,]\d{1,3})?$/.test(nextQuantity) : /^\d+$/.test(nextQuantity))) { showToast(fractional ? 'Saisissez une quantité positive ou nulle, avec au plus trois décimales.' : 'Saisissez une quantité entière positive ou nulle.'); return; }
+    const payload = {produit_id:productId, succursale_id:Number(branchId), operation:'set', quantity:Number(nextQuantity.replace(',', '.')), min_stock_level:Number(stock?.min_stock_level ?? 5)};
     fetch('../backend/public/stock.php', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(payload)})
       .then(async response => { const result = await readJson(response); if (!response.ok || !result.success) throw new Error(result.message || 'Mise à jour impossible.'); showToast('Stock mis à jour.'); await loadStock(); })
       .catch(error => showToast(error.message));
@@ -5081,12 +5326,80 @@ function riskQuantityLabel(value, unit = '') {
   const amount = Number(value || 0).toLocaleString('fr-FR', {maximumFractionDigits:2});
   return `${amount}${unit ? ` ${unit}` : ''}`;
 }
+function riskDateLabel(value) {
+  if (!value) return 'Indéterminée';
+  const [year, month, day] = value.split('-').map(Number);
+  return new Intl.DateTimeFormat('fr-FR').format(new Date(year, month - 1, day));
+}
 function riskStatusMarkup(value, label) {
   return `<span class="risk-status risk-status--${escapeHtml(value)}">${escapeHtml(label)}</span>`;
+}
+function renderRiskStatusRows() {
+  const body = container.querySelector('#risk-stock-rows');
+  if (!body || !stockRiskData) return;
+  const selectedRows = stockRiskData.rows.filter(row => stockRiskSelectedProducts?.has(Number(row.produit_id)));
+  const markup = selectedRows.map(row => {
+    const riskMarkup = row.risk === 'urgent' ? riskStatusMarkup('urgent', row.critical ? 'Critique' : 'Urgent')
+      : row.risk === 'soon' ? riskStatusMarkup('warning', 'Prochainement')
+        : riskStatusMarkup('safe', 'Stock suffisant');
+    const signals = [!row.is_perishable && riskStatusMarkup('neutral', 'Non périssable'), row.overstock && riskStatusMarkup('neutral', 'Surstock'), row.low_rotation && riskStatusMarkup('warning', 'Faible rotation'), row.near_expiry && riskStatusMarkup('expired', 'Péremption')].filter(Boolean).join(' ');
+    const duration = row.days_remaining === null ? 'Données insuffisantes' : `${riskQuantityLabel(row.days_remaining)} j`;
+    const supply = row.recommended_quantity > 0 ? `À commander : ${riskQuantityLabel(row.recommended_quantity, row.unit_abbreviation || row.unit_name)}` : 'Aucun besoin estimé';
+    return `<tr><td><strong>${escapeHtml(row.sku)}</strong><br>${escapeHtml(row.name)}<br>${signals}</td><td>${escapeHtml(row.branch_name)}</td><td>${riskQuantityLabel(row.stock_available, row.unit_abbreviation || row.unit_name)}<br><small>Après transferts en attente : ${riskQuantityLabel(row.forecast_available_quantity, row.unit_abbreviation || row.unit_name)} · Minimum : ${riskQuantityLabel(row.min_stock_level)}</small></td><td>MAD ${riskQuantityLabel(row.mad)}<br>CMM ${riskQuantityLabel(row.cmm)}</td><td>${duration}</td><td>Entrées : ${riskQuantityLabel(row.pending_quantity, row.unit_abbreviation || row.unit_name)}<br>Sorties : ${riskQuantityLabel(row.pending_transfer_out_quantity, row.unit_abbreviation || row.unit_name)}</td><td>${riskMarkup}</td><td>${escapeHtml(supply)}</td></tr>`;
+  }).join('');
+  body.innerHTML = markup || '<tr><td class="risk-empty" colspan="8">Aucun produit sélectionné.</td></tr>';
+  container.querySelectorAll('[data-risk-forecast-product],[data-risk-expiry-product]').forEach(row => {
+    row.hidden = !stockRiskSelectedProducts?.has(Number(row.dataset.riskForecastProduct || row.dataset.riskExpiryProduct));
+  });
+  const summary = container.querySelector('[data-risk-product-filter-summary]');
+  if (summary) summary.textContent = stockRiskSelectedProducts?.size === stockRiskData.rows.length
+    ? `Produits affichés : tous (${stockRiskData.rows.length})`
+    : `Produits affichés : ${stockRiskSelectedProducts?.size || 0} / ${stockRiskData.rows.length}`;
+  const allToggle = container.querySelector('[data-risk-show-all]');
+  if (allToggle) {
+    allToggle.checked = stockRiskSelectedProducts?.size === stockRiskData.rows.length;
+    allToggle.indeterminate = Boolean(stockRiskSelectedProducts?.size && stockRiskSelectedProducts.size < stockRiskData.rows.length);
+  }
+  container.querySelector('[data-risk-product-count]')?.replaceChildren(document.createTextNode(`${selectedRows.length} produit(s) affiché(s)`));
+}
+function setupRiskProductFilter() {
+  const body = container.querySelector('#risk-stock-rows');
+  const tableWrapper = body?.closest('table')?.parentElement;
+  if (!tableWrapper || !stockRiskData) return;
+  let filter = container.querySelector('[data-risk-product-filter]');
+  if (!filter) {
+    filter = document.createElement('div');
+    filter.className = 'risk-product-filter';
+    filter.dataset.riskProductFilter = '';
+    filter.innerHTML = '<details><summary data-risk-product-filter-summary>Produits affichés</summary><div class="risk-product-filter-panel"><label class="risk-product-select-all"><input type="checkbox" data-risk-show-all checked> Tout afficher</label><label>Rechercher un produit<input type="search" data-risk-product-search placeholder="Nom ou référence"></label><div class="risk-product-filter-actions"><button type="button" data-risk-select-matches>Sélectionner les résultats</button><button type="button" data-risk-clear-selection>Effacer la sélection</button><small data-risk-search-count></small></div><div class="risk-product-options" data-risk-product-options></div></div></details><small data-risk-product-count></small>';
+    tableWrapper.insertAdjacentElement('beforebegin', filter);
+    filter.querySelector('[data-risk-product-search]').addEventListener('input', event => {
+      stockRiskProductSearch = event.target.value.trim().toLocaleLowerCase();
+      const options = [...filter.querySelectorAll('[data-risk-product-option]')];
+      options.forEach(option => { option.hidden = !option.textContent.toLocaleLowerCase().includes(stockRiskProductSearch); });
+      filter.querySelector('[data-risk-search-count]').textContent = `${options.filter(option => !option.hidden).length} résultat(s)`;
+    });
+    filter.querySelector('details').addEventListener('toggle', event => { if (event.target.open) filter.querySelector('[data-risk-product-search]').focus(); });
+    filter.querySelector('details').addEventListener('keydown', event => {
+      if (event.key === 'Escape') { event.currentTarget.open = false; filter.querySelector('[data-risk-product-filter-summary]').focus(); }
+    });
+  }
+  const options = filter.querySelector('[data-risk-product-options]');
+  const search = filter.querySelector('[data-risk-product-search]');
+  if (search) search.value = stockRiskProductSearch;
+  options.innerHTML = stockRiskData.rows.map(row => `<label data-risk-product-option><input type="checkbox" data-risk-product-selection="${Number(row.produit_id)}" ${stockRiskSelectedProducts?.has(Number(row.produit_id)) ? 'checked' : ''}><span>${escapeHtml(row.sku)} · ${escapeHtml(row.name)}</span></label>`).join('');
+  const visibleOptions = [...options.querySelectorAll('[data-risk-product-option]')];
+  visibleOptions.forEach(option => { option.hidden = !option.textContent.toLocaleLowerCase().includes(stockRiskProductSearch); });
+  filter.querySelector('[data-risk-search-count]').textContent = `${visibleOptions.filter(option => !option.hidden).length} résultat(s)`;
+  renderRiskStatusRows();
 }
 function renderRiskTreasury() {
   const target = container.querySelector('#risk-treasury-content');
   if (!target || !stockRiskData) return;
+  const heading = container.querySelector('#risk-treasury-panel h2');
+  const subtitle = container.querySelector('#risk-treasury-panel .panel-subtitle');
+  if (heading) heading.textContent = 'Montant estimé des approvisionnements';
+  if (subtitle) subtitle.textContent = 'Estimation des bons sélectionnés, calculée au coût unitaire des produits.';
   const estimates = new Map();
   container.querySelectorAll('[data-risk-selected]:checked').forEach(check => {
     const row = check.closest('[data-risk-product-row]');
@@ -5095,19 +5408,11 @@ function renderRiskTreasury() {
     const cost = Number(row.querySelector('[data-risk-cost]').value || 0);
     if (currency && quantity > 0) estimates.set(currency, (estimates.get(currency) || 0) + quantity * cost);
   });
-  const balances = stockRiskData.treasury?.cash_balances || {};
   const blocks = [...estimates].map(([currency, amount]) => {
-    const available = Object.prototype.hasOwnProperty.call(balances, currency) ? Number(balances[currency]) : null;
-    const canViewTreasury = Boolean(stockRiskData.treasury?.access);
-    const shortfall = canViewTreasury && (available === null || available < amount);
-    const balanceLabel = !canViewTreasury
-      ? 'Solde masqué par les droits du compte'
-      : available === null ? 'Aucune caisse ouverte connue' : `Caisses ouvertes : ${escapeHtml(moneyCurrencyLabel(available, currency))}`;
-    return `<article class="risk-treasury-item${shortfall ? ' is-insufficient' : ''}"><strong>${shortfall ? 'Vérifier la trésorerie' : 'Trésorerie indicative'} · ${escapeHtml(currency)}</strong><span>Bon sélectionné : ${escapeHtml(moneyCurrencyLabel(amount, currency))}</span><span>${balanceLabel}</span>${shortfall ? '<span>Solde ouvert inférieur ou indisponible : vérifiez la trésorerie avant la commande.</span>' : ''}</article>`;
+    return `<article class="risk-treasury-item"><strong>Approvisionnement estimé · ${escapeHtml(currency)}</strong><span>Bon sélectionné : ${escapeHtml(moneyCurrencyLabel(amount, currency))}</span></article>`;
   });
   if (!blocks.length) blocks.push('<p class="empty-note">Sélectionnez des produits à commander pour estimer les besoins par monnaie.</p>');
-  const permissionNote = stockRiskData.treasury?.access ? '' : '<p class="risk-treasury-note">Votre rôle ne permet pas de consulter les soldes de caisse. Faites vérifier cette estimation par un utilisateur autorisé à consulter la trésorerie.</p>';
-  target.innerHTML = `${blocks.join('')}${permissionNote}<p class="risk-treasury-note">Aucune somme n’est réservée ni débitée. Cette comparaison est indicative et ne convertit pas les monnaies.</p>`;
+  target.innerHTML = `${blocks.join('')}<p class="risk-treasury-note">Estimation au coût unitaire des produits. Les soldes de caisse ne sont pas consultés ni affichés ici; aucune somme n’est réservée ou débitée.</p>`;
 }
 function renderRiskOrders(orders) {
   const body = container.querySelector('#risk-order-rows');
@@ -5119,13 +5424,13 @@ function renderRiskOrders(orders) {
   }
   body.innerHTML = orders.map(order => {
     const totals = Object.entries(order.estimated_totals || {}).map(([currency, amount]) => moneyCurrencyLabel(amount, currency)).join(' · ') || '—';
-    const lines = (order.items || []).map(item => `<li><strong>${escapeHtml(item.sku)} · ${escapeHtml(item.product_name)}</strong> — Stock ${riskQuantityLabel(item.stock_disponible)} · MAD ${riskQuantityLabel(item.mad)} · CMM ${riskQuantityLabel(item.cmm)} · recommandé ${riskQuantityLabel(item.quantite_recommandee)} · commandé ${riskQuantityLabel(item.quantite_commande)} · Fournisseur ${escapeHtml(item.supplier_name || '—')} · coût ${escapeHtml(moneyCurrencyLabel(item.unit_cost, item.monais))}</li>`).join('');
+    const lines = (order.items || []).map(item => `<li data-risk-order-item data-product-id="${Number(item.produit_id)}"><strong>${escapeHtml(item.sku)} · ${escapeHtml(item.product_name)}</strong> — Stock ${riskQuantityLabel(item.stock_disponible)} · MAD ${riskQuantityLabel(item.mad)} · CMM ${riskQuantityLabel(item.cmm)} · recommandé ${riskQuantityLabel(item.quantite_recommandee)} · fournisseur ${escapeHtml(item.supplier_name || '—')}<label>Commandé <input class="risk-input" type="number" min="${Number(item.quantite_fractionnaire) ? '0.001' : '1'}" step="${Number(item.quantite_fractionnaire) ? '0.001' : '1'}" value="${Number(item.quantite_commande)}" data-risk-order-quantity></label><label>Coût unitaire <input class="risk-input" type="number" min="0" step="0.01" value="${Number(item.unit_cost)}" data-risk-order-cost> ${escapeHtml(item.monais)}</label></li>`).join('');
     const status = order.status === 'DRAFT' ? riskStatusMarkup('warning', 'Brouillon') : order.status === 'TRANSMITTED' ? riskStatusMarkup('safe', 'Transmis') : riskStatusMarkup('neutral', order.status);
     const exportActions = `<button type="button" class="text-button risk-action-button risk-action-button--compact" data-risk-order-export="excel" data-risk-order-id="${Number(order.bon_previsionnel_id)}"><svg class="risk-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h14v18H5zM8 7h8M8 11h3m2 0h3m-8 4h3m2 0h3m-8 4h3m2 0h3"/></svg><span>Exporter Excel</span></button> <button type="button" class="text-button risk-action-button risk-action-button--compact" data-risk-order-export="pdf" data-risk-order-id="${Number(order.bon_previsionnel_id)}"><svg class="risk-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM14 3v5h5M9 14h2a1.5 1.5 0 0 0 0-3H9v6m5 0v-6h1a3 3 0 0 1 0 6h-1"/></svg><span>Exporter PDF</span></button>`;
     const transmit = order.status === 'DRAFT' && hasAccess('creer_approvisionnements')
-      ? `<button type="button" class="text-button risk-action-button risk-action-button--compact" data-risk-transmit="${Number(order.bon_previsionnel_id)}"><svg class="risk-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8zM11 13l5-5"/></svg><span>Transmettre aux approvisionnements</span></button>`
+      ? `<button type="button" class="text-button risk-action-button risk-action-button--compact" data-risk-order-save="${Number(order.bon_previsionnel_id)}">Enregistrer</button> <button type="button" class="text-button risk-action-button risk-action-button--compact" data-risk-order-delete="${Number(order.bon_previsionnel_id)}">Supprimer</button> <button type="button" class="text-button risk-action-button risk-action-button--compact" data-risk-transmit="${Number(order.bon_previsionnel_id)}"><svg class="risk-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 21 3l-8 18-2-8zM11 13l5-5"/></svg><span>Transmettre aux approvisionnements</span></button>`
       : '';
-    return `<tr><td><strong>${escapeHtml(order.reference)}</strong><details class="risk-order-details"><summary>Détail (${Number(order.item_count)} produit(s))</summary><ul class="risk-order-lines">${lines}</ul></details></td><td>${escapeHtml(order.branch_name)}</td><td>${escapeHtml(dateLabel(order.created_at))}</td><td>${Number(order.item_count)}</td><td>${escapeHtml(totals)}</td><td>${status}</td><td><div class="risk-order-actions">${exportActions}${transmit}</div></td></tr>`;
+    return `<tr data-risk-order-row="${Number(order.bon_previsionnel_id)}"><td><strong>${escapeHtml(order.reference)}</strong><details class="risk-order-details"><summary>Détail (${Number(order.item_count)} produit(s))</summary><ul class="risk-order-lines">${lines}</ul></details></td><td>${escapeHtml(order.branch_name)}</td><td>${escapeHtml(dateLabel(order.created_at))}</td><td>${Number(order.item_count)}</td><td>${escapeHtml(totals)}</td><td>${status}</td><td><div class="risk-order-actions">${exportActions}${transmit}</div></td></tr>`;
   }).join('');
 }
 function stockRiskOrderExportRows(order) {
@@ -5202,12 +5507,130 @@ async function exportStockRiskOrder(orderId, format) {
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   }
 }
+function stockRiskReportTables() {
+  const data = stockRiskData;
+  const selectedIds = stockRiskSelectedProducts || new Set(data.rows.map(row => Number(row.produit_id)));
+  const selectedRows = data.rows.filter(row => selectedIds.has(Number(row.produit_id)));
+  const selectedExpiringLots = data.expiring_lots.filter(lot => selectedIds.has(Number(lot.produit_id)) && Number(lot.days_to_expiry) <= Number(data.period_days));
+  const riskLabel = row => row.critical ? 'Critique' : row.risk === 'urgent' ? 'Urgent' : row.risk === 'soon' ? 'À surveiller' : 'Suffisant';
+  return [
+    {
+      title: 'Synthèse de la période',
+      headers: ['Indicateur', 'Valeur'],
+      rows: [
+        ['Succursale', data.branches.find(branch => Number(branch.succursale_id) === Number(data.branch_id))?.name || ''],
+        ['Période (jours)', String(data.period_days)],
+        ['Historique analysé (jours)', String(data.history_days)],
+        ['Produits sélectionnés', String(selectedRows.length)],
+        ['Risques de rupture', String(selectedRows.filter(row => row.risk !== 'safe').length)],
+        ['Stocks critiques', String(selectedRows.filter(row => row.critical).length)],
+        ['Produits à réapprovisionner', String(selectedRows.filter(row => Number(row.recommended_quantity) > 0).length)],
+        ['Produits avec lot à risque dans la période', String(new Set(selectedExpiringLots.map(lot => Number(lot.produit_id))).size)],
+      ],
+    },
+    {
+      title: 'Projections par produit',
+      headers: ['Référence', 'Produit', 'Risque', 'Stock disponible', 'Ventes moyennes / jour', 'Demande prévue', 'Quantité servable estimée', 'Vente max / jour avant rupture', 'Stock projeté en fin de période', 'Déficit possible', 'Couverture estimée (jours)', 'Date de rupture estimée'],
+      rows: selectedRows.map(row => [row.sku, row.name, riskLabel(row), String(row.forecast_available_quantity), String(row.mad), String(row.projected_demand), String(row.serviceable_quantity), String(row.daily_sell_limit), String(row.projected_ending_stock), String(row.projected_shortage_quantity), row.days_remaining === null ? 'Indéterminé' : String(row.days_remaining), row.estimated_stockout_date || 'Indéterminée']),
+    },
+    {
+      title: 'Péremptions et pertes estimées',
+      headers: ['Référence', 'Produit', 'Lot', 'Date d’expiration', 'Jours restants', 'Quantité restante', 'Quantité exposée estimée', 'Perte estimée', 'Monnaie'],
+      rows: selectedExpiringLots.map(lot => {
+        const product = selectedRows.find(row => Number(row.produit_id) === Number(lot.produit_id));
+        const exposedQuantity = Math.max(0, Number(lot.quantity_remaining) - Number(product?.mad || 0) * Math.max(0, Number(lot.days_to_expiry)));
+        const loss = exposedQuantity * Number(product?.cost_price || 0);
+        return [lot.sku, lot.product_name, String(lot.lot_id), lot.date_expiration, String(lot.days_to_expiry), String(lot.quantity_remaining), String(exposedQuantity), String(loss), product?.currency || ''];
+      }),
+    },
+    {
+      title: 'Réapprovisionnements estimés',
+      headers: ['Référence', 'Produit', 'Stock', 'MAD', 'CMM', 'Quantité recommandée', 'Coût unitaire estimé', 'Monnaie', 'Montant estimé'],
+      rows: selectedRows.filter(row => Number(row.recommended_quantity) > 0).map(row => [row.sku, row.name, String(row.stock_available), String(row.mad), String(row.cmm), String(row.recommended_quantity), String(row.cost_price), row.currency, String(Number(row.recommended_quantity) * Number(row.cost_price))]),
+    },
+  ];
+}
+async function exportStockRiskReport(format) {
+  if (!stockRiskData) return showToast('Aucune analyse de risque à exporter.');
+  const tables = stockRiskReportTables();
+  const branchName = stockRiskData.branches.find(branch => Number(branch.succursale_id) === Number(stockRiskData.branch_id))?.name || 'succursale';
+  const filename = `rapport-risques-stock-${String(branchName).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9-]+/gi, '-').toLowerCase()}-${stockRiskData.period_days}-jours`;
+  if (format === 'excel') {
+    const escapeCell = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const sections = tables.map(table => `<h2>${escapeCell(table.title)}</h2><table><thead><tr>${table.headers.map(header => `<th>${escapeCell(header)}</th>`).join('')}</tr></thead><tbody>${table.rows.map(row => `<tr>${row.map(cell => `<td>${escapeCell(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table>`).join('');
+    const documentHtml = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>table{border-collapse:collapse;margin-bottom:20px}th,td{border:1px solid #999;padding:5px;text-align:left}th{background:#e8f5ed}h2{font: bold 16px Arial}</style></head><body>${sections}</body></html>`;
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob(['\ufeff', documentHtml], {type:'application/vnd.ms-excel;charset=utf-8'}));
+    link.download = `${filename}.xls`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    return;
+  }
+  const response = await fetch('../backend/public/pdf-report.php', {
+    method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
+    body:JSON.stringify({
+      title:`Rapport des risques de stock · ${branchName} · ${stockRiskData.period_days} jours`,
+      report_context:'stock-risk', succursale_id:stockRiskData.branch_id,
+      tables:tables.map(table => ({headers:table.headers, rows:table.rows.map(row => row.map(value => String(value ?? '')))})),
+    }),
+  });
+  if (!response.ok) {
+    const result = await readJson(response);
+    throw new Error(result.message || 'Export PDF impossible.');
+  }
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(await response.blob());
+  link.download = `${filename}.pdf`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
 async function loadStockRiskDashboard() {
   const branchSelect = container.querySelector('#stock-risk-branch');
   if (!branchSelect) return;
+  let periodSelect = container.querySelector('#stock-risk-period');
+  if (!periodSelect) {
+    const filterBar = branchSelect.closest('.filter-bar');
+    if (filterBar) {
+      const label = document.createElement('label');
+      label.textContent = 'Période d’analyse';
+      periodSelect = document.createElement('select');
+      periodSelect.className = 'select-field';
+      periodSelect.id = 'stock-risk-period';
+      for (const [days, text] of [[7, '1 semaine'], [14, '2 semaines'], [30, '1 mois'], [60, '2 mois'], [90, '3 mois'], [180, '6 mois'], [365, '12 mois']]) {
+        periodSelect.add(new Option(text, String(days)));
+      }
+      periodSelect.add(new Option('Période personnalisée', 'custom'));
+      periodSelect.value = '30';
+      label.append(periodSelect);
+      const customPeriod = document.createElement('div');
+      customPeriod.className = 'risk-custom-period';
+      customPeriod.dataset.riskCustomPeriod = '';
+      customPeriod.hidden = true;
+      customPeriod.innerHTML = '<input type="number" min="1" max="52" value="2" aria-label="Durée personnalisée"><select aria-label="Unité de durée"><option value="weeks">Semaines</option><option value="months">Mois</option></select>';
+      periodSelect.addEventListener('change', () => { customPeriod.hidden = periodSelect.value !== 'custom'; });
+      customPeriod.querySelector('select').addEventListener('change', event => { customPeriod.querySelector('input').max = event.target.value === 'months' ? '12' : '52'; });
+      customPeriod.addEventListener('change', loadStockRiskDashboard);
+      filterBar.insertBefore(customPeriod, filterBar.querySelector('[data-risk-refresh]')?.closest('button') || null);
+      filterBar.insertBefore(label, filterBar.querySelector('[data-risk-refresh]')?.closest('button') || null);
+      const reportActions = document.createElement('div');
+      reportActions.className = 'risk-report-actions';
+      reportActions.innerHTML = '<button type="button" class="primary-button" data-risk-report-export="excel">Exporter le rapport Excel</button><button type="button" class="primary-button" data-risk-report-export="pdf">Rapport PDF</button>';
+      filterBar.insertBefore(reportActions, filterBar.querySelector('[data-risk-refresh]')?.closest('button') || null);
+    }
+  }
   const requestId = ++stockRiskRequest;
   const params = new URLSearchParams({action:'dashboard'});
   if (branchSelect.value) params.set('succursale_id', branchSelect.value);
+  if (periodSelect?.value === 'custom') {
+    const customPeriod = container.querySelector('[data-risk-custom-period]');
+    const unit = customPeriod?.querySelector('select').value || 'weeks';
+    const maximum = unit === 'months' ? 12 : 52;
+    const amount = Math.min(maximum, Math.max(1, Number(customPeriod?.querySelector('input').value || 1)));
+    customPeriod.querySelector('input').value = String(amount);
+    params.set('period_days', String(Math.min(365, Math.ceil(amount * (unit === 'months' ? 30.4375 : 7)))));
+  } else if (periodSelect?.value) {
+    params.set('period_days', periodSelect.value);
+  }
   const rowsTarget = container.querySelector('#risk-stock-rows');
   if (rowsTarget) rowsTarget.innerHTML = '<tr><td colspan="8">Analyse en cours…</td></tr>';
   try {
@@ -5216,8 +5639,43 @@ async function loadStockRiskDashboard() {
     if (!response.ok || !result.success) throw new Error(result.message || 'Analyse des risques impossible.');
     if (requestId !== stockRiskRequest || currentViewName !== 'stock-risk' || !branchSelect.isConnected) return;
     stockRiskData = result.data;
+    const historyDescription = container.querySelector('.filter-bar')?.nextElementSibling;
+    if (historyDescription) historyDescription.textContent = `Le MAD/CMM et la projection utilisent les ventes et sorties validées des ${stockRiskData.history_days} derniers jours. Les transferts en attente ajustent le stock prévisionnel sans être comptés comme consommation.`;
     branchSelect.innerHTML = (stockRiskData.branches || []).map(branch => `<option value="${Number(branch.succursale_id)}">${escapeHtml(branch.name)}</option>`).join('');
     branchSelect.value = String(stockRiskData.branch_id);
+    const availableProductIds = new Set(stockRiskData.rows.map(row => Number(row.produit_id)));
+    stockRiskSelectedProducts = stockRiskSelectedProducts === null
+      ? new Set(availableProductIds)
+      : new Set([...stockRiskSelectedProducts].filter(productId => availableProductIds.has(productId)));
+    setupRiskProductFilter();
+    const customPeriod = container.querySelector('[data-risk-custom-period]');
+    const projectionPeriodLabel = periodSelect.value === 'custom'
+      ? `${customPeriod.querySelector('input').value} ${customPeriod.querySelector('select').value === 'months' ? 'mois' : 'semaines'}`
+      : (periodSelect.selectedOptions[0]?.textContent || `${stockRiskData.period_days} jours`);
+    const forecastPanel = container.querySelector('[data-risk-forecast]') || document.createElement('section');
+    forecastPanel.className = 'panel';
+    forecastPanel.dataset.riskForecast = '';
+    const forecastRows = stockRiskData.rows.map(row => {
+      const unit = row.unit_abbreviation || row.unit_name || '';
+      const lossLabel = Number(row.estimated_expiry_loss) > 0
+        ? `${moneyCurrencyLabel(row.estimated_expiry_loss, row.currency)} (${riskQuantityLabel(row.estimated_expiry_loss_quantity, unit)} exposés)`
+        : 'Aucune perte de péremption estimée';
+      const expiryRate = Number(row.expiry_sell_per_day) > 0
+        ? `${riskQuantityLabel(row.expiry_sell_per_day, unit)} / jour`
+        : '—';
+      const stockoutRate = Number(row.daily_sell_limit) > 0
+        ? `${riskQuantityLabel(row.daily_sell_limit, unit)} / jour maximum`
+        : '0';
+      const endingStock = `${riskQuantityLabel(row.projected_ending_stock, unit)} en stock`;
+      const serviceable = riskQuantityLabel(row.serviceable_quantity, unit);
+      const coverage = row.coverage_days === null ? 'Indéterminée' : `${riskQuantityLabel(row.coverage_days)} jours`;
+      const possibleShortage = Number(row.projected_shortage_quantity) > 0 ? riskQuantityLabel(row.projected_shortage_quantity, unit) : 'Aucun';
+      const stockoutDate = riskDateLabel(row.estimated_stockout_date);
+      const productNature = row.is_perishable ? 'Périssable' : 'Non périssable';
+      return `<tr data-risk-forecast-product="${Number(row.produit_id)}"><td><strong>${escapeHtml(row.name)}</strong><br><small>${productNature}</small></td><td>${riskQuantityLabel(row.projected_demand, unit)}</td><td>${escapeHtml(serviceable)}</td><td>${escapeHtml(coverage)}</td><td>${escapeHtml(stockoutRate)}</td><td>${escapeHtml(endingStock)}</td><td>${escapeHtml(possibleShortage)}${Number(row.projected_shortage_quantity) > 0 ? `<br><small>Vers le ${escapeHtml(stockoutDate)}</small>` : ''}</td><td>${escapeHtml(expiryRate)}</td><td>${escapeHtml(lossLabel)}</td></tr>`;
+    }).join('');
+    forecastPanel.innerHTML = `<div class="panel-header"><div><h2>Projection sur ${escapeHtml(projectionPeriodLabel)}</h2><p class="panel-subtitle">MAD/CMM, couverture estimée du stock, quantité servable, stock final et déficit calculés à partir des sorties validées sur la période sélectionnée. Les produits périssables et non périssables sont analysés.</p></div></div><div style="overflow:auto"><table class="data-table risk-forecast-table"><thead><tr><th>Produit</th><th>Demande prévue</th><th>Quantité servable estimée</th><th>Couverture estimée</th><th>Vente max / jour avant rupture</th><th>Stock final estimé</th><th>Déficit possible</th><th>Pour écouler les lots à risque / jour</th><th>Perte estimée au coût d’achat</th></tr></thead><tbody>${forecastRows || '<tr><td colspan="9">Aucun produit actif.</td></tr>'}</tbody></table></div>`;
+    container.querySelector('.risk-summary-grid')?.insertAdjacentElement('afterend', forecastPanel);
     const summary = stockRiskData.summary;
     for (const [id, value] of Object.entries({
       'risk-stockout-count':summary.stockout_risks,
@@ -5232,19 +5690,10 @@ async function loadStockRiskDashboard() {
     }
     const recommendations = stockRiskData.rows.filter(row => Number(row.recommended_quantity) > 0);
     const recommendationBody = container.querySelector('#risk-recommendation-rows');
-    recommendationBody.innerHTML = recommendations.length ? recommendations.map(row => `<tr data-risk-product-row data-product-id="${Number(row.produit_id)}" data-currency="${escapeHtml(row.currency)}"><td><input class="risk-checkbox" type="checkbox" data-risk-selected checked aria-label="Inclure ${escapeHtml(row.name)}"></td><td><strong>${escapeHtml(row.sku)}</strong><br>${escapeHtml(row.name)}</td><td>${riskQuantityLabel(row.stock_available, row.unit_abbreviation || row.unit_name)}</td><td>${riskQuantityLabel(row.mad)}</td><td>${riskQuantityLabel(row.cmm)}</td><td>${riskQuantityLabel(row.recommended_quantity, row.unit_abbreviation || row.unit_name)}</td><td><input class="risk-input" type="number" min="1" step="1" value="${Number(row.recommended_quantity)}" data-risk-quantity aria-label="Quantité à commander pour ${escapeHtml(row.name)}"></td><td>${escapeHtml(row.supplier_name || '—')}</td><td><input class="risk-input" type="number" min="0" step="0.01" value="${Number(row.cost_price).toFixed(2)}" data-risk-cost aria-label="Coût estimé pour ${escapeHtml(row.name)}"> ${escapeHtml(row.currency)}</td></tr>`).join('') : '<tr><td class="risk-empty" colspan="9">Aucun approvisionnement proposé pour le moment.</td></tr>';
-    const statusRows = stockRiskData.rows.map(row => {
-      const riskMarkup = row.risk === 'urgent' ? riskStatusMarkup('urgent', row.critical ? 'Critique' : 'Urgent')
-        : row.risk === 'soon' ? riskStatusMarkup('warning', 'Prochainement')
-          : riskStatusMarkup('safe', 'Stock suffisant');
-      const signals = [row.overstock && riskStatusMarkup('neutral', 'Surstock'), row.low_rotation && riskStatusMarkup('warning', 'Faible rotation'), row.near_expiry && riskStatusMarkup('expired', 'Péremption')].filter(Boolean).join(' ');
-      const duration = row.days_remaining === null ? 'Données insuffisantes' : `${riskQuantityLabel(row.days_remaining)} j`;
-      const supply = row.recommended_quantity > 0 ? `À commander : ${riskQuantityLabel(row.recommended_quantity, row.unit_abbreviation || row.unit_name)}` : 'Aucun besoin estimé';
-      return `<tr><td><strong>${escapeHtml(row.sku)}</strong><br>${escapeHtml(row.name)}<br>${signals}</td><td>${escapeHtml(row.branch_name)}</td><td>${riskQuantityLabel(row.stock_available, row.unit_abbreviation || row.unit_name)}<br><small>Après transferts en attente : ${riskQuantityLabel(row.forecast_available_quantity, row.unit_abbreviation || row.unit_name)} · Minimum : ${riskQuantityLabel(row.min_stock_level)}</small></td><td>MAD ${riskQuantityLabel(row.mad)}<br>CMM ${riskQuantityLabel(row.cmm)}</td><td>${duration}</td><td>Entrées : ${riskQuantityLabel(row.pending_quantity, row.unit_abbreviation || row.unit_name)}<br>Sorties : ${riskQuantityLabel(row.pending_transfer_out_quantity, row.unit_abbreviation || row.unit_name)}</td><td>${riskMarkup}</td><td>${escapeHtml(supply)}</td></tr>`;
-    });
-    rowsTarget.innerHTML = statusRows.length ? statusRows.join('') : '<tr><td class="risk-empty" colspan="8">Aucun produit actif dans cette succursale.</td></tr>';
+    recommendationBody.innerHTML = recommendations.length ? recommendations.map(row => `<tr data-risk-product-row data-product-id="${Number(row.produit_id)}" data-currency="${escapeHtml(row.currency)}"><td><input class="risk-checkbox" type="checkbox" data-risk-selected checked aria-label="Inclure ${escapeHtml(row.name)}"></td><td><strong>${escapeHtml(row.sku)}</strong><br>${escapeHtml(row.name)}</td><td>${riskQuantityLabel(row.stock_available, row.unit_abbreviation || row.unit_name)}</td><td>${riskQuantityLabel(row.mad)}</td><td>${riskQuantityLabel(row.cmm)}</td><td>${riskQuantityLabel(row.recommended_quantity, row.unit_abbreviation || row.unit_name)}</td><td><input class="risk-input" type="number" min="${row.quantite_fractionnaire ? '0.001' : '1'}" step="${row.quantite_fractionnaire ? '0.001' : '1'}" value="${Number(row.recommended_quantity)}" data-risk-quantity aria-label="Quantité à commander pour ${escapeHtml(row.name)}"></td><td>${escapeHtml(row.supplier_name || '—')}</td><td><input class="risk-input" type="number" min="0" step="0.01" value="${Number(row.cost_price).toFixed(2)}" data-risk-cost aria-label="Coût estimé pour ${escapeHtml(row.name)}"> ${escapeHtml(row.currency)}</td></tr>`).join('') : '<tr><td class="risk-empty" colspan="9">Aucun approvisionnement proposé pour le moment.</td></tr>';
     const expiryBody = container.querySelector('#risk-expiry-rows');
-    expiryBody.innerHTML = stockRiskData.expiring_lots.length ? stockRiskData.expiring_lots.map(lot => `<tr><td><strong>${escapeHtml(lot.sku)}</strong><br>${escapeHtml(lot.product_name)}</td><td>#${Number(lot.lot_id)}</td><td>${escapeHtml(dateLabel(lot.date_expiration))}</td><td class="${Number(lot.days_to_expiry) < 0 ? 'risk-expiry-overdue' : ''}">${Number(lot.days_to_expiry) < 0 ? `Dépassé de ${Math.abs(Number(lot.days_to_expiry))} j` : `${Number(lot.days_to_expiry)} j`}</td><td>${riskQuantityLabel(lot.quantity_remaining)}</td></tr>`).join('') : '<tr><td class="risk-empty" colspan="5">Aucun lot proche de l’expiration dans les 90 prochains jours.</td></tr>';
+    expiryBody.innerHTML = stockRiskData.expiring_lots.length ? stockRiskData.expiring_lots.map(lot => `<tr data-risk-expiry-product="${Number(lot.produit_id)}"><td><strong>${escapeHtml(lot.sku)}</strong><br>${escapeHtml(lot.product_name)}</td><td>#${Number(lot.lot_id)}</td><td>${escapeHtml(dateLabel(lot.date_expiration))}</td><td class="${Number(lot.days_to_expiry) < 0 ? 'risk-expiry-overdue' : ''}">${Number(lot.days_to_expiry) < 0 ? `Dépassé de ${Math.abs(Number(lot.days_to_expiry))} j` : `${Number(lot.days_to_expiry)} j`}</td><td>${riskQuantityLabel(lot.quantity_remaining)}</td></tr>`).join('') : '<tr><td class="risk-empty" colspan="5">Aucun lot proche de l’expiration dans les 90 prochains jours.</td></tr>';
+    renderRiskStatusRows();
     renderRiskTreasury();
     if (hasAccess('voir_risques_stock') || hasAccess('voir_approvisionnements') || hasAccess('creer_approvisionnements')) {
       const orderParams = new URLSearchParams({action:'orders', succursale_id:String(stockRiskData.branch_id)});
@@ -5312,8 +5761,59 @@ async function transmitStockRiskOrder(orderId) {
     showToast(error.message);
   }
 }
+async function saveStockRiskOrder(orderId) {
+  const row = container.querySelector(`[data-risk-order-row="${orderId}"]`);
+  const items = [...(row?.querySelectorAll('[data-risk-order-item]') || [])].map(item => {
+    const original = stockRiskOrders.find(order => Number(order.bon_previsionnel_id) === orderId)?.items.find(line => Number(line.produit_id) === Number(item.dataset.productId));
+    return {
+      product_id:Number(item.dataset.productId),
+      quantity:Number(item.querySelector('[data-risk-order-quantity]').value),
+      unit_cost:Number(item.querySelector('[data-risk-order-cost]').value),
+      supplier_id:original?.fournisseur_id || null,
+    };
+  });
+  try {
+    const response = await fetch('../backend/public/stock-risk.php?action=orders', {
+      method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'include',
+      body:JSON.stringify({bon_previsionnel_id:orderId, items}),
+    });
+    const result = await readJson(response);
+    if (!response.ok || !result.success) throw new Error(result.message || 'Modification du bon impossible.');
+    showToast('Bon prévisionnel modifié.');
+    await loadStockRiskDashboard();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+async function deleteStockRiskOrder(orderId) {
+  if (!window.confirm('Supprimer définitivement ce bon brouillon ?')) return;
+  try {
+    const response = await fetch('../backend/public/stock-risk.php?action=orders', {
+      method:'DELETE', headers:{'Content-Type':'application/json'}, credentials:'include',
+      body:JSON.stringify({bon_previsionnel_id:orderId}),
+    });
+    const result = await readJson(response);
+    if (!response.ok || !result.success) throw new Error(result.message || 'Suppression du bon impossible.');
+    showToast('Bon brouillon supprimé.');
+    await loadStockRiskDashboard();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
 document.addEventListener('change', event => {
-  if (event.target.matches('#stock-risk-branch')) loadStockRiskDashboard();
+  if (event.target.matches('#stock-risk-branch')) { stockRiskSelectedProducts = null; loadStockRiskDashboard(); }
+  if (event.target.matches('#stock-risk-period')) loadStockRiskDashboard();
+  if (event.target.matches('[data-risk-show-all]')) {
+    stockRiskSelectedProducts = event.target.checked ? new Set(stockRiskData?.rows.map(row => Number(row.produit_id)) || []) : new Set();
+    container.querySelectorAll('[data-risk-product-selection]').forEach(input => { input.checked = event.target.checked; });
+    renderRiskStatusRows();
+  }
+  if (event.target.matches('[data-risk-product-selection]')) {
+    const productId = Number(event.target.dataset.riskProductSelection);
+    if (event.target.checked) stockRiskSelectedProducts.add(productId);
+    else stockRiskSelectedProducts.delete(productId);
+    renderRiskStatusRows();
+  }
   if (event.target.matches('[data-risk-selected]')) renderRiskTreasury();
 });
 document.addEventListener('input', event => {
@@ -5321,6 +5821,20 @@ document.addEventListener('input', event => {
 });
 document.addEventListener('click', event => {
   if (event.target.closest('[data-risk-refresh]')) loadStockRiskDashboard();
+  if (event.target.closest('[data-risk-select-matches]')) {
+    container.querySelectorAll('[data-risk-product-option]:not([hidden]) [data-risk-product-selection]').forEach(input => {
+      input.checked = true;
+      stockRiskSelectedProducts.add(Number(input.dataset.riskProductSelection));
+    });
+    renderRiskStatusRows();
+  }
+  if (event.target.closest('[data-risk-clear-selection]')) {
+    stockRiskSelectedProducts = new Set();
+    container.querySelectorAll('[data-risk-product-selection],[data-risk-show-all]').forEach(input => { input.checked = false; input.indeterminate = false; });
+    renderRiskStatusRows();
+  }
+  const reportButton = event.target.closest('[data-risk-report-export]');
+  if (reportButton) exportStockRiskReport(reportButton.dataset.riskReportExport).catch(error => showToast(error.message));
   if (event.target.closest('[data-risk-create-order]')) createStockRiskOrder();
   const exportButton = event.target.closest('[data-risk-order-export]');
   if (exportButton) {
@@ -5329,6 +5843,10 @@ document.addEventListener('click', event => {
   }
   const transmitButton = event.target.closest('[data-risk-transmit]');
   if (transmitButton) transmitStockRiskOrder(Number(transmitButton.dataset.riskTransmit));
+  const saveButton = event.target.closest('[data-risk-order-save]');
+  if (saveButton) saveStockRiskOrder(Number(saveButton.dataset.riskOrderSave));
+  const deleteButton = event.target.closest('[data-risk-order-delete]');
+  if (deleteButton) deleteStockRiskOrder(Number(deleteButton.dataset.riskOrderDelete));
 });
 setInterval(()=>{if(currentViewName==='cash'&&hasAccess('modifier_caisse'))loadPendingSales();},20000);
 setInterval(()=>{if(currentViewName==='stock-risk')loadStockRiskDashboard();},60000);

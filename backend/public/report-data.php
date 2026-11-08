@@ -391,6 +391,10 @@ try {
         $query->execute();
         $movement = $query->get_result()->fetch_assoc();
         if (!$movement) JsonResponse::error('Mouvement de caisse introuvable.', 404);
+        $branchLookup = $db->prepare('SELECT succursale_id FROM caisses WHERE entreprise_id = ? AND caisse_id = ? LIMIT 1');
+        $branchLookup->bind_param('ii', $enterpriseId, $movement['cash_id']);
+        $branchLookup->execute();
+        $movement['branch_id'] = (int) ($branchLookup->get_result()->fetch_assoc()['succursale_id'] ?? 0);
         JsonResponse::send(['success' => true, 'data' => $movement]);
     }
 
@@ -450,7 +454,7 @@ try {
         Authorization::requireAnyPermission($user,['voir_ventes','creer_ventes']);
         $requested=(int)($_GET['succursale_id']??0);$targetBranch=Authorization::branchId($user,$requested>0?$requested:null);
         if($targetBranch===null){$branchQuery=$db->prepare('SELECT succursale_id FROM succursales WHERE entreprise_id=? ORDER BY est_sucursal_mere DESC,succursale_id LIMIT 1');$branchQuery->bind_param('i',$enterpriseId);$branchQuery->execute();$targetBranch=(int)($branchQuery->get_result()->fetch_assoc()['succursale_id']??0);}
-        $productParams=[$targetBranch,$targetBranch,$enterpriseId];$productSql='SELECT p.produit_id,p.name,p.sku,p.unit_price,p.monais,p.est_perisable,p.unite_de_mesure,u.name AS unit_name,u.symbole AS unit_symbol,CASE WHEN p.est_perisable=1 THEN COALESCE(lots.available_quantity,0) ELSE COALESCE(st.quantity,0) END AS quantity FROM produits p LEFT JOIN unites_mesure u ON u.unite_mesure_id=p.unite_de_mesure AND u.entreprise_id=p.entreprise_id LEFT JOIN stocks st ON st.produit_id=p.produit_id AND st.entreprise_id=p.entreprise_id AND st.succursale_id=? LEFT JOIN (SELECT a.entreprise_id,a.succursale_id,d.produit_id,SUM(d.quantity-d.quantity_out) AS available_quantity FROM achat_details d JOIN achats a ON a.achat_id=d.achat_id AND a.entreprise_id=d.entreprise_id WHERE a.movement_type=\'IN\' AND a.status=\'RECEIVED\' AND d.date_expiration>=CURDATE() GROUP BY a.entreprise_id,a.succursale_id,d.produit_id) lots ON lots.entreprise_id=p.entreprise_id AND lots.produit_id=p.produit_id AND lots.succursale_id=? WHERE p.entreprise_id=? AND p.is_active=1';$productSql.=$productOriginCondition('p.succursale_origine_id',$productParams);$productSql.=' ORDER BY p.name';$products=$db->prepare($productSql);$bindParams($products,$productParams);$products->execute();$productRows=$products->get_result()->fetch_all(MYSQLI_ASSOC);
+        $productParams=[$targetBranch,$targetBranch,$enterpriseId];$productSql='SELECT p.produit_id,p.name,p.sku,p.unit_price,p.monais,p.est_perisable,p.quantite_fractionnaire,p.unite_de_mesure,u.name AS unit_name,u.symbole AS unit_symbol,CASE WHEN p.est_perisable=1 THEN COALESCE(lots.available_quantity,0) ELSE COALESCE(st.quantity,0) END AS quantity FROM produits p LEFT JOIN unites_mesure u ON u.unite_mesure_id=p.unite_de_mesure AND u.entreprise_id=p.entreprise_id LEFT JOIN stocks st ON st.produit_id=p.produit_id AND st.entreprise_id=p.entreprise_id AND st.succursale_id=? LEFT JOIN (SELECT a.entreprise_id,a.succursale_id,d.produit_id,SUM(d.quantity-d.quantity_out) AS available_quantity FROM achat_details d JOIN achats a ON a.achat_id=d.achat_id AND a.entreprise_id=d.entreprise_id WHERE a.movement_type=\'IN\' AND a.status=\'RECEIVED\' AND d.date_expiration>=CURDATE() GROUP BY a.entreprise_id,a.succursale_id,d.produit_id) lots ON lots.entreprise_id=p.entreprise_id AND lots.produit_id=p.produit_id AND lots.succursale_id=? WHERE p.entreprise_id=? AND p.is_active=1';$productSql.=$productOriginCondition('p.succursale_origine_id',$productParams);$productSql.=' ORDER BY p.name';$products=$db->prepare($productSql);$bindParams($products,$productParams);$products->execute();$productRows=$products->get_result()->fetch_all(MYSQLI_ASSOC);
         $cash=$db->prepare("SELECT c.caisse_id,c.name,t.code AS monais,t.symbole AS currency_symbol,c.montant AS solde_courant FROM caisses c JOIN types_caisses t ON t.type_caisse_id=c.type_caisse_id AND t.entreprise_id=c.entreprise_id WHERE c.entreprise_id=? AND c.succursale_id=? AND c.statut='OUVERTE' ORDER BY c.caisse_id DESC");$cash->bind_param('ii',$enterpriseId,$targetBranch);$cash->execute();$cashRows=$cash->get_result()->fetch_all(MYSQLI_ASSOC);$clients=$db->prepare('SELECT client_id,name FROM clients WHERE entreprise_id=? ORDER BY name');$clients->bind_param('i',$enterpriseId);$clients->execute();$clientRows=$clients->get_result()->fetch_all(MYSQLI_ASSOC);$currencyQuery=$db->prepare('SELECT type_monais AS code FROM tb_monais ORDER BY type_monais');$currencyQuery->execute();$currencyRows=array_column($currencyQuery->get_result()->fetch_all(MYSQLI_ASSOC),'code');
         JsonResponse::send(['success'=>true,'data'=>['succursale_id'=>$targetBranch,'products'=>$productRows,'cashboxes'=>$cashRows,'clients'=>$clientRows,'currencies'=>$currencyRows]]);
     }
@@ -636,18 +640,19 @@ try {
         $response = ['success' => true, 'data' => $query->get_result()->fetch_all(MYSQLI_ASSOC)];
         if ($response['data'] !== []) {
             $purchaseIds = implode(',', array_map(static fn (array $row): int => (int) $row['achat_id'], $response['data']));
-            $detailsQuery = $db->prepare('SELECT ad.achat_id, SUM(ad.quantity) AS total_quantity, MAX(ad.unit_cost) AS unit_cost, MAX(p.name) AS product_name, MAX(p.sku) AS product_sku, MAX(p.est_perisable) AS is_perishable, MAX(u.name) AS unit_name, MAX(u.symbole) AS unit_abbreviation, MAX(p.monais) AS monais FROM achat_details ad JOIN produits p ON p.produit_id = ad.produit_id AND p.entreprise_id = ad.entreprise_id LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE ad.entreprise_id = ? AND ad.achat_id IN (' . $purchaseIds . ') GROUP BY ad.achat_id');
+            $detailsQuery = $db->prepare('SELECT ad.achat_id, SUM(ad.quantity) AS total_quantity, MAX(ad.unit_cost) AS unit_cost, MAX(p.name) AS product_name, MAX(p.sku) AS product_sku, MAX(p.est_perisable) AS is_perishable, MAX(p.quantite_fractionnaire) AS quantite_fractionnaire, MAX(u.name) AS unit_name, MAX(u.symbole) AS unit_abbreviation, MAX(p.monais) AS monais FROM achat_details ad JOIN produits p ON p.produit_id = ad.produit_id AND p.entreprise_id = ad.entreprise_id LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE ad.entreprise_id = ? AND ad.achat_id IN (' . $purchaseIds . ') GROUP BY ad.achat_id');
             $detailsQuery->bind_param('i', $enterpriseId);
             $detailsQuery->execute();
             $purchaseDetails = [];
             foreach ($detailsQuery->get_result()->fetch_all(MYSQLI_ASSOC) as $detail) $purchaseDetails[(int) $detail['achat_id']] = $detail;
             foreach ($response['data'] as &$purchaseRow) {
                 $details = $purchaseDetails[(int) $purchaseRow['achat_id']] ?? [];
-                $purchaseRow['total_quantity'] = (int) ($details['total_quantity'] ?? 0);
+                $purchaseRow['total_quantity'] = (float) ($details['total_quantity'] ?? 0);
                 $purchaseRow['unit_cost'] = (float) ($details['unit_cost'] ?? 0);
                 $purchaseRow['product_name'] = $details['product_name'] ?? null;
                 $purchaseRow['product_sku'] = $details['product_sku'] ?? null;
                 $purchaseRow['is_perishable'] = (bool) ($details['is_perishable'] ?? false);
+                $purchaseRow['quantite_fractionnaire'] = (bool) ($details['quantite_fractionnaire'] ?? false);
                 $purchaseRow['unit_name'] = $details['unit_name'] ?? null;
                 $purchaseRow['unit_abbreviation'] = $details['unit_abbreviation'] ?? null;
                 $purchaseRow['monais'] = $details['monais'] ?? null;
@@ -696,7 +701,7 @@ try {
         $productId = (int) ($_GET['produit_id'] ?? 0);
         if ($productId < 1) JsonResponse::error('Identifiant produit invalide.', 422);
         $productParams = [$enterpriseId, $productId];
-        $productSql = 'SELECT p.produit_id, p.sku, p.name, p.unit_price, p.cost_price, p.monais, u.name AS unit_name, u.symbole AS unit_abbreviation FROM produits p LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE p.entreprise_id = ? AND p.produit_id = ?';
+        $productSql = 'SELECT p.produit_id, p.sku, p.name, p.unit_price, p.cost_price, p.monais, p.created_at, u.name AS unit_name, u.symbole AS unit_abbreviation FROM produits p LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE p.entreprise_id = ? AND p.produit_id = ?';
         $productSql .= $productOriginCondition('p.succursale_origine_id', $productParams) . ' LIMIT 1';
         $productQuery = $db->prepare($productSql);
         $bindParams($productQuery, $productParams);
@@ -730,6 +735,10 @@ try {
         if (!$validDate($dateFrom) || !$validDate($dateTo) || ($dateFrom !== '' && $dateTo !== '' && $dateFrom > $dateTo)) {
             JsonResponse::error('Format de date invalide pour le rapport.', 422);
         }
+        $periodEnd = $dateTo !== '' ? $dateTo : (new DateTimeImmutable('today'))->format('Y-m-d');
+        $periodStart = $dateFrom !== '' ? $dateFrom : (new DateTimeImmutable($periodEnd))->modify('-89 days')->format('Y-m-d');
+        if ($periodEnd < $periodStart) $periodEnd = $periodStart;
+        $madPeriodDays = max(1, (int) (new DateTimeImmutable($periodStart))->diff(new DateTimeImmutable($periodEnd))->days + 1);
         $rows = array_values(array_filter($rows, static function (array $row) use ($dateFrom, $dateTo, $search): bool {
             $day = substr((string) $row['movement_date'], 0, 10);
             if ($dateFrom !== '' && $day < $dateFrom) return false;
@@ -738,6 +747,25 @@ try {
             $haystack = mb_strtolower(implode(' ', array_map('strval', [$row['branch_name'], $row['movement_type'], $row['reference_type'], $row['note']])), 'UTF-8');
             return str_contains($haystack, $search);
         }));
+
+        $consumptionSql = 'SELECT SUM(CASE
+                WHEN m.reference_type = \'VENTE\' AND m.movement_type = \'SORTIE\' AND v.status <> \'CANCELLED\' THEN m.quantity_moved
+                WHEN m.reference_type = \'SORTIE_STOCK\' AND m.movement_type = \'SORTIE\' AND a.status = \'RECEIVED\' THEN m.quantity_moved
+                ELSE 0
+            END) AS consumed_quantity
+            FROM mouvements_stock m
+            LEFT JOIN ventes v ON m.reference_type = \'VENTE\' AND v.vente_id = m.reference_id AND v.entreprise_id = m.entreprise_id
+            LEFT JOIN achats a ON m.reference_type = \'SORTIE_STOCK\' AND a.achat_id = m.reference_id AND a.entreprise_id = m.entreprise_id
+            WHERE m.entreprise_id = ? AND m.produit_id = ? AND m.movement_date >= ? AND m.movement_date < DATE_ADD(?, INTERVAL 1 DAY)';
+        if ($branchId !== null) $consumptionSql .= ' AND m.succursale_id = ?';
+        $consumptionQuery = $db->prepare($consumptionSql);
+        if ($branchId === null) $consumptionQuery->bind_param('iiss', $enterpriseId, $productId, $periodStart, $periodEnd);
+        else $consumptionQuery->bind_param('iissi', $enterpriseId, $productId, $periodStart, $periodEnd, $branchId);
+        $consumptionQuery->execute();
+        $consumedQuantity = (float) ($consumptionQuery->get_result()->fetch_assoc()['consumed_quantity'] ?? 0);
+        $productAgeDays = max(1, min($madPeriodDays, (int) floor((strtotime($periodEnd) - strtotime((string) $product['created_at'])) / 86400) + 1));
+        $mad = $consumedQuantity / $productAgeDays;
+        $cmm = $mad * 30.4375;
 
         $costSql = "SELECT 'APPROVISIONNEMENT' AS reference_type, a.achat_id AS reference_id, SUM(d.quantity * d.unit_cost) / NULLIF(SUM(d.quantity), 0) AS unit_cost
             FROM achats a JOIN achat_details d ON d.achat_id = a.achat_id AND d.entreprise_id = a.entreprise_id
@@ -779,8 +807,9 @@ try {
         else $stockQuery->bind_param('iii', $enterpriseId, $productId, $branchId);
         $stockQuery->execute();
         $balances = $stockQuery->get_result()->fetch_all(MYSQLI_ASSOC);
-        $currentStock = array_sum(array_map(static fn (array $balance): int => (int) $balance['quantity'], $balances));
-        JsonResponse::send(['success' => true, 'data' => ['product' => $product, 'movements' => $rows, 'balances' => $balances, 'stock_max' => max($historicalStockMax, $currentStock)]]);
+        $currentStock = array_sum(array_map(static fn (array $balance): float => (float) $balance['quantity'], $balances));
+        $coverageDays = $mad > 0 ? round($currentStock / $mad, 1) : null;
+        JsonResponse::send(['success' => true, 'data' => ['product' => $product, 'movements' => $rows, 'balances' => $balances, 'stock_max' => max($historicalStockMax, $currentStock), 'mad' => round($mad, 4), 'cmm' => round($cmm, 2), 'mad_period_days' => $madPeriodDays, 'coverage_days' => $coverageDays]]);
     }
 
     if ($action === 'stock-movements-products') {
@@ -908,6 +937,10 @@ try {
         $purchaseQuery->execute();
         $purchase = $purchaseQuery->get_result()->fetch_assoc();
         if (!$purchase) JsonResponse::error('Approvisionnement introuvable dans votre périmètre.', 404);
+        $branchLookup = $db->prepare('SELECT succursale_id FROM achats WHERE entreprise_id = ? AND achat_id = ? LIMIT 1');
+        $branchLookup->bind_param('ii', $enterpriseId, $purchaseId);
+        $branchLookup->execute();
+        $purchase['branch_id'] = (int) ($branchLookup->get_result()->fetch_assoc()['succursale_id'] ?? 0);
 
         $details = $db->prepare('SELECT d.quantity, d.quantity_out, d.date_expiration, d.unit_cost, d.subtotal, p.sku, p.name AS product_name, p.monais, u.name AS unit_name, u.symbole AS unit_abbreviation FROM achat_details d JOIN produits p ON p.produit_id = d.produit_id AND p.entreprise_id = d.entreprise_id LEFT JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE d.entreprise_id = ? AND d.achat_id = ? ORDER BY d.achat_detail_id');
         $details->bind_param('ii', $enterpriseId, $purchaseId);

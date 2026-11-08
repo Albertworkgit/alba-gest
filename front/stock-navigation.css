@@ -172,6 +172,10 @@
 .stock-detail-facts>div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #edf1ee; font-size: 10px; }
 .stock-detail-facts dt { color: var(--muted); }
 .stock-detail-facts dd { margin: 0; color: var(--ink); font-weight: 700; text-align: right; }
+.entity-form .product-tracking-type { display: flex; align-items: center; gap: 12px; width: fit-content; max-width: 100%; min-width: 0; justify-self: start; margin: 0; padding: 6px 9px; border: 1px solid #e6ebe7; border-radius: 6px; }
+.entity-form .product-tracking-type legend { padding: 0 4px; color: #73807b; font-size: 11px; font-weight: 700; }
+.entity-form .product-tracking-type label { display: inline-flex; flex-direction: row; align-items: center; gap: 5px; margin: 0; white-space: nowrap; }
+.entity-form .product-tracking-type input[type="radio"] { padding: 0; border: 0; accent-color: #147c70; }
 .stock-detail-description { margin: 12px 0; color: var(--muted); font-size: 11px; line-height: 1.55; overflow-wrap: anywhere; }
 .stock-detail-actions { display: grid; gap: 7px; margin-top: 14px; }
 .stock-detail-action { min-height: 36px; padding: 8px 10px; border: 1px solid #dce8e0; border-radius: 6px; background: #fff; color: #286143; font-size: 11px; font-weight: 700; text-align: center; }
@@ -187,6 +191,8 @@
 .dark-theme .stock-product-cards .stock-product-card td { background: transparent; }
 .dark-theme .stock-card-identity strong,.dark-theme .stock-card-price>strong { color: var(--ink); }
 .dark-theme .stock-product-details { border-color: #354742; border-top-color: #58bd80; background: #263633; }
+.dark-theme .product-tracking-type { border-color: #354742; }
+.dark-theme .product-tracking-type legend { color: #9db2aa; }
 .dark-theme .stock-detail-quantity { background: #203a2d; }
 .dark-theme .stock-detail-quantity>span { color: #a8cbb4; }
 .dark-theme .stock-detail-facts>div { border-color: #354742; }

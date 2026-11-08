@@ -56,7 +56,7 @@ try {
         $branchId,
         (int) ($body['produit_id'] ?? 0),
         (string) ($body['operation'] ?? ''),
-        (int) ($body['quantity'] ?? -1),
+        (float) ($body['quantity'] ?? -1),
         array_key_exists('min_stock_level', $body) ? (int) $body['min_stock_level'] : null,
         (int) ($actor['id'] ?? 0),
         Authorization::productOrigins($actor)

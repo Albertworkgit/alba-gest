@@ -9,14 +9,14 @@ use RuntimeException;
 
 final class StockRiskService
 {
-    private const HISTORY_DAYS = 90;
     private const TARGET_DAYS = 30;
     private const EXPIRY_DAYS = 90;
 
     public function __construct(private readonly mysqli $db) {}
 
-    public function dashboard(array $actor, ?int $requestedBranchId): array
+    public function dashboard(array $actor, ?int $requestedBranchId, int $periodDays = self::TARGET_DAYS): array
     {
+        $periodDays = max(1, min(365, $periodDays));
         $enterpriseId = (int) $actor['entreprise_id'];
         $branchId = Authorization::branchId($actor, $requestedBranchId);
         $origins = Authorization::productOrigins($actor);
@@ -29,7 +29,7 @@ final class StockRiskService
         }
         if ($branchName === '') throw new RuntimeException('Succursale introuvable ou inaccessible.');
 
-        $productsSql = 'SELECT p.produit_id, p.sku, p.name, p.fournisseur_id, p.cost_price, p.monais, p.est_perisable, p.created_at, f.name AS supplier_name, COALESCE(s.quantity, 0) AS stock_available, COALESCE(s.min_stock_level, 5) AS min_stock_level, COALESCE(pending.pending_quantity, 0) AS pending_quantity, COALESCE(pending_transfer_out.pending_quantity, 0) AS pending_transfer_out_quantity, u.name AS unit_name, u.symbole AS unit_abbreviation
+        $productsSql = 'SELECT p.produit_id, p.sku, p.name, p.fournisseur_id, p.cost_price, p.monais, p.est_perisable, p.quantite_fractionnaire, p.created_at, f.name AS supplier_name, COALESCE(s.quantity, 0) AS stock_available, COALESCE(s.min_stock_level, 5) AS min_stock_level, COALESCE(pending.pending_quantity, 0) AS pending_quantity, COALESCE(pending_transfer_out.pending_quantity, 0) AS pending_transfer_out_quantity, u.name AS unit_name, u.symbole AS unit_abbreviation
             FROM produits p
             LEFT JOIN stocks s ON s.entreprise_id = p.entreprise_id AND s.produit_id = p.produit_id AND s.succursale_id = ?
             LEFT JOIN fournisseurs f ON f.fournisseur_id = p.fournisseur_id AND f.entreprise_id = p.entreprise_id
@@ -78,7 +78,7 @@ final class StockRiskService
             FROM mouvements_stock m
             LEFT JOIN ventes v ON m.reference_type = \'VENTE\' AND v.vente_id = m.reference_id AND v.entreprise_id = m.entreprise_id
             LEFT JOIN achats a ON m.reference_type = \'SORTIE_STOCK\' AND a.achat_id = m.reference_id AND a.entreprise_id = m.entreprise_id
-            WHERE m.entreprise_id = ? AND m.succursale_id = ? AND m.movement_date >= DATE_SUB(NOW(), INTERVAL ' . self::HISTORY_DAYS . ' DAY)
+            WHERE m.entreprise_id = ? AND m.succursale_id = ? AND m.movement_date >= DATE_SUB(NOW(), INTERVAL ' . $periodDays . ' DAY)
             GROUP BY m.produit_id';
         $consumption = $this->db->prepare($consumptionSql);
         $consumption->bind_param('ii', $enterpriseId, $branchId);
@@ -106,28 +106,54 @@ final class StockRiskService
         $rows = [];
         $urgent = $critical = $overstock = $lowRotation = [];
         $expiryProducts = [];
-        foreach ($expiryLots as $lot) $expiryProducts[(int) $lot['produit_id']] = true;
+        $expiryByProduct = [];
+        foreach ($expiryLots as $lot) {
+            $productId = (int) $lot['produit_id'];
+            $expiryProducts[$productId] = true;
+            $expiryByProduct[$productId][] = $lot;
+        }
         foreach ($products as $product) {
             $productId = (int) $product['produit_id'];
-            $quantity = (int) $product['stock_available'];
-            $pendingQuantity = (int) $product['pending_quantity'];
-            $pendingTransferOut = (int) $product['pending_transfer_out_quantity'];
+            $quantity = (float) $product['stock_available'];
+            $pendingQuantity = (float) $product['pending_quantity'];
+            $pendingTransferOut = (float) $product['pending_transfer_out_quantity'];
             $forecastQuantity = max(0, $quantity - $pendingTransferOut);
             $consumed = $consumptionByProduct[$productId] ?? 0.0;
-            $ageDays = max(1, min(self::HISTORY_DAYS, (int) floor((time() - strtotime((string) $product['created_at'])) / 86400)));
+            $ageDays = max(1, min($periodDays, (int) floor((time() - strtotime((string) $product['created_at'])) / 86400)));
             $mad = $consumed / $ageDays;
             $cmm = $mad * 30.4375;
-            $daysRemaining = $mad > 0 ? round($forecastQuantity / $mad, 1) : null;
-            $recommended = $mad > 0
-                ? max(0, (int) ceil(($mad * self::TARGET_DAYS) - $forecastQuantity - $pendingQuantity))
-                : 0;
+            $daysUntilStockout = $mad > 0 ? $forecastQuantity / $mad : null;
+            $daysRemaining = $daysUntilStockout !== null ? round($daysUntilStockout, 1) : null;
+            $estimatedStockoutDate = $daysUntilStockout !== null
+                ? (new \DateTimeImmutable('today'))->modify('+' . (int) ceil($daysUntilStockout) . ' days')->format('Y-m-d')
+                : null;
+            $recommendedNeed = $mad > 0 ? max(0, ($mad * $periodDays) - $forecastQuantity - $pendingQuantity) : 0;
+            $recommended = (int) $product['quantite_fractionnaire'] === 1
+                ? ceil($recommendedNeed * 1000) / 1000
+                : ceil($recommendedNeed);
+            $dailySellLimit = $forecastQuantity / $periodDays;
+            $projectedDemand = $mad * $periodDays;
+            $expiryQuantity = 0.0;
+            $expirySellPerDay = 0.0;
+            $estimatedLoss = 0.0;
+            $estimatedLossQuantity = 0.0;
+            foreach ($expiryByProduct[$productId] ?? [] as $lot) {
+                $daysToExpiry = max(0, (int) $lot['days_to_expiry']);
+                if ($daysToExpiry > $periodDays) continue;
+                $lotQuantity = (float) $lot['quantity_remaining'];
+                $expiryQuantity += $lotQuantity;
+                $expirySellPerDay += $lotQuantity / max(1, $daysToExpiry);
+                $atRiskQuantity = max(0, $lotQuantity - ($mad * $daysToExpiry));
+                $estimatedLossQuantity += $atRiskQuantity;
+                $estimatedLoss += $atRiskQuantity * (float) $product['cost_price'];
+            }
             $daysToCritical = $mad > 0 ? $forecastQuantity / $mad : null;
-            $criticalStock = $forecastQuantity <= (int) $product['min_stock_level'];
+            $criticalStock = $forecastQuantity <= (float) $product['min_stock_level'];
             $risk = $criticalStock || ($daysToCritical !== null && $daysToCritical <= 7)
                 ? 'urgent'
                 : ($daysToCritical !== null && $daysToCritical <= 30 ? 'soon' : 'safe');
             $isOverstock = $mad > 0 && $forecastQuantity > $mad * 90;
-            $isLowRotation = $ageDays >= self::HISTORY_DAYS && $cmm < 1 && $forecastQuantity > 0;
+            $isLowRotation = $ageDays >= $periodDays && $cmm < 1 && $forecastQuantity > 0;
             $row = [
                 'produit_id' => $productId,
                 'sku' => (string) $product['sku'],
@@ -139,12 +165,25 @@ final class StockRiskService
                 'supplier_name' => (string) ($product['supplier_name'] ?? ''),
                 'stock_available' => $quantity,
                 'forecast_available_quantity' => $forecastQuantity,
-                'min_stock_level' => (int) $product['min_stock_level'],
+                'min_stock_level' => (float) $product['min_stock_level'],
+                'quantite_fractionnaire' => (int) $product['quantite_fractionnaire'],
                 'pending_quantity' => $pendingQuantity,
                 'pending_transfer_out_quantity' => $pendingTransferOut,
                 'mad' => round($mad, 4),
                 'cmm' => round($cmm, 2),
                 'days_remaining' => $daysRemaining,
+                'coverage_days' => $daysRemaining,
+                'period_days' => $periodDays,
+                'daily_sell_limit' => round($dailySellLimit, 4),
+                'projected_demand' => round($projectedDemand, 3),
+                'serviceable_quantity' => round(min($forecastQuantity, $projectedDemand), 3),
+                'projected_ending_stock' => round(max(0, $forecastQuantity - $projectedDemand), 3),
+                'projected_shortage_quantity' => round(max(0, $projectedDemand - $forecastQuantity), 3),
+                'estimated_stockout_date' => $estimatedStockoutDate,
+                'expiry_quantity_in_period' => round($expiryQuantity, 4),
+                'expiry_sell_per_day' => round($expirySellPerDay, 4),
+                'estimated_expiry_loss_quantity' => round($estimatedLossQuantity, 4),
+                'estimated_expiry_loss' => round($estimatedLoss, 2),
                 'recommended_quantity' => $recommended,
                 'cost_price' => (float) $product['cost_price'],
                 'currency' => (string) $product['monais'],
@@ -163,9 +202,6 @@ final class StockRiskService
             if ($isLowRotation) $lowRotation[] = $row;
         }
 
-        $permissions = Authorization::permissions($actor);
-        $canViewTreasury = in_array('*', $permissions, true) || in_array('voir_caisse', $permissions, true);
-        $balances = $canViewTreasury ? $this->cashBalances($enterpriseId, $branchId) : [];
         $recommendedCosts = [];
         foreach ($rows as $row) {
             $currency = $row['currency'];
@@ -175,20 +211,18 @@ final class StockRiskService
         $treasuryWarnings = [];
         foreach ($recommendedCosts as $currency => $amount) {
             if ($amount <= 0) continue;
-            $available = $balances[$currency] ?? null;
             $treasuryWarnings[] = [
                 'currency' => $currency,
                 'estimated_amount' => round($amount, 2),
-                'available_balance' => $available,
-                'insufficient' => $canViewTreasury && ($available === null || $available < $amount),
             ];
         }
 
         return [
             'branch_id' => $branchId,
             'branches' => $branches,
-            'history_days' => self::HISTORY_DAYS,
-            'target_coverage_days' => self::TARGET_DAYS,
+            'history_days' => $periodDays,
+            'target_coverage_days' => $periodDays,
+            'period_days' => $periodDays,
             'summary' => [
                 'stockout_risks' => count(array_filter($rows, static fn(array $row): bool => $row['risk'] !== 'safe')),
                 'critical_stock' => count($critical),
@@ -203,7 +237,7 @@ final class StockRiskService
             'overstock' => $overstock,
             'low_rotation' => $lowRotation,
             'expiring_lots' => $expiryLots,
-            'treasury' => ['access' => $canViewTreasury, 'cash_balances' => $balances, 'estimated_orders' => $treasuryWarnings],
+            'treasury' => ['estimated_orders' => $treasuryWarnings],
         ];
     }
 
@@ -220,7 +254,7 @@ final class StockRiskService
         $statement->bind_param('iii', $enterpriseId, $branchId, $branchId);
         $statement->execute();
         $orders = $statement->get_result()->fetch_all(MYSQLI_ASSOC);
-        $itemsQuery = $this->db->prepare('SELECT d.produit_id, d.fournisseur_id, d.stock_disponible, d.mad, d.cmm, d.quantite_recommandee, d.quantite_commande, d.unit_cost, d.monais, p.sku, p.name AS product_name, f.name AS supplier_name FROM bon_commande_previsionnel_details d JOIN produits p ON p.produit_id = d.produit_id AND p.entreprise_id = d.entreprise_id LEFT JOIN fournisseurs f ON f.fournisseur_id = d.fournisseur_id AND f.entreprise_id = d.entreprise_id WHERE d.entreprise_id = ? AND d.bon_previsionnel_id = ? ORDER BY p.name');
+        $itemsQuery = $this->db->prepare('SELECT d.produit_id, d.fournisseur_id, d.stock_disponible, d.mad, d.cmm, d.quantite_recommandee, d.quantite_commande, d.unit_cost, d.monais, p.quantite_fractionnaire, p.sku, p.name AS product_name, f.name AS supplier_name FROM bon_commande_previsionnel_details d JOIN produits p ON p.produit_id = d.produit_id AND p.entreprise_id = d.entreprise_id LEFT JOIN fournisseurs f ON f.fournisseur_id = d.fournisseur_id AND f.entreprise_id = d.entreprise_id WHERE d.entreprise_id = ? AND d.bon_previsionnel_id = ? ORDER BY p.name');
         foreach ($orders as &$order) {
             $orderId = (int) $order['bon_previsionnel_id'];
             $itemsQuery->bind_param('ii', $enterpriseId, $orderId);
@@ -265,11 +299,11 @@ final class StockRiskService
             foreach ($items as $item) {
                 if (!is_array($item)) throw new RuntimeException('Ligne de commande invalide.');
                 $productId = (int) ($item['product_id'] ?? 0);
-                $quantity = filter_var($item['quantity'] ?? null, FILTER_VALIDATE_INT);
+                $quantity = filter_var($item['quantity'] ?? null, FILTER_VALIDATE_FLOAT);
                 $supplierId = isset($item['supplier_id']) && $item['supplier_id'] !== '' ? (int) $item['supplier_id'] : null;
                 $unitCost = filter_var($item['unit_cost'] ?? null, FILTER_VALIDATE_FLOAT);
                 $current = $currentRows[$productId] ?? null;
-                if (!$current || $quantity === false || $quantity < 1 || $unitCost === false || $unitCost < 0) {
+                if (!$current || $quantity === false || !is_finite((float) $quantity) || $quantity < 0.001 || abs((float) $quantity - round((float) $quantity, 3)) > 0.0000001 || ((int) $current['quantite_fractionnaire'] !== 1 && floor((float) $quantity) !== (float) $quantity) || $unitCost === false || $unitCost < 0) {
                     throw new RuntimeException('Produit, quantité ou coût invalide dans le bon prévisionnel.');
                 }
                 if (isset($seenProducts[$productId])) throw new RuntimeException('Un produit ne peut apparaître qu’une fois dans un bon prévisionnel.');
@@ -286,7 +320,7 @@ final class StockRiskService
                 $cmm = $current['cmm'];
                 $recommended = $current['recommended_quantity'];
                 $currency = $current['currency'];
-                $insert->bind_param('iiiiiddiids', $enterpriseId, $orderId, $productId, $supplierId, $stock, $mad, $cmm, $recommended, $quantity, $unitCost, $currency);
+                $insert->bind_param('iiiidddddds', $enterpriseId, $orderId, $productId, $supplierId, $stock, $mad, $cmm, $recommended, $quantity, $unitCost, $currency);
                 $insert->execute();
             }
             $this->db->commit();
@@ -315,7 +349,7 @@ final class StockRiskService
             $branchCheck->execute();
             if (!$branchCheck->get_result()->fetch_assoc()) throw new RuntimeException('Succursale introuvable.');
 
-            $lines = $this->db->prepare('SELECT d.produit_id, d.fournisseur_id, d.quantite_commande, d.unit_cost, d.monais, p.est_perisable, p.succursale_origine_id
+            $lines = $this->db->prepare('SELECT d.produit_id, d.fournisseur_id, d.quantite_commande, d.unit_cost, d.monais, p.est_perisable, p.quantite_fractionnaire, p.succursale_origine_id
                 FROM bon_commande_previsionnel_details d JOIN produits p ON p.produit_id = d.produit_id AND p.entreprise_id = d.entreprise_id
                 WHERE d.entreprise_id = ? AND d.bon_previsionnel_id = ? FOR UPDATE');
             $lines->bind_param('ii', $enterpriseId, $orderId);
@@ -327,9 +361,9 @@ final class StockRiskService
                 if (!Authorization::canUseProductFromBranch($actor, (int) $line['succursale_origine_id'])) {
                     throw new RuntimeException('Accès limité à votre succursale : un produit du bon n’est plus accessible.');
                 }
-                $quantity = (int) $line['quantite_commande'];
+                $quantity = (float) $line['quantite_commande'];
                 $unitCost = (float) $line['unit_cost'];
-                if ($quantity < 1 || $unitCost <= 0) {
+                if ($quantity < 0.001 || ((int) $line['quantite_fractionnaire'] !== 1 && floor($quantity) !== $quantity) || $unitCost <= 0) {
                     throw new RuntimeException('Un coût d’achat supérieur à zéro est requis avant de transmettre le bon.');
                 }
                 if ($line['fournisseur_id'] !== null) {
@@ -353,7 +387,7 @@ final class StockRiskService
                 $purchaseId = (int) $this->db->insert_id;
                 $subtotal = $total;
                 $detail = $this->db->prepare('INSERT INTO achat_details (entreprise_id, achat_id, produit_id, quantity, date_expiration, unit_cost, subtotal) VALUES (?, ?, ?, ?, NULL, ?, ?)');
-                $detail->bind_param('iiiidd', $enterpriseId, $purchaseId, $line['produit_id'], $quantity, $unitCost, $subtotal);
+                $detail->bind_param('iiiddd', $enterpriseId, $purchaseId, $line['produit_id'], $quantity, $unitCost, $subtotal);
                 $detail->execute();
             }
             $update = $this->db->prepare('UPDATE bons_commande_previsionnels SET status = \'TRANSMITTED\', transmitted_at = NOW() WHERE bon_previsionnel_id = ? AND entreprise_id = ? AND status = \'DRAFT\'');
@@ -362,6 +396,85 @@ final class StockRiskService
             if ($update->affected_rows !== 1) throw new RuntimeException('Le bon a déjà été transmis.');
             $this->db->commit();
             return ['reference' => (string) $order['reference'], 'purchase_count' => count($orderLines)];
+        } catch (\Throwable $exception) {
+            $this->db->rollback();
+            throw $exception;
+        }
+    }
+
+    public function updateOrder(array $actor, int $orderId, array $items): void
+    {
+        $enterpriseId = (int) $actor['entreprise_id'];
+        if ($orderId < 1 || $items === [] || count($items) > 200) {
+            throw new RuntimeException('Le bon doit contenir au moins un produit (200 maximum).');
+        }
+        $this->db->begin_transaction();
+        try {
+            $query = $this->db->prepare('SELECT succursale_id, status FROM bons_commande_previsionnels WHERE bon_previsionnel_id = ? AND entreprise_id = ? LIMIT 1 FOR UPDATE');
+            $query->bind_param('ii', $orderId, $enterpriseId);
+            $query->execute();
+            $order = $query->get_result()->fetch_assoc();
+            if (!$order || $order['status'] !== 'DRAFT') throw new RuntimeException('Seuls les bons brouillons peuvent être modifiés.');
+            $branchId = Authorization::branchId($actor, (int) $order['succursale_id']);
+            if ($branchId === null) throw new RuntimeException('Succursale requise pour modifier le bon.');
+
+            $analysis = $this->dashboard($actor, $branchId);
+            $currentRows = [];
+            foreach ($analysis['rows'] as $row) $currentRows[$row['produit_id']] = $row;
+            $seenProducts = [];
+            $delete = $this->db->prepare('DELETE FROM bon_commande_previsionnel_details WHERE entreprise_id = ? AND bon_previsionnel_id = ?');
+            $delete->bind_param('ii', $enterpriseId, $orderId);
+            $delete->execute();
+            foreach ($items as $item) {
+                if (!is_array($item)) throw new RuntimeException('Ligne de commande invalide.');
+                $productId = (int) ($item['product_id'] ?? 0);
+                $quantity = filter_var($item['quantity'] ?? null, FILTER_VALIDATE_FLOAT);
+                $unitCost = filter_var($item['unit_cost'] ?? null, FILTER_VALIDATE_FLOAT);
+                $current = $currentRows[$productId] ?? null;
+                if (!$current || $quantity === false || !is_finite((float) $quantity) || $quantity < 0.001 || abs((float) $quantity - round((float) $quantity, 3)) > 0.0000001 || ((int) $current['quantite_fractionnaire'] !== 1 && floor((float) $quantity) !== (float) $quantity) || $unitCost === false || $unitCost < 0) {
+                    throw new RuntimeException('Produit, quantité ou coût invalide dans le bon prévisionnel.');
+                }
+                if (isset($seenProducts[$productId])) throw new RuntimeException('Un produit ne peut apparaître qu’une fois dans un bon prévisionnel.');
+                $seenProducts[$productId] = true;
+                $supplierId = isset($item['supplier_id']) && $item['supplier_id'] !== '' ? (int) $item['supplier_id'] : null;
+                if ($supplierId !== null) {
+                    $supplier = $this->db->prepare('SELECT fournisseur_id FROM fournisseurs WHERE fournisseur_id = ? AND entreprise_id = ? AND (succursale_id IS NULL OR succursale_id = ?) LIMIT 1');
+                    $supplier->bind_param('iii', $supplierId, $enterpriseId, $branchId);
+                    $supplier->execute();
+                    if (!$supplier->get_result()->fetch_assoc()) throw new RuntimeException('Un fournisseur ne correspond pas à cette succursale.');
+                }
+                $insert = $this->db->prepare('INSERT INTO bon_commande_previsionnel_details (entreprise_id, bon_previsionnel_id, produit_id, fournisseur_id, stock_disponible, mad, cmm, quantite_recommandee, quantite_commande, unit_cost, monais) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+                $stock = $current['stock_available'];
+                $mad = $current['mad'];
+                $cmm = $current['cmm'];
+                $recommended = $current['recommended_quantity'];
+                $currency = $current['currency'];
+                $insert->bind_param('iiiidddddds', $enterpriseId, $orderId, $productId, $supplierId, $stock, $mad, $cmm, $recommended, $quantity, $unitCost, $currency);
+                $insert->execute();
+            }
+            $this->db->commit();
+        } catch (\Throwable $exception) {
+            $this->db->rollback();
+            throw $exception;
+        }
+    }
+
+    public function deleteOrder(array $actor, int $orderId): void
+    {
+        $enterpriseId = (int) $actor['entreprise_id'];
+        $this->db->begin_transaction();
+        try {
+            $query = $this->db->prepare('SELECT succursale_id, status FROM bons_commande_previsionnels WHERE bon_previsionnel_id = ? AND entreprise_id = ? LIMIT 1 FOR UPDATE');
+            $query->bind_param('ii', $orderId, $enterpriseId);
+            $query->execute();
+            $order = $query->get_result()->fetch_assoc();
+            if (!$order || $order['status'] !== 'DRAFT') throw new RuntimeException('Seuls les bons brouillons peuvent être supprimés.');
+            if (Authorization::branchId($actor, (int) $order['succursale_id']) === null) throw new RuntimeException('Accès limité à votre succursale.');
+            $delete = $this->db->prepare('DELETE FROM bons_commande_previsionnels WHERE bon_previsionnel_id = ? AND entreprise_id = ? AND status = \'DRAFT\'');
+            $delete->bind_param('ii', $orderId, $enterpriseId);
+            $delete->execute();
+            if ($delete->affected_rows !== 1) throw new RuntimeException('Le bon brouillon n’a pas pu être supprimé.');
+            $this->db->commit();
         } catch (\Throwable $exception) {
             $this->db->rollback();
             throw $exception;

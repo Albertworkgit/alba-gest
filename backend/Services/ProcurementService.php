@@ -34,7 +34,7 @@ final class ProcurementService
         $productId = (int) ($data['produit_id'] ?? 0);
         $userId = (int) $actor['id'];
         $purchaseNo = trim((string) ($data['purchase_no'] ?? ''));
-        $quantity = (int) ($data['quantity'] ?? 0);
+        $quantity = (float) ($data['quantity'] ?? 0);
         $unitCost = (float) ($data['unit_cost'] ?? 0);
         $movementType = strtoupper((string) ($data['movement_type'] ?? 'IN'));
         $unitCostMode = strtoupper((string) ($data['unit_cost_mode'] ?? 'PRODUCT'));
@@ -50,7 +50,7 @@ final class ProcurementService
         if (!in_array($movementType, ['IN', 'OUT'], true)) {
             throw new RuntimeException('Choisissez une entrée ou une sortie de stock valide.');
         }
-        if ($productId < 1 || $quantity < 1 || $unitCost < 0 || ($movementType === 'IN' && $purchaseNo === '')) {
+        if ($productId < 1 || !is_finite($quantity) || $quantity < 0.001 || $unitCost < 0 || ($movementType === 'IN' && $purchaseNo === '')) {
             throw new RuntimeException('Produit et quantité sont obligatoires; une référence est aussi requise pour une entrée.');
         }
         if (mb_strlen($purchaseNo, 'UTF-8') > 50) {
@@ -76,11 +76,14 @@ final class ProcurementService
         if (!$ownership || !$ownership['branch_ok'] || !$ownership['product_ok']) {
             throw new RuntimeException('Une ressource ne correspond pas à votre entreprise.');
         }
-        $product = $this->db->prepare('SELECT est_perisable, cost_price, monais, succursale_origine_id FROM produits WHERE produit_id = ? AND entreprise_id = ? AND is_active = 1 LIMIT 1');
+        $product = $this->db->prepare('SELECT est_perisable, quantite_fractionnaire, cost_price, monais, succursale_origine_id FROM produits WHERE produit_id = ? AND entreprise_id = ? AND is_active = 1 LIMIT 1');
         $product->bind_param('ii', $productId, $enterpriseId);
         $product->execute();
         $productRow = $product->get_result()->fetch_assoc();
         if (!$productRow) throw new RuntimeException('Produit introuvable ou inactif.');
+        if (!is_finite($quantity) || $quantity < 0.001 || abs($quantity - round($quantity, 3)) > 0.0000001 || ((int) $productRow['quantite_fractionnaire'] !== 1 && floor($quantity) !== $quantity)) {
+            throw new RuntimeException('La quantité ne correspond pas au mode de quantité du produit.');
+        }
         if (!Authorization::canUseProductFromBranch($actor, (int) $productRow['succursale_origine_id'])) {
             throw new RuntimeException('Accès limité à votre succursale : ce produit n’est pas accessible.');
         }
@@ -117,13 +120,13 @@ final class ProcurementService
                 $lotsQuery->execute();
                 $remainingToAllocate = $quantity;
                 foreach ($lotsQuery->get_result()->fetch_all(MYSQLI_ASSOC) as $lot) {
-                    $lotRemaining = (int) $lot['quantity'] - (int) $lot['quantity_out'];
+                    $lotRemaining = (float) $lot['quantity'] - (float) $lot['quantity_out'];
                     $allocated = min($remainingToAllocate, $lotRemaining);
                     if ($allocated > 0) {
                         $lotAllocations[] = ['lot_detail_id' => (int) $lot['achat_detail_id'], 'quantity' => $allocated];
                         $remainingToAllocate -= $allocated;
                     }
-                    if ($remainingToAllocate === 0) break;
+                    if ($remainingToAllocate <= 0) break;
                 }
                 if ($remainingToAllocate > 0) throw new RuntimeException('La quantité demandée dépasse le stock disponible dans les lots périssables de cette succursale.');
             }
@@ -141,7 +144,7 @@ final class ProcurementService
 
             $detailExpiration = $isPerishable && $movementType === 'IN' ? $expirationDate : null;
             $detail = $this->db->prepare('INSERT INTO achat_details (entreprise_id, achat_id, produit_id, quantity, date_expiration, unit_cost, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?)');
-            $detail->bind_param('iiiisdd', $enterpriseId, $purchaseId, $productId, $quantity, $detailExpiration, $unitCost, $total);
+            $detail->bind_param('iiidsdd', $enterpriseId, $purchaseId, $productId, $quantity, $detailExpiration, $unitCost, $total);
             $detail->execute();
             $purchaseDetailId = (int) $this->db->insert_id;
 
@@ -150,25 +153,25 @@ final class ProcurementService
                 $stockBeforeQuery->bind_param('iii', $enterpriseId, $branchId, $productId);
                 $stockBeforeQuery->execute();
                 $stockBeforeRow = $stockBeforeQuery->get_result()->fetch_assoc();
-                $quantityBefore = (int) ($stockBeforeRow['quantity'] ?? 0);
+                $quantityBefore = (float) ($stockBeforeRow['quantity'] ?? 0);
                 if ($movementType === 'IN') {
                     $stock = $this->db->prepare('INSERT INTO stocks (entreprise_id, succursale_id, produit_id, quantity) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)');
-                    $stock->bind_param('iiii', $enterpriseId, $branchId, $productId, $quantity);
+                    $stock->bind_param('iiid', $enterpriseId, $branchId, $productId, $quantity);
                     $stock->execute();
                 } else {
                     $stock = $this->db->prepare('UPDATE stocks SET quantity = quantity - ? WHERE entreprise_id = ? AND succursale_id = ? AND produit_id = ? AND quantity >= ?');
-                    $stock->bind_param('iiiii', $quantity, $enterpriseId, $branchId, $productId, $quantity);
+                    $stock->bind_param('diiid', $quantity, $enterpriseId, $branchId, $productId, $quantity);
                     $stock->execute();
                     if ($stock->affected_rows !== 1) throw new RuntimeException('Stock insuffisant pour effectuer cette sortie.');
                     foreach ($lotAllocations as $allocationRow) {
                         $allocatedQuantity = $allocationRow['quantity'];
                         $lotDetailId = $allocationRow['lot_detail_id'];
                         $updateLot = $this->db->prepare('UPDATE achat_details SET quantity_out = quantity_out + ? WHERE achat_detail_id = ? AND entreprise_id = ? AND quantity - quantity_out >= ?');
-                        $updateLot->bind_param('iiii', $allocatedQuantity, $lotDetailId, $enterpriseId, $allocatedQuantity);
+                        $updateLot->bind_param('didi', $allocatedQuantity, $lotDetailId, $enterpriseId, $allocatedQuantity);
                         $updateLot->execute();
                         if ($updateLot->affected_rows !== 1) throw new RuntimeException('Le lot a été modifié par une autre opération. Réessayez.');
                         $allocationStatement = $this->db->prepare('INSERT INTO achat_detail_sorties (entreprise_id, sortie_detail_id, lot_detail_id, quantity) VALUES (?, ?, ?, ?)');
-                        $allocationStatement->bind_param('iiii', $enterpriseId, $purchaseDetailId, $lotDetailId, $allocatedQuantity);
+                        $allocationStatement->bind_param('iiid', $enterpriseId, $purchaseDetailId, $lotDetailId, $allocatedQuantity);
                         $allocationStatement->execute();
                     }
                 }
@@ -177,7 +180,7 @@ final class ProcurementService
                 $ledgerNote = $movementType === 'OUT' ? $exitReason : 'Bon d’approvisionnement ' . $purchaseNo;
                 $ledger = $this->db->prepare('INSERT INTO mouvements_stock (entreprise_id, succursale_id, produit_id, user_id, movement_type, quantity_before, quantity_moved, quantity_after, reference_type, reference_id, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
                 $referenceType = $movementType === 'OUT' ? 'SORTIE_STOCK' : 'APPROVISIONNEMENT';
-                $ledger->bind_param('iiiisiiisis', $enterpriseId, $branchId, $productId, $userId, $ledgerType, $quantityBefore, $quantity, $quantityAfter, $referenceType, $purchaseId, $ledgerNote);
+                $ledger->bind_param('iiiisdddiss', $enterpriseId, $branchId, $productId, $userId, $ledgerType, $quantityBefore, $quantity, $quantityAfter, $referenceType, $purchaseId, $ledgerNote);
                 $ledger->execute();
             }
 
@@ -195,7 +198,7 @@ final class ProcurementService
         int $purchaseId,
         string $newStatus,
         ?string $expirationDate = null,
-        ?int $quantityReceived = null,
+        ?float $quantityReceived = null,
         ?float $receivedUnitCost = null
     ): void
     {
@@ -211,35 +214,35 @@ final class ProcurementService
             if (($quantityReceived !== null || $receivedUnitCost !== null) && !$isForecastPurchase) {
                 throw new RuntimeException('La quantité et le coût modifiables sont réservés aux approvisionnements prévisionnels.');
             }
-            if (($quantityReceived !== null && $quantityReceived < 1) || ($receivedUnitCost !== null && $receivedUnitCost <= 0)) {
+            if (($quantityReceived !== null && (!is_finite($quantityReceived) || $quantityReceived < 0.001 || abs($quantityReceived - round($quantityReceived, 3)) > 0.0000001)) || ($receivedUnitCost !== null && $receivedUnitCost <= 0)) {
                 throw new RuntimeException('La quantité reçue et le coût unitaire doivent être supérieurs à zéro.');
             }
             if ($purchase['status'] === $newStatus) { $this->db->commit(); return; }
             if ($purchase['status'] === 'RECEIVED' && $newStatus === 'CANCELLED') {
                 if (empty($purchase['validation_date']) || time() - strtotime((string)$purchase['validation_date']) >= 172800) throw new RuntimeException('Un approvisionnement validé ne peut être annulé que pendant les 48 heures suivant sa validation.');
                 $q = $this->db->prepare('SELECT d.achat_detail_id,d.produit_id,d.quantity,p.est_perisable FROM achat_details d JOIN produits p ON p.produit_id=d.produit_id AND p.entreprise_id=d.entreprise_id WHERE d.entreprise_id=? AND d.achat_id=? LIMIT 1 FOR UPDATE');
-                $q->bind_param('ii',$enterpriseId,$purchaseId);$q->execute();$d=$q->get_result()->fetch_assoc();
+                $q->bind_param('ii', $enterpriseId, $purchaseId); $q->execute(); $d = $q->get_result()->fetch_assoc();
                 if (!$d) throw new RuntimeException('Détail de l’approvisionnement introuvable.');
-                $branch=(int)$purchase['succursale_id'];$product=(int)$d['produit_id'];$quantity=(int)$d['quantity'];$user=(int)$actor['id'];
-                $b=$this->db->prepare('SELECT quantity FROM stocks WHERE entreprise_id=? AND succursale_id=? AND produit_id=? FOR UPDATE');$b->bind_param('iii',$enterpriseId,$branch,$product);$b->execute();$before=(int)(($b->get_result()->fetch_assoc()['quantity']??0));
-                if($purchase['movement_type']==='IN'){$st=$this->db->prepare('UPDATE stocks SET quantity=quantity-? WHERE entreprise_id=? AND succursale_id=? AND produit_id=? AND quantity>=?');$st->bind_param('iiiii',$quantity,$enterpriseId,$branch,$product,$quantity);$st->execute();if($st->affected_rows!==1)throw new RuntimeException('Le stock a déjà été consommé; annulation impossible sans régularisation.');}
-                else{$st=$this->db->prepare('UPDATE stocks SET quantity=quantity+? WHERE entreprise_id=? AND succursale_id=? AND produit_id=?');$st->bind_param('iiii',$quantity,$enterpriseId,$branch,$product);$st->execute();}
-                if($purchase['movement_type']==='OUT' && (int)$d['est_perisable']===1){$detailId=(int)$d['achat_detail_id'];$alloc=$this->db->prepare('SELECT lot_detail_id,quantity FROM achat_detail_sorties WHERE entreprise_id=? AND sortie_detail_id=? FOR UPDATE');$alloc->bind_param('ii',$enterpriseId,$detailId);$alloc->execute();foreach($alloc->get_result()->fetch_all(MYSQLI_ASSOC) as $lot){$lotId=(int)$lot['lot_detail_id'];$taken=(int)$lot['quantity'];$undo=$this->db->prepare('UPDATE achat_details SET quantity_out=GREATEST(0,quantity_out-?) WHERE entreprise_id=? AND achat_detail_id=?');$undo->bind_param('iii',$taken,$enterpriseId,$lotId);$undo->execute();}$del=$this->db->prepare('DELETE FROM achat_detail_sorties WHERE entreprise_id=? AND sortie_detail_id=?');$del->bind_param('ii',$enterpriseId,$detailId);$del->execute();}
-                $after=$purchase['movement_type']==='IN'?$before-$quantity:$before+$quantity;$type=$purchase['movement_type']==='IN'?'SORTIE':'ENTREE';$ref='ANNULATION_APPROVISIONNEMENT';$note='Annulation dans les 48 h #' . $purchaseId;
-                $m=$this->db->prepare('INSERT INTO mouvements_stock (entreprise_id,succursale_id,produit_id,user_id,movement_type,quantity_before,quantity_moved,quantity_after,reference_type,reference_id,note) VALUES (?,?,?,?,?,?,?,?,?,?,?)');$m->bind_param('iiiisiiisis',$enterpriseId,$branch,$product,$user,$type,$before,$quantity,$after,$ref,$purchaseId,$note);$m->execute();
+                $branch = (int) $purchase['succursale_id']; $product = (int) $d['produit_id']; $quantity = (float) $d['quantity']; $user = (int) $actor['id'];
+                $b = $this->db->prepare('SELECT quantity FROM stocks WHERE entreprise_id=? AND succursale_id=? AND produit_id=? FOR UPDATE'); $b->bind_param('iii', $enterpriseId, $branch, $product); $b->execute(); $before = (float) (($b->get_result()->fetch_assoc()['quantity'] ?? 0));
+                if ($purchase['movement_type'] === 'IN') { $st = $this->db->prepare('UPDATE stocks SET quantity=quantity-? WHERE entreprise_id=? AND succursale_id=? AND produit_id=? AND quantity>=?'); $st->bind_param('diiid', $quantity, $enterpriseId, $branch, $product, $quantity); $st->execute(); if ($st->affected_rows !== 1) throw new RuntimeException('Le stock a déjà été consommé; annulation impossible sans régularisation.'); }
+                else { $st = $this->db->prepare('UPDATE stocks SET quantity=quantity+? WHERE entreprise_id=? AND succursale_id=? AND produit_id=?'); $st->bind_param('diii', $quantity, $enterpriseId, $branch, $product); $st->execute(); }
+                if ($purchase['movement_type'] === 'OUT' && (int) $d['est_perisable'] === 1) { $detailId = (int) $d['achat_detail_id']; $alloc = $this->db->prepare('SELECT lot_detail_id,quantity FROM achat_detail_sorties WHERE entreprise_id=? AND sortie_detail_id=? FOR UPDATE'); $alloc->bind_param('ii', $enterpriseId, $detailId); $alloc->execute(); foreach ($alloc->get_result()->fetch_all(MYSQLI_ASSOC) as $lot) { $lotId = (int) $lot['lot_detail_id']; $taken = (float) $lot['quantity']; $undo = $this->db->prepare('UPDATE achat_details SET quantity_out=GREATEST(0,quantity_out-?) WHERE entreprise_id=? AND achat_detail_id=?'); $undo->bind_param('dii', $taken, $enterpriseId, $lotId); $undo->execute(); } $del = $this->db->prepare('DELETE FROM achat_detail_sorties WHERE entreprise_id=? AND sortie_detail_id=?'); $del->bind_param('ii', $enterpriseId, $detailId); $del->execute(); }
+                $after = $purchase['movement_type'] === 'IN' ? $before - $quantity : $before + $quantity; $type = $purchase['movement_type'] === 'IN' ? 'SORTIE' : 'ENTREE'; $ref = 'ANNULATION_APPROVISIONNEMENT'; $note = 'Annulation dans les 48 h #' . $purchaseId;
+                $m = $this->db->prepare('INSERT INTO mouvements_stock (entreprise_id,succursale_id,produit_id,user_id,movement_type,quantity_before,quantity_moved,quantity_after,reference_type,reference_id,note) VALUES (?,?,?,?,?,?,?,?,?,?,?)'); $m->bind_param('iiiisdddiss', $enterpriseId, $branch, $product, $user, $type, $before, $quantity, $after, $ref, $purchaseId, $note); $m->execute();
             } elseif ($purchase['status'] !== 'PENDING') throw new RuntimeException('Un approvisionnement validé ou annulé ne peut pas être modifié.');
             if ($newStatus === 'RECEIVED') {
-                $q = $this->db->prepare('SELECT d.achat_detail_id, d.produit_id, d.quantity, d.date_expiration, d.unit_cost, p.est_perisable FROM achat_details d JOIN produits p ON p.produit_id=d.produit_id AND p.entreprise_id=d.entreprise_id WHERE d.entreprise_id=? AND d.achat_id=? LIMIT 1 FOR UPDATE');
+                $q = $this->db->prepare('SELECT d.achat_detail_id, d.produit_id, d.quantity, d.date_expiration, d.unit_cost, p.est_perisable, p.quantite_fractionnaire FROM achat_details d JOIN produits p ON p.produit_id=d.produit_id AND p.entreprise_id=d.entreprise_id WHERE d.entreprise_id=? AND d.achat_id=? LIMIT 1 FOR UPDATE');
                 $q->bind_param('ii', $enterpriseId, $purchaseId); $q->execute(); $d = $q->get_result()->fetch_assoc();
                 if (!$d) throw new RuntimeException('Détail d’approvisionnement introuvable.');
                 if ($isForecastPurchase && $purchase['movement_type'] === 'IN') {
-                    $quantity = $quantityReceived ?? (int) $d['quantity'];
+                    $quantity = $quantityReceived ?? (float) $d['quantity'];
                     $unitCost = $receivedUnitCost ?? (float) $d['unit_cost'];
-                    if ($quantity < 1 || $unitCost <= 0) throw new RuntimeException('Saisissez une quantité reçue et un coût unitaire supérieurs à zéro.');
+                    if ($quantity < 0.001 || ((int) $d['quantite_fractionnaire'] !== 1 && floor($quantity) !== $quantity) || $unitCost <= 0) throw new RuntimeException('La quantité reçue doit respecter le mode du produit et son coût unitaire être supérieur à zéro.');
                     $subtotal = $quantity * $unitCost;
                     $detailId = (int) $d['achat_detail_id'];
                     $saveReceiptDetails = $this->db->prepare('UPDATE achat_details SET quantity = ?, unit_cost = ?, subtotal = ? WHERE achat_detail_id = ? AND entreprise_id = ?');
-                    $saveReceiptDetails->bind_param('iddii', $quantity, $unitCost, $subtotal, $detailId, $enterpriseId);
+                    $saveReceiptDetails->bind_param('dddii', $quantity, $unitCost, $subtotal, $detailId, $enterpriseId);
                     $saveReceiptDetails->execute();
                     $saveReceiptTotal = $this->db->prepare('UPDATE achats SET total_amount = ? WHERE achat_id = ? AND entreprise_id = ?');
                     $saveReceiptTotal->bind_param('dii', $subtotal, $purchaseId, $enterpriseId);
@@ -247,7 +250,7 @@ final class ProcurementService
                     $d['quantity'] = $quantity;
                     $d['unit_cost'] = $unitCost;
                 }
-                $branch=(int)$purchase['succursale_id']; $product=(int)$d['produit_id']; $quantity=(int)$d['quantity']; $user=(int)$actor['id'];
+                $branch=(int)$purchase['succursale_id']; $product=(int)$d['produit_id']; $quantity=(float)$d['quantity']; $user=(int)$actor['id'];
                 if ((int)$d['est_perisable'] === 1 && $purchase['movement_type'] === 'IN' && empty($d['date_expiration'])) {
                     $validExpiration = is_string($expirationDate)
                         && preg_match('/^\d{4}-\d{2}-\d{2}$/', $expirationDate) === 1
@@ -265,14 +268,14 @@ final class ProcurementService
                 if ((int)$d['est_perisable']===1 && $purchase['movement_type']==='OUT') {
                     $l=$this->db->prepare('SELECT d.achat_detail_id,d.quantity,d.quantity_out FROM achat_details d JOIN achats a ON a.achat_id=d.achat_id AND a.entreprise_id=d.entreprise_id WHERE d.entreprise_id=? AND d.produit_id=? AND a.succursale_id=? AND a.movement_type=\'IN\' AND a.status=\'RECEIVED\' AND d.date_expiration IS NOT NULL AND d.quantity>d.quantity_out ORDER BY d.date_expiration,d.achat_detail_id FOR UPDATE');
                     $l->bind_param('iii',$enterpriseId,$product,$branch); $l->execute(); $left=$quantity;
-                    foreach($l->get_result()->fetch_all(MYSQLI_ASSOC) as $lot){$take=min($left,(int)$lot['quantity']-(int)$lot['quantity_out']);if($take>0){$allocations[]=[(int)$lot['achat_detail_id'],$take];$left-=$take;}if($left===0)break;}
+                    foreach($l->get_result()->fetch_all(MYSQLI_ASSOC) as $lot){$take=min($left,(float)$lot['quantity']-(float)$lot['quantity_out']);if($take>0){$allocations[]=[(int)$lot['achat_detail_id'],$take];$left-=$take;}if($left<=0)break;}
                     if($left>0)throw new RuntimeException('Stock des lots périssables insuffisant.');
                 }
-                $b=$this->db->prepare('SELECT quantity FROM stocks WHERE entreprise_id=? AND succursale_id=? AND produit_id=? FOR UPDATE'); $b->bind_param('iii',$enterpriseId,$branch,$product);$b->execute();$before=(int)(($b->get_result()->fetch_assoc()['quantity']??0));
-                if($purchase['movement_type']==='IN'){$st=$this->db->prepare('INSERT INTO stocks (entreprise_id,succursale_id,produit_id,quantity) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)');$st->bind_param('iiii',$enterpriseId,$branch,$product,$quantity);$st->execute();}
-                else{$st=$this->db->prepare('UPDATE stocks SET quantity=quantity-? WHERE entreprise_id=? AND succursale_id=? AND produit_id=? AND quantity>=?');$st->bind_param('iiiii',$quantity,$enterpriseId,$branch,$product,$quantity);$st->execute();if($st->affected_rows!==1)throw new RuntimeException('Stock insuffisant pour valider cette sortie.');foreach($allocations as [$lotId,$take]){$u=$this->db->prepare('UPDATE achat_details SET quantity_out=quantity_out+? WHERE achat_detail_id=? AND entreprise_id=?');$u->bind_param('iii',$take,$lotId,$enterpriseId);$u->execute();$ins=$this->db->prepare('INSERT INTO achat_detail_sorties (entreprise_id,sortie_detail_id,lot_detail_id,quantity) VALUES (?,?,?,?)');$detailId=(int)$d['achat_detail_id'];$ins->bind_param('iiii',$enterpriseId,$detailId,$lotId,$take);$ins->execute();}}
+                $b=$this->db->prepare('SELECT quantity FROM stocks WHERE entreprise_id=? AND succursale_id=? AND produit_id=? FOR UPDATE'); $b->bind_param('iii',$enterpriseId,$branch,$product);$b->execute();$before=(float)(($b->get_result()->fetch_assoc()['quantity']??0));
+                if($purchase['movement_type']==='IN'){$st=$this->db->prepare('INSERT INTO stocks (entreprise_id,succursale_id,produit_id,quantity) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE quantity=quantity+VALUES(quantity)');$st->bind_param('iiid',$enterpriseId,$branch,$product,$quantity);$st->execute();}
+                else{$st=$this->db->prepare('UPDATE stocks SET quantity=quantity-? WHERE entreprise_id=? AND succursale_id=? AND produit_id=? AND quantity>=?');$st->bind_param('diiid',$quantity,$enterpriseId,$branch,$product,$quantity);$st->execute();if($st->affected_rows!==1)throw new RuntimeException('Stock insuffisant pour valider cette sortie.');foreach($allocations as [$lotId,$take]){$u=$this->db->prepare('UPDATE achat_details SET quantity_out=quantity_out+? WHERE achat_detail_id=? AND entreprise_id=?');$u->bind_param('dii',$take,$lotId,$enterpriseId);$u->execute();$ins=$this->db->prepare('INSERT INTO achat_detail_sorties (entreprise_id,sortie_detail_id,lot_detail_id,quantity) VALUES (?,?,?,?)');$detailId=(int)$d['achat_detail_id'];$ins->bind_param('iiid',$enterpriseId,$detailId,$lotId,$take);$ins->execute();}}
                 $after=$purchase['movement_type']==='IN'?$before+$quantity:$before-$quantity; $type=$purchase['movement_type']==='IN'?'ENTREE':'SORTIE';$ref=$purchase['movement_type']==='IN'?'APPROVISIONNEMENT':'SORTIE_STOCK';$note='Approvisionnement validé #'.$purchaseId;
-                $m=$this->db->prepare('INSERT INTO mouvements_stock (entreprise_id,succursale_id,produit_id,user_id,movement_type,quantity_before,quantity_moved,quantity_after,reference_type,reference_id,note) VALUES (?,?,?,?,?,?,?,?,?,?,?)');$m->bind_param('iiiisiiisis',$enterpriseId,$branch,$product,$user,$type,$before,$quantity,$after,$ref,$purchaseId,$note);$m->execute();
+                $m=$this->db->prepare('INSERT INTO mouvements_stock (entreprise_id,succursale_id,produit_id,user_id,movement_type,quantity_before,quantity_moved,quantity_after,reference_type,reference_id,note) VALUES (?,?,?,?,?,?,?,?,?,?,?)');$m->bind_param('iiiisdddiss',$enterpriseId,$branch,$product,$user,$type,$before,$quantity,$after,$ref,$purchaseId,$note);$m->execute();
             }
             $oldStatus=(string)$purchase['status'];$u=$this->db->prepare('UPDATE achats SET status=?, validation_date=CASE WHEN ?=\'RECEIVED\' THEN NOW() WHEN ?=\'PENDING\' THEN NULL ELSE validation_date END WHERE achat_id=? AND entreprise_id=? AND status=?');$u->bind_param('sssiis',$newStatus,$newStatus,$newStatus,$purchaseId,$enterpriseId,$oldStatus);$u->execute();if($u->affected_rows!==1)throw new RuntimeException('Statut déjà modifié.');
             $this->db->commit();

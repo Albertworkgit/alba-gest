@@ -120,7 +120,7 @@ try {
     if ($reportContext === 'stock-risk') {
         if (($user['type'] ?? '') !== 'user') JsonResponse::error('Action réservée aux utilisateurs d’entreprise.', 403);
         Authorization::requireModule($user, 'stock_risk');
-        Authorization::requirePermission($user, 'voir_stock');
+        Authorization::requireAnyPermission($user, ['voir_risques_stock', 'voir_stock']);
     } else {
         if ($reportContext !== '') JsonResponse::error('Contexte de rapport invalide.', 422);
         Authorization::requireAnyPermission($user, ['voir_rapports', 'voir_comptabilite']);

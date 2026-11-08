@@ -37,6 +37,7 @@ final class CompanyProfileService
         $address = trim((string) ($data['address'] ?? ''));
         $rccm = trim((string) ($data['rccm'] ?? ''));
         $boitePostale = trim((string) ($data['boite_postale'] ?? ''));
+        $qrCodesEnabled = !empty($data['qr_codes_enabled']) ? 1 : 0;
         if ($enterpriseId < 1 || $name === '' || mb_strlen($name, 'UTF-8') > 100) {
             throw new RuntimeException('Le nom de l’entreprise est obligatoire (100 caractères maximum).');
         }
@@ -72,8 +73,8 @@ final class CompanyProfileService
                 $stamp = $uploaded;
             }
 
-            $update = $this->db->prepare('UPDATE entreprises SET name = ?, email = ?, phone = ?, address = ?, rccm = ?, boite_postale = ?, logo = ?, cachet = ? WHERE entreprise_id = ?');
-            $update->bind_param('ssssssssi', $name, $email, $phone, $address, $rccm, $boitePostale, $logo, $stamp, $enterpriseId);
+            $update = $this->db->prepare('UPDATE entreprises SET name = ?, email = ?, phone = ?, address = ?, rccm = ?, boite_postale = ?, logo = ?, cachet = ?, qr_codes_enabled = ? WHERE entreprise_id = ?');
+            $update->bind_param('ssssssssii', $name, $email, $phone, $address, $rccm, $boitePostale, $logo, $stamp, $qrCodesEnabled, $enterpriseId);
             $update->execute();
         } catch (\Throwable $exception) {
             foreach ($newFiles as $path) $this->deleteStoredFile($enterpriseId, $path);
@@ -86,7 +87,7 @@ final class CompanyProfileService
 
     public function get(int $enterpriseId): array
     {
-        $statement = $this->db->prepare('SELECT entreprise_id, name, email, phone, address, rccm, boite_postale, logo, cachet FROM entreprises WHERE entreprise_id = ? LIMIT 1');
+        $statement = $this->db->prepare('SELECT entreprise_id, name, email, phone, address, rccm, boite_postale, logo, cachet, qr_codes_enabled FROM entreprises WHERE entreprise_id = ? LIMIT 1');
         $statement->bind_param('i', $enterpriseId);
         $statement->execute();
         return $statement->get_result()->fetch_assoc() ?: [];

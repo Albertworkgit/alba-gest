@@ -186,6 +186,16 @@
   .dark-theme #mobile-primary-nav .nav-item{color:#b7c9c2}
   .dark-theme #mobile-primary-nav .nav-item.active{background:#34554c;color:#fff;box-shadow:inset 0 -2px #72c8b4}
 }
+  .sidebar .nav-item{padding-left:11px;border-left:2px solid transparent;border-radius:0;background:transparent!important;box-shadow:none!important}
+  .sidebar .nav-item:hover{background:transparent!important;color:#fff}
+  .sidebar .nav-item.active{border-left-color:#87d4b8;background:transparent!important;color:#fff;box-shadow:none!important}
+  #mobile-primary-nav .nav-item{border-radius:0;background:transparent!important;box-shadow:none!important;border-bottom:2px solid transparent}
+  #mobile-primary-nav .nav-item.active{border-bottom-color:var(--teal);background:transparent!important;color:var(--teal-dark);box-shadow:none!important}
+  #module-section-nav a{padding:6px 8px;border-radius:0;background:transparent;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px}
+  #module-section-nav a:hover,#module-section-nav a:focus-visible{background:transparent;color:var(--teal-dark);text-decoration-color:currentColor;outline-offset:2px}
+  .dark-theme #module-section-nav a{background:transparent}
+  .dark-theme #module-section-nav a:hover,.dark-theme #module-section-nav a:focus-visible{background:transparent;color:#fff}
+  .dark-theme #mobile-primary-nav .nav-item.active{background:transparent!important;color:#fff;box-shadow:none!important}
 .filter-bar .icon-action-button{display:inline-grid;place-items:center;flex:0 0 34px;width:34px;height:34px;padding:7px;border:1px solid #f3d2cf;border-radius:8px;background:#fff1ef;color:#bd514a}
 .filter-bar .icon-action-button svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .filter-bar .icon-action-button:hover{background:#fde2de;border-color:#e7aaa4}
