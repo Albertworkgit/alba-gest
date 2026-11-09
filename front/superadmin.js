@@ -11,6 +11,10 @@ const moduleAccessList = document.getElementById('module-access-list');
 const currencyList = document.getElementById('currency-list');
 const currencyForm = document.getElementById('currency-form');
 const currencyCancel = document.getElementById('currency-cancel');
+const datasetForm = document.getElementById('dataset-form');
+const datasetList = document.getElementById('dataset-list');
+const datasetItemRows = document.getElementById('dataset-item-rows');
+const datasetPreviewMessage = document.getElementById('dataset-preview-message');
 const message = document.getElementById('admin-message');
 const adminPageTitle = document.getElementById('admin-page-title');
 const adminPageDescription = document.getElementById('admin-page-description');
@@ -27,6 +31,7 @@ function setAdminView(viewName, updateAddress = true) {
     'super-admins': ['Super administrateurs', 'Créez et consultez les comptes de super administration.'],
     modules: ['Droits des modules', 'Définissez les modules accessibles à chaque entreprise.'],
     currencies: ['Monnaies disponibles', 'Gérez les monnaies proposées lors de la création des produits.'],
+    datasets: ['Gestion des jeux de données', 'Constituez et publiez des modèles sectoriels réutilisables par les entreprises.'],
     profile: ['Mon profil', 'Modifiez votre identité et votre mot de passe super administrateur.']
   };
   if (!views[viewName]) viewName = 'enterprises';
@@ -35,8 +40,183 @@ function setAdminView(viewName, updateAddress = true) {
   adminPageTitle.textContent = views[viewName][0];
   adminPageDescription.textContent = views[viewName][1];
   if (updateAddress) window.history.replaceState({}, document.title, `${window.location.pathname}#${viewName}`);
+  if (viewName === 'datasets') loadDatasets();
 }
 
+const datasetSectors = {
+  commerce_general:'Commerce général',pharmacie:'Pharmacie',alimentation_boissons:'Alimentation et boissons',
+  quincaillerie:'Quincaillerie',materiaux_construction:'Matériaux de construction',agriculture:'Agriculture',
+  informatique_electronique:'Informatique et électronique',habillement:'Habillement',
+  transport_logistique:'Transport et logistique',industrie:'Industrie',autres:'Autres secteurs',all:'Tous secteurs',
+  pharmaceutical:'Pharmaceutique',commercial:'Commerce général',other:'Autres secteurs'
+};
+const datasetTypes = {
+  category:'Catégorie',unit:'Unité',product:'Produit',service:'Service',supplier:'Fournisseur type',
+  subcategory:'Sous-catégorie',brand:'Marque',product_type:'Type de produit',common:'Information commune'
+};
+let datasets = [];
+
+function datasetApiUrl(query = '') {
+  return `../backend/public/datasets.php${query ? `?${query}` : ''}`;
+}
+
+function clearDatasetForm() {
+  datasetForm.reset();
+  datasetForm.elements.namedItem('jeu_donnees_id').value = '';
+  datasetItemRows.replaceChildren();
+  datasetPreviewMessage.textContent = 'Ajoutez des lignes ou importez le modèle CSV pour prévisualiser les données.';
+  document.getElementById('dataset-save').textContent = 'Enregistrer le jeu de données';
+  appendDatasetRow();
+}
+
+function appendDatasetRow(item = {}) {
+  datasetItemRows.querySelector('[data-dataset-empty]')?.remove();
+  const row = document.createElement('tr');
+  if (item._error) {
+    row.classList.add('dataset-invalid');
+    row.title = item._error;
+  }
+  row.innerHTML = `<td><select name="type">${Object.entries(datasetTypes).map(([value,label]) => `<option value="${value}">${label}</option>`).join('')}</select></td>
+    <td><input name="name" maxlength="150" value="${escapeHtml(item.name || '')}" required></td>
+    <td><input name="reference" maxlength="100" value="${escapeHtml(item.reference || '')}"></td>
+    <td><input name="category" value="${escapeHtml(item.category || '')}"></td>
+    <td><input name="unit" value="${escapeHtml(item.unit || '')}"></td>
+    <td><input name="unit_symbol" maxlength="15" value="${escapeHtml(item.unit_symbol || '')}"></td>
+    <td><input name="sale_price" type="number" min="0" step="0.01" value="${escapeHtml(item.sale_price ?? '')}"></td>
+    <td><input name="cost_price" type="number" min="0" step="0.01" value="${escapeHtml(item.cost_price ?? '')}"></td>
+    <td><input name="currency" maxlength="10" value="${escapeHtml(item.currency || '')}"></td>
+    <td><input name="perishable" type="checkbox" ${Number(item.perishable) ? 'checked' : ''}></td>
+    <td><input name="description" value="${escapeHtml(item.description || '')}"></td>
+    <td class="dataset-row-error">${escapeHtml(item._error || '')}</td>
+    <td><button type="button" class="delete-super-admin" data-dataset-row-delete aria-label="Supprimer la ligne">×</button></td>`;
+  row.querySelector('[name="type"]').value = datasetTypes[item.type] ? item.type : 'category';
+  row.querySelector('[data-dataset-row-delete]').addEventListener('click', () => {
+    row.remove();
+    if (!datasetItemRows.querySelector('tr')) datasetItemRows.innerHTML = '<tr data-dataset-empty><td colspan="13">Aucune ligne ajoutée.</td></tr>';
+  });
+  row.querySelectorAll('input,select').forEach(input => input.addEventListener('input', () => {
+    row.classList.remove('dataset-invalid');
+    row.querySelector('.dataset-row-error').textContent = '';
+  }));
+  datasetItemRows.append(row);
+}
+
+function readDatasetRows() {
+  return [...datasetItemRows.querySelectorAll('tr')].filter(row => row.querySelector('[name="type"]')).map(row => ({
+    type:row.querySelector('[name="type"]').value,
+    name:row.querySelector('[name="name"]').value.trim(),
+    reference:row.querySelector('[name="reference"]').value.trim(),
+    category:row.querySelector('[name="category"]').value.trim(),
+    unit:row.querySelector('[name="unit"]').value.trim(),
+    unit_symbol:row.querySelector('[name="unit_symbol"]').value.trim(),
+    sale_price:row.querySelector('[name="sale_price"]').value,
+    cost_price:row.querySelector('[name="cost_price"]').value,
+    currency:row.querySelector('[name="currency"]').value.trim(),
+    perishable:row.querySelector('[name="perishable"]').checked ? 1 : 0,
+    description:row.querySelector('[name="description"]').value.trim()
+  }));
+}
+
+async function loadDatasets() {
+  if (!datasetList) return;
+  try {
+    const result = await requestJson(datasetApiUrl());
+    datasets = result.data;
+    renderDatasets();
+  } catch (error) {
+    datasetList.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
+  }
+}
+
+function renderDatasets() {
+  document.getElementById('dataset-stat-total').textContent = datasets.length.toLocaleString('fr-FR');
+  document.getElementById('dataset-stat-active').textContent = datasets.filter(dataset => Number(dataset.is_active) === 1).length.toLocaleString('fr-FR');
+  document.getElementById('dataset-stat-sectors').textContent = new Set(datasets.map(dataset => dataset.secteur_activite)).size.toLocaleString('fr-FR');
+  const query = document.getElementById('dataset-search-admin').value.trim().toLocaleLowerCase();
+  const sectorFilter = document.getElementById('dataset-sector-filter').value;
+  const statusFilter = document.getElementById('dataset-status-filter').value;
+  const rows = datasets.filter(dataset => (!query || `${dataset.name} ${dataset.description || ''} ${dataset.categorie}`.toLocaleLowerCase().includes(query))
+    && (!sectorFilter || dataset.secteur_activite === sectorFilter)
+    && (statusFilter === '' || Number(dataset.is_active) === Number(statusFilter)));
+  datasetList.innerHTML = rows.length ? rows.map(dataset => `<tr><td><strong>${escapeHtml(dataset.name)}</strong></td><td>${escapeHtml(datasetSectors[dataset.secteur_activite] || dataset.secteur_activite)}</td><td>${escapeHtml(dataset.categorie)}</td><td>${dataset.version_number ? `v${Number(dataset.version_number)}` : '—'}</td><td>${Number(dataset.item_count || 0)}</td><td>${escapeHtml(dataset.creator_name || '—')}</td><td><span class="status ${Number(dataset.is_active) ? 'success' : 'danger'}">${Number(dataset.is_active) ? 'Actif' : 'Inactif'}</span></td><td><div class="super-admin-row-actions"><button type="button" data-dataset-edit="${Number(dataset.jeu_donnees_id)}">Modifier</button><a href="${datasetApiUrl(`action=export&id=${Number(dataset.jeu_donnees_id)}&version_id=${Number(dataset.jeu_donnees_version_id || 0)}`)}">Exporter</a><button type="button" class="${Number(dataset.is_active) ? 'delete-super-admin' : ''}" data-dataset-status="${Number(dataset.jeu_donnees_id)}" data-next-status="${Number(dataset.is_active) ? 0 : 1}">${Number(dataset.is_active) ? 'Désactiver' : 'Activer'}</button></div></td></tr>`).join('') : '<tr><td colspan="8">Aucun jeu de données enregistré.</td></tr>';
+}
+
+datasetForm?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const submit = document.getElementById('dataset-save');
+  submit.disabled = true;
+  try {
+    const data = Object.fromEntries(new FormData(datasetForm));
+    data.jeu_donnees_id = Number(data.jeu_donnees_id || 0);
+    data.items = readDatasetRows();
+    if (!data.items.length) throw new Error('Ajoutez au moins une ligne au jeu de données.');
+    const result = await requestJson(datasetApiUrl(), {
+      method:data.jeu_donnees_id ? 'PUT' : 'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(data)
+    });
+    notify(`Jeu enregistré en version ${result.data.version_number}.`);
+    clearDatasetForm();
+    await loadDatasets();
+  } catch (error) { notify(error.message); }
+  finally { submit.disabled = false; }
+});
+
+document.getElementById('dataset-add-row')?.addEventListener('click', () => appendDatasetRow());
+document.getElementById('dataset-reset')?.addEventListener('click', clearDatasetForm);
+document.getElementById('dataset-template')?.addEventListener('click', () => { window.location.href = datasetApiUrl('action=template'); });
+document.getElementById('dataset-search-admin')?.addEventListener('input', renderDatasets);
+document.getElementById('dataset-sector-filter')?.addEventListener('change', renderDatasets);
+document.getElementById('dataset-status-filter')?.addEventListener('change', renderDatasets);
+datasetList?.addEventListener('click', async event => {
+  const edit = event.target.closest('[data-dataset-edit]');
+  const toggle = event.target.closest('[data-dataset-status]');
+  if (edit) {
+    try {
+      const {data} = await requestJson(datasetApiUrl(`id=${encodeURIComponent(edit.dataset.datasetEdit)}`));
+      datasetForm.elements.namedItem('jeu_donnees_id').value = data.jeu_donnees_id;
+      datasetForm.elements.namedItem('name').value = data.name;
+      datasetForm.elements.namedItem('description').value = data.description || '';
+      datasetForm.elements.namedItem('secteur_activite').value = data.secteur_activite;
+      datasetForm.elements.namedItem('categorie').value = data.categorie;
+      datasetItemRows.replaceChildren();
+      data.items.forEach(item => appendDatasetRow(item));
+      document.getElementById('dataset-save').textContent = `Enregistrer une nouvelle version (actuelle : ${data.version_number})`;
+      datasetForm.scrollIntoView({behavior:'smooth', block:'start'});
+    } catch (error) { notify(error.message); }
+  }
+  if (toggle) {
+    try {
+      await requestJson(datasetApiUrl('action=status'), {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id:Number(toggle.dataset.datasetStatus),is_active:toggle.dataset.nextStatus === '1'})
+      });
+      notify('Statut du jeu de données mis à jour.');
+      await loadDatasets();
+    } catch (error) { notify(error.message); }
+  }
+});
+
+document.getElementById('dataset-csv-file')?.addEventListener('change', async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+  datasetPreviewMessage.textContent = 'Analyse du fichier CSV…';
+  try {
+    const response = await fetch(datasetApiUrl('action=preview-csv'), {method:'POST',credentials:'include',body:formData});
+    const result = await response.json();
+    if (!response.ok || !result.success) throw new Error(result.message || 'Analyse CSV impossible.');
+    const rows = result.data.items;
+    datasetItemRows.replaceChildren();
+    rows.forEach(item => appendDatasetRow(item));
+    datasetPreviewMessage.textContent = `${rows.length} ligne(s) analysée(s), ${result.data.errors.length} anomalie(s). Corrigez les lignes avant l’enregistrement.`;
+    if (result.data.errors.length) notify(result.data.errors.slice(0, 3).map(error => `Ligne ${error.row} : ${error.message}`).join(' · '));
+  } catch (error) {
+    datasetPreviewMessage.textContent = error.message;
+    notify(error.message);
+  } finally { event.target.value = ''; }
+});
 async function loadSuperAdmins(page = 1) {
   superAdminPage = page;
   try {
@@ -183,7 +363,7 @@ async function loadEnterprises() {
   const selectedEnterprise = moduleAccessEnterprise.value;
   moduleAccessEnterprise.innerHTML = '<option value="">Sélectionner une entreprise</option>' + result.data.map(enterprise => `<option value="${Number(enterprise.entreprise_id)}">${escapeHtml(enterprise.name)}</option>`).join('');
   if (result.data.some(enterprise => String(enterprise.entreprise_id) === selectedEnterprise)) moduleAccessEnterprise.value = selectedEnterprise;
-  enterpriseList.innerHTML = result.data.length ? result.data.map(enterprise => `<tr><td><strong>${escapeHtml(enterprise.name)}</strong></td><td>${escapeHtml({pharmaceutical:'Pharmaceutique',commercial:'Commerciale',other:'Autres'}[enterprise.activity_type] || 'Commerciale')}</td><td>${escapeHtml(enterprise.email || '—')}</td><td>${escapeHtml(enterprise.created_at)}</td><td><span class="status ${Number(enterprise.is_active) === 1 ? 'success' : 'danger'}">${Number(enterprise.is_active) === 1 ? 'Active' : 'Inactive'}</span></td><td><button class="status-button ${Number(enterprise.is_active) === 1 ? 'deactivate' : 'activate'}" data-enterprise-id="${Number(enterprise.entreprise_id)}" data-next-status="${Number(enterprise.is_active) === 1 ? 0 : 1}">${Number(enterprise.is_active) === 1 ? 'Désactiver' : 'Activer'}</button></td><td><form class="branch-limit-form" data-enterprise-limit-form="${Number(enterprise.entreprise_id)}"><span>${Number(enterprise.succursales_count)} /</span><input name="max_succursales" type="number" min="2" step="1" required aria-label="Nombre maximal de succursales pour ${escapeHtml(enterprise.name)}" value="${Math.max(2, Number(enterprise.max_succursales))}"><button type="submit">Enregistrer</button></form></td><td><button class="text-button" data-modules-enterprise="${Number(enterprise.entreprise_id)}">${enterprise.modules_autorises.length} modules autorisés</button></td><td class="enterprise-delete-column"><button class="status-button deactivate" data-enterprise-delete="${Number(enterprise.entreprise_id)}" data-enterprise-name="${escapeHtml(enterprise.name)}" aria-label="Supprimer l’entreprise ${escapeHtml(enterprise.name)}" title="Supprimer définitivement cette entreprise">Supprimer</button></td></tr>`).join('') : '<tr><td colspan="9">Aucune entreprise enregistrée.</td></tr>';
+  enterpriseList.innerHTML = result.data.length ? result.data.map(enterprise => `<tr><td><strong>${escapeHtml(enterprise.name)}</strong></td><td>${escapeHtml(datasetSectors[enterprise.activity_type] || 'Autres secteurs')}</td><td>${escapeHtml(enterprise.email || '—')}</td><td>${escapeHtml(enterprise.created_at)}</td><td><span class="status ${Number(enterprise.is_active) === 1 ? 'success' : 'danger'}">${Number(enterprise.is_active) === 1 ? 'Active' : 'Inactive'}</span></td><td><button class="status-button ${Number(enterprise.is_active) === 1 ? 'deactivate' : 'activate'}" data-enterprise-id="${Number(enterprise.entreprise_id)}" data-next-status="${Number(enterprise.is_active) === 1 ? 0 : 1}">${Number(enterprise.is_active) === 1 ? 'Désactiver' : 'Activer'}</button></td><td><form class="branch-limit-form" data-enterprise-limit-form="${Number(enterprise.entreprise_id)}"><span>${Number(enterprise.succursales_count)} /</span><input name="max_succursales" type="number" min="2" step="1" required aria-label="Nombre maximal de succursales pour ${escapeHtml(enterprise.name)}" value="${Math.max(2, Number(enterprise.max_succursales))}"><button type="submit">Enregistrer</button></form></td><td><button class="text-button" data-modules-enterprise="${Number(enterprise.entreprise_id)}">${enterprise.modules_autorises.length} modules autorisés</button></td><td class="enterprise-delete-column"><button class="status-button deactivate" data-enterprise-delete="${Number(enterprise.entreprise_id)}" data-enterprise-name="${escapeHtml(enterprise.name)}" aria-label="Supprimer l’entreprise ${escapeHtml(enterprise.name)}" title="Supprimer définitivement cette entreprise">Supprimer</button></td></tr>`).join('') : '<tr><td colspan="9">Aucune entreprise enregistrée.</td></tr>';
 }
 
 enterpriseList.addEventListener('submit', async event => {

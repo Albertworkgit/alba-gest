@@ -21,6 +21,14 @@ views['stock-risk'] = {
   action:"",
   html:`<section class="panel"><div class="filter-bar"><label>Succursale<select class="select-field" id="stock-risk-branch"></select></label><button type="button" class="text-button risk-action-button" data-risk-refresh><svg class="risk-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9a7 7 0 0 1 11.9-2L20 12M4 12l2.5 5a7 7 0 0 0 11.9-2"/></svg><span>Actualiser l’analyse</span></button></div><p class="panel-subtitle">Le MAD/CMM utilisent les ventes et sorties validées des 90 derniers jours. Les transferts en attente ajustent le stock prévisionnel sans être comptés comme consommation. Les commandes proposées restent modifiables et ne changent pas le stock.</p></section><div class="dashboard-grid risk-summary-grid"><article class="stat-card"><span class="stat-label">Risque de rupture</span><div class="stat-value" id="risk-stockout-count">—</div></article><article class="stat-card"><span class="stat-label">Stock critique</span><div class="stat-value" id="risk-critical-count">—</div></article><article class="stat-card"><span class="stat-label">Surstock</span><div class="stat-value" id="risk-overstock-count">—</div></article><article class="stat-card"><span class="stat-label">Proche expiration</span><div class="stat-value" id="risk-expiry-count">—</div></article><article class="stat-card"><span class="stat-label">Faible rotation</span><div class="stat-value" id="risk-rotation-count">—</div></article><article class="stat-card"><span class="stat-label">À réapprovisionner</span><div class="stat-value" id="risk-order-count">—</div></article></div><section class="panel risk-treasury-panel" id="risk-treasury-panel"><div class="panel-header"><div><h2>Alerte trésorerie</h2><p class="panel-subtitle">Estimation des propositions au coût produit, comparée aux soldes des caisses ouvertes de la succursale.</p></div></div><div class="risk-treasury-content" id="risk-treasury-content"><p class="empty-note">Chargement…</p></div></section><section class="panel"><div class="panel-header"><div><h2>Propositions de réapprovisionnement</h2><p class="panel-subtitle">MAD : sorties moyennes par jour · CMM : sorties moyennes par mois · couverture visée : 30 jours.</p></div><button type="button" class="primary-button risk-action-button" data-risk-create-order><svg class="risk-action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v6h6M10 14h6m-3-3v6"/></svg><span>Créer un bon prévisionnel</span></button></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Sélection</th><th>Référence / produit</th><th>Stock</th><th>MAD</th><th>CMM</th><th>Recommandé</th><th>À commander</th><th>Fournisseur</th><th>Coût unitaire estimé</th></tr></thead><tbody id="risk-recommendation-rows"><tr><td colspan="9">Chargement…</td></tr></tbody></table></div></section><section class="panel"><div class="panel-header"><div><h2>État des risques</h2><p class="panel-subtitle">Le stock suffisant est indiqué explicitement; les lots à écouler en priorité sont signalés séparément.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Produit</th><th>Succursale</th><th>Stock</th><th>MAD / CMM</th><th>Jours estimés</th><th>Flux en attente</th><th>Risque</th><th>Approvisionnement</th></tr></thead><tbody id="risk-stock-rows"><tr><td colspan="8">Chargement…</td></tr></tbody></table></div></section><section class="panel"><div class="panel-header"><div><h2>Lots à écouler en priorité (FEFO)</h2><p class="panel-subtitle">Les lots sont classés par date d’expiration croissante pour suivre la rotation FEFO.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Produit</th><th>Lot</th><th>Date d’expiration</th><th>Jours restants</th><th>Quantité restante</th></tr></thead><tbody id="risk-expiry-rows"><tr><td colspan="5">Chargement…</td></tr></tbody></table></div></section><section class="panel"><div class="panel-header"><div><h2>Bons prévisionnels</h2><p class="panel-subtitle">La transmission crée des approvisionnements entrants en attente; aucune quantité n’est ajoutée au stock avant leur réception.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Référence</th><th>Succursale</th><th>Date</th><th>Articles</th><th>Estimation</th><th>Statut</th><th>Action</th></tr></thead><tbody id="risk-order-rows"><tr><td colspan="7">Chargement…</td></tr></tbody></table></div></section>`
 };
+views['data-library'] = {
+  label:"Jeux de données",
+  kicker:"BIBLIOTHÈQUE DE DONNÉES",
+  title:"Démarrez avec des données <em>prêtes à l’emploi.</em>",
+  description:"Consultez les modèles approuvés pour votre secteur, puis copiez les éléments choisis dans votre entreprise.",
+  action:"",
+  html:`<section class="panel"><div class="panel-header"><div><h2>Bibliothèque par secteur</h2><p class="panel-subtitle">Les données copiées sont ajoutées à votre entreprise et ne modifient jamais le jeu de données d’origine.</p></div><input class="search-field" id="dataset-search" type="search" placeholder="Rechercher un jeu de données"></div><div class="dashboard-grid" id="dataset-library-list"><p>Chargement…</p></div></section><section class="panel" id="dataset-detail-panel" hidden><div id="dataset-detail"></div></section><section class="panel"><div class="panel-header"><div><h2>Historique des importations</h2><p class="panel-subtitle">Les imports récents de votre entreprise.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Jeu de données</th><th>Version</th><th>Succursale</th><th>Importé par</th><th>Importé le</th><th>Résultat</th></tr></thead><tbody id="dataset-import-history"><tr><td colspan="6">Chargement…</td></tr></tbody></table></div></section><section class="panel"><div class="panel-header"><div><h2>Autres référentiels importés</h2><p class="panel-subtitle">Services, marques, sous-catégories, types de produits et autres données métier copiés dans votre entreprise.</p></div></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Type</th><th>Nom</th><th>Succursale</th><th>Description</th><th>Importé le</th></tr></thead><tbody id="dataset-reference-list"><tr><td colspan="5">Chargement…</td></tr></tbody></table></div></section>`
+};
 let activeBranchId = '';
 let branchOptions = [];
 const branchScopedResources = new Set(['stocks', 'achats', 'caisses', 'ventes', 'fournisseurs']);
@@ -61,6 +69,7 @@ const routes = {
   '/': 'dashboard',
   '/dashboard': 'dashboard',
   '/stock': 'stock',
+  '/bibliotheque-donnees': 'data-library',
   '/risques-stock': 'stock-risk',
   '/approvisionnements': 'procurement',
   '/ventes': 'sales',
@@ -95,12 +104,21 @@ const enterpriseThemes = [
 ];
 const activityTypeLabels = {
   pharmaceutical:'Pharmaceutique',
-  commercial:'Commerciale',
-  other:'Autres',
+  commercial:'Commerce général',
+  alimentation_boissons:'Alimentation et boissons',
+  quincaillerie:'Quincaillerie',
+  materiaux_construction:'Matériaux de construction',
+  agriculture:'Agriculture',
+  informatique_electronique:'Informatique et électronique',
+  habillement:'Habillement',
+  transport_logistique:'Transport et logistique',
+  industrie:'Industrie',
+  other:'Autres secteurs',
 };
 let currentViewName = 'dashboard';
 let sessionUser = null;
 let stockRiskOrders = [];
+let qrCodeModulePromise = null;
 
 function applyTheme(choice) {
   const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -317,6 +335,7 @@ function renderView(viewName) {
     if (hasAccess('voir_approvisionnements')) loadPurchaseRows();
     if (hasAccess('voir_approvisionnements')) loadProcurementTrends();
   }
+  if (viewName === 'data-library') loadDatasetLibrary();
   if (viewName === 'users') {
     if (hasAccess('voir_roles') || hasAccess('gerer_roles')) loadRoleList();
     if (hasAccess('gerer_utilisateurs')) loadUserRows();
@@ -3810,6 +3829,91 @@ function openEntityForm(type, entity = null) {
   });
 }
 document.querySelectorAll('.nav-item').forEach(item => item.addEventListener('click', () => { navigate(item.dataset.view); document.getElementById('sidebar').classList.remove('open'); }));
+async function loadDatasetLibrary() {
+  const list = document.getElementById('dataset-library-list');
+  const history = document.getElementById('dataset-import-history');
+  const references = document.getElementById('dataset-reference-list');
+  const detailPanel = document.getElementById('dataset-detail-panel');
+  const search = document.getElementById('dataset-search');
+  if (!list || !history || !detailPanel) return;
+  const sectorLabels = {commerce_general:'Commerce général',pharmacie:'Pharmacie',alimentation_boissons:'Alimentation et boissons',quincaillerie:'Quincaillerie',materiaux_construction:'Matériaux de construction',agriculture:'Agriculture',informatique_electronique:'Informatique et électronique',habillement:'Habillement',transport_logistique:'Transport et logistique',industrie:'Industrie',autres:'Autres secteurs',all:'Tous secteurs'};
+  const typeLabels = {category:'Catégorie',unit:'Unité',product:'Produit',supplier:'Fournisseur type',service:'Service',subcategory:'Sous-catégorie',brand:'Marque',product_type:'Type de produit',common:'Information commune'};
+  let datasets = [];
+  let branchChoices = [];
+  try {
+    const result = await fetch('../backend/public/datasets.php', {credentials:'include'});
+    const payload = await readJson(result);
+    if (!result.ok || !payload.success) throw new Error(payload.message || 'Chargement des jeux de données impossible.');
+    datasets = payload.data;
+    if (sessionUser?.is_company_admin) {
+      try { branchChoices = await apiGet('succursales'); }
+      catch (error) { console.error('Chargement des succursales pour l’import impossible.', error); }
+    }
+    const renderList = () => {
+      const query = search?.value.trim().toLocaleLowerCase() || '';
+      const filtered = datasets.filter(dataset => !query || `${dataset.name} ${dataset.description || ''} ${dataset.categorie}`.toLocaleLowerCase().includes(query));
+      list.innerHTML = filtered.length ? filtered.map(dataset => `<article class="stat-card dataset-card"><span class="stat-label">${escapeHtml(sectorLabels[dataset.secteur_activite] || dataset.secteur_activite)} · ${escapeHtml(dataset.categorie)}</span><h3>${escapeHtml(dataset.name)}</h3><p>${escapeHtml(dataset.description || 'Modèle prêt à importer dans votre entreprise.')}</p><small>Version ${Number(dataset.version_number)} · ${Number(dataset.item_count)} ligne(s)</small><button type="button" class="text-button" data-dataset-open="${Number(dataset.jeu_donnees_id)}">Consulter</button></article>`).join('') : '<p class="empty-note">Aucun jeu de données disponible pour votre secteur.</p>';
+      list.querySelectorAll('[data-dataset-open]').forEach(button => button.addEventListener('click', () => openDataset(Number(button.dataset.datasetOpen))));
+    };
+    const loadHistory = async () => {
+      try {
+        const response = await fetch('../backend/public/datasets.php?action=history', {credentials:'include'});
+        const data = await readJson(response);
+        if (!response.ok || !data.success) throw new Error(data.message || 'Historique indisponible.');
+        history.innerHTML = data.data.length ? data.data.map(row => {
+          const result = row.resultat || {};
+          const imported = Number(result.category || 0) + Number(result.unit || 0) + Number(result.product || 0) + Number(result.supplier || 0);
+          return `<tr><td>${escapeHtml(row.dataset_name)}</td><td>v${Number(row.version_number)}</td><td>${escapeHtml(row.branch_name)}</td><td>${escapeHtml(row.user_name)}</td><td>${escapeHtml(dateLabel(row.created_at))}</td><td>${imported + Number(result.reference || 0)} ajouté(s), ${Number(result.duplicates || 0)} doublon(s) ignoré(s)</td></tr>`;
+        }).join('') : '<tr><td colspan="6">Aucune importation enregistrée.</td></tr>';
+      } catch (error) { history.innerHTML = `<tr><td colspan="6">${escapeHtml(error.message)}</td></tr>`; }
+    };
+    const loadReferences = async () => {
+      try {
+        const response = await fetch('../backend/public/datasets.php?action=references', {credentials:'include'});
+        const result = await readJson(response);
+        if (!response.ok || !result.success) throw new Error(result.message || 'Référentiels importés indisponibles.');
+        references.innerHTML = result.data.length ? result.data.map(row => `<tr><td>${escapeHtml(typeLabels[row.reference_type] || row.reference_type)}</td><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.branch_name)}</td><td>${escapeHtml(row.details?.description || '—')}</td><td>${escapeHtml(dateLabel(row.created_at))}</td></tr>`).join('') : '<tr><td colspan="5">Aucun autre référentiel importé.</td></tr>';
+      } catch (error) { references.innerHTML = `<tr><td colspan="5">${escapeHtml(error.message)}</td></tr>`; }
+    };
+    const openDataset = async (id, versionId = 0) => {
+      detailPanel.hidden = false;
+      const detail = document.getElementById('dataset-detail');
+      detail.innerHTML = '<p>Chargement du jeu de données…</p>';
+      try {
+        const url = `../backend/public/datasets.php?id=${encodeURIComponent(id)}${versionId ? `&version_id=${encodeURIComponent(versionId)}` : ''}`;
+        const response = await fetch(url, {credentials:'include'});
+        const result = await readJson(response);
+        if (!response.ok || !result.success) throw new Error(result.message || 'Chargement impossible.');
+        const dataset = result.data;
+        const usableTypes = new Set(Object.keys(typeLabels));
+        const items = dataset.items || [];
+        detail.innerHTML = `<div class="panel-header"><div><h2>${escapeHtml(dataset.name)}</h2><p class="panel-subtitle">${escapeHtml(sectorLabels[dataset.secteur_activite] || dataset.secteur_activite)} · ${escapeHtml(dataset.categorie)} · ${escapeHtml(dataset.description || '')}</p></div><a class="text-button" href="../backend/public/datasets.php?action=export&id=${Number(dataset.jeu_donnees_id)}&version_id=${Number(dataset.selected_version_id)}">Télécharger CSV</a></div><div class="filter-bar"><label>Version<select data-dataset-version>${dataset.versions.map(version => `<option value="${Number(version.jeu_donnees_version_id)}"${Number(version.jeu_donnees_version_id) === Number(dataset.selected_version_id) ? ' selected' : ''}>Version ${Number(version.version_number)} · ${escapeHtml(dateLabel(version.created_at))}</option>`).join('')}</select></label>${sessionUser?.is_company_admin ? `<label>Succursale cible<select data-dataset-branch>${branchChoices.map(branch => `<option value="${Number(branch.succursale_id)}"${Number(branch.succursale_id) === Number(sessionUser.succursale_id) ? ' selected' : ''}>${escapeHtml(branch.name)}</option>`).join('')}</select></label>` : ''}<label><input type="checkbox" data-dataset-select-all checked> Sélectionner les lignes</label></div><div style="overflow:auto"><table class="data-table"><thead><tr><th>Importer</th><th>Type</th><th>Nom</th><th>Référence</th><th>Catégorie</th><th>Unité</th><th>Prix</th></tr></thead><tbody>${items.map((item, index) => `<tr><td><input type="checkbox" data-dataset-item="${index}" checked></td><td>${escapeHtml(typeLabels[item.type] || item.type)}</td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.reference || '—')}</td><td>${escapeHtml(item.category || '—')}</td><td>${escapeHtml(item.unit || item.unit_symbol || '—')}</td><td>${escapeHtml(item.sale_price ? `${item.sale_price} ${item.currency || ''}` : '—')}</td></tr>`).join('') || '<tr><td colspan="7">Ce jeu ne contient aucune donnée.</td></tr>'}</tbody></table></div><p class="panel-subtitle">Les catégories, unités, produits et fournisseurs alimentent le catalogue de gestion. Les autres types sont conservés comme référentiels propres à la succursale.</p>${sessionUser?.is_company_admin ? '<div class="filter-bar"><button type="button" class="primary-button" data-dataset-import>Importer les lignes sélectionnées</button></div>' : '<p class="panel-subtitle">L’importation est réservée à l’administrateur de votre entreprise.</p>'}`;
+        detail.querySelector('[data-dataset-version]')?.addEventListener('change', event => openDataset(id, Number(event.target.value)));
+        detail.querySelector('[data-dataset-select-all]')?.addEventListener('change', event => detail.querySelectorAll('[data-dataset-item]:not(:disabled)').forEach(input => { input.checked = event.target.checked; }));
+        detail.querySelector('[data-dataset-import]')?.addEventListener('click', async event => {
+          const button = event.currentTarget;
+          const selectedItems = [...detail.querySelectorAll('[data-dataset-item]:checked')].map(input => Number(input.dataset.datasetItem));
+          if (!selectedItems.length) { showToast('Sélectionnez au moins une ligne importable.'); return; }
+          button.disabled = true;
+          try {
+            const response = await fetch('../backend/public/datasets.php?action=import', {method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({version_id:Number(dataset.selected_version_id),succursale_id:Number(detail.querySelector('[data-dataset-branch]')?.value || sessionUser.succursale_id || 0),selected_items:selectedItems})});
+            const imported = await readJson(response);
+            if (!response.ok || !imported.success) throw new Error(imported.message || 'Importation impossible.');
+            const counts = imported.data.counts;
+            showToast(`Import terminé : ${counts.category} catégorie(s), ${counts.unit} unité(s), ${counts.product} produit(s), ${counts.supplier} fournisseur(s), ${counts.reference} référentiel(s); ${counts.duplicates} doublon(s) ignoré(s).`);
+            await Promise.all([loadHistory(), loadReferences()]);
+          } catch (error) { showToast(error.message); }
+          finally { button.disabled = false; }
+        });
+      } catch (error) { detail.innerHTML = `<p>${escapeHtml(error.message)}</p>`; }
+    };
+    renderList();
+    search?.addEventListener('input', renderList);
+    await Promise.all([loadHistory(), loadReferences()]);
+  } catch (error) {
+    list.innerHTML = `<p class="empty-note">${escapeHtml(error.message)}</p>`;
+  }
+}
 mobilePrimaryNavigation?.addEventListener('click', event => {
   const item = event.target.closest('.nav-item[data-view]');
   if (item) navigate(item.dataset.view);
@@ -4178,12 +4282,21 @@ function printReportInWindow(printWindow, title, content, note = '', orientation
     if (printStarted || printWindow.closed) return;
     printStarted = true;
     const qrPlaceholders = [...printWindow.document.querySelectorAll('[data-document-qr]')];
+    let qrCodeModule = null;
+    if (qrPlaceholders.some(placeholder => qrCodesAllowedAtBranch(Number(placeholder.dataset.qrBranch)))) {
+      try {
+        qrCodeModulePromise ||= import('./build/qrCode.js?v=20261109-invoice-qr');
+        qrCodeModule = await qrCodeModulePromise;
+      } catch (error) {
+        console.error('Chargement du générateur QR impossible.', error);
+      }
+    }
     for (const placeholder of qrPlaceholders) {
       if (!qrCodesAllowedAtBranch(Number(placeholder.dataset.qrBranch))) {
         placeholder.remove();
         continue;
       }
-      if (!window.AlbaStockQr) {
+      if (!qrCodeModule) {
         placeholder.textContent = 'QR indisponible';
         continue;
       }
@@ -4194,7 +4307,7 @@ function printReportInWindow(printWindow, title, content, note = '', orientation
       }
       const image = printWindow.document.createElement('img');
       try {
-        image.src = await window.AlbaStockQr.toDataUrl(JSON.stringify(payload, null, 2));
+        image.src = await qrCodeModule.toDataUrl(JSON.stringify(payload, null, 2));
       } catch {
         placeholder.textContent = 'QR trop volumineux pour cette pièce';
         continue;
@@ -4403,7 +4516,7 @@ function printReportInWindow(printWindow, title, content, note = '', orientation
   if (content.includes('cash-receipt-sheet')) documentHtml = documentHtml.replace('</style>', '@page{size:A4 landscape;margin:5mm}body.cash-receipt-print>header,body.cash-receipt-print>.report-company-footer{display:none}body.cash-receipt-print>main{margin:0;padding:0}.cash-receipt-sheet{height:198mm;width:100%;display:flex;flex-direction:column;overflow:hidden}.cash-receipt-sheet-heading{flex:0 0 auto;text-align:center;margin:0 0 2mm}.cash-receipt-sheet-heading h2{font-size:12px;margin:0 0 2px}.cash-receipt-sheet-heading p{font-size:8px;margin:0}.cash-receipt-grid-viewport{flex:1 1 auto;min-height:0;overflow:hidden;position:relative}.cash-receipt-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:2mm;transform-origin:top left}.cash-receipt-card{border:1px solid #9aa9a1;padding:2mm;break-inside:avoid;page-break-inside:avoid}.cash-receipt-card h2{font-size:10px;margin:1mm 0}.cash-receipt-card p{font-size:8px;margin:1mm 0}.cash-receipt-card .signature-row{margin-top:4mm;gap:2mm}.cash-receipt-card .signature-row div{font-size:7px;padding-top:1mm}</style>');
   if (content.includes('cash-receipt-sheet')) documentHtml = documentHtml.replace('</style>', '.cash-receipt-card .cash-movement-heading{gap:4px;padding-bottom:3px}.cash-receipt-card .cash-movement-heading h1{font-size:9px}.cash-receipt-card .cash-movement-heading p,.cash-receipt-card .cash-movement-heading strong{font-size:7px}.cash-receipt-card .cash-movement-details{margin:2px 0}.cash-receipt-card .cash-movement-details p{padding:1px 0;font-size:7px}.cash-receipt-card .cash-movement-amount{margin:3px 0;padding:3px;font-size:8px}.cash-movement-voucher.cash-receipt-card .signature-row{margin-top:4px}</style>');
   if (orientation === 'landscape') documentHtml = documentHtml.replace('</style>', '@media print{.stock-card-report .dashboard-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.stock-card-report .stat-card{margin:0}.stock-card-report .report-table th,.stock-card-report .report-table td{padding:4px;font-size:9px}.stock-card-report .report-table{table-layout:fixed}.stock-card-report .report-table th,.stock-card-report .report-table td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.stock-card-page{display:flex;flex-direction:column;break-after:page;page-break-after:always;min-height:184mm;break-inside:avoid}.stock-card-page--first{min-height:126mm}.stock-card-page:last-child{break-after:auto;page-break-after:auto}.stock-page-footer{margin-top:auto;break-inside:avoid}.stock-page-footer p{margin:3px 0;padding:4px;background:#eaf3ee}.stock-carryover{padding:5px;background:#fff6dc}}</style>');
-  if (content.includes('sale-invoice-qr')) documentHtml = documentHtml.replace('</style>', '@media print{.sale-invoice-summary{display:grid;grid-template-columns:minmax(0,1fr) 92px;align-items:center;gap:10px}.sale-invoice-summary>.document-qr{display:flex;flex-direction:column;align-items:center;gap:4px;margin:0;text-align:center}.sale-invoice-summary>.document-qr img{width:76px;height:76px}.sale-invoice-summary>.document-qr span{font-size:7px}}</style>');
+  if (content.includes('data-invoice-qr')) documentHtml = documentHtml.replace('</style>', '@media print{.sale-invoice-summary{display:grid;grid-template-columns:minmax(0,1fr) 92px;align-items:center;gap:10px}.sale-invoice-summary>.document-qr{display:flex;flex-direction:column;align-items:center;gap:4px;margin:0;text-align:center}.sale-invoice-summary>.document-qr img{width:76px;height:76px}.sale-invoice-summary>.document-qr span{font-size:7px}}</style>');
   const logo = companyLogoMarkup();
   if (logo) documentHtml = documentHtml.replace('<header>', `<header>${logo}`);
   documentHtml = documentHtml.replace('</style>', '.report-company-logo{position:absolute;left:0;top:0;width:76px;height:76px;object-fit:contain}.company-stamp-image{display:block;width:150px;height:90px;object-fit:contain;margin:10px 0 0}.stamp-signature{min-height:120px}</style>');
@@ -4636,6 +4749,11 @@ async function printSaleInvoice(button){
     const signature = saleDocumentSignatureMarkup();
     const content=`<article class="sale-invoice">${saleDocumentHeaderMarkup(sale,'FACTURE',sale.invoice_no,saleStatusLabel(sale.status))}<div class="sale-invoice-table-title">FACTURE N° ${escapeHtml(sale.invoice_no)}</div><table class="report-table sale-invoice-table" data-skip-report-totals="true"><thead><tr><th>#</th><th>Description</th><th>Quantité</th><th>Prix unit.</th><th>Remise</th><th>Montant</th></tr></thead><tbody>${rows||'<tr><td colspan="6">Aucun détail disponible</td></tr>'}</tbody></table><section class="sale-invoice-summary"><div>${totals}</div></section>${signature}</article>`;
     const qrPayload = {type:'FACTURE', sale_id:Number(sale.vente_id), numero:sale.invoice_no, date:sale.sale_date, client:sale.client_name || 'Client comptoir', succursale:sale.branch_name, total:saleCurrencyBalances(sale).map(balance=>({montant:Number(balance.total_amount), monnaie:balance.monais})), paye:salePaidCurrencyBalances(sale).map(balance=>({montant:Number(balance.amount_paid), monnaie:balance.monais})), reste:saleCurrencyDueBalances(sale).map(balance=>({montant:Number(balance.due), monnaie:balance.monais}))};
+    if (!sessionUser?.enterprise_qr_codes_enabled) {
+      showToast('QR non affiché : autorisez les QR codes dans les paramètres de l’entreprise.');
+    } else if (!qrCodesAllowedAtBranch(sale.succursale_id)) {
+      showToast('QR non affiché : autorisez les QR codes pour la succursale de cette vente.');
+    }
     const qrPlaceholder = documentQrMarkup(sale.succursale_id, qrPayload, sale.vente_id);
     const printableContent = content.replace('</div></section>' + signature, `${qrPlaceholder}</div></section>${signature}`);
     printReportInWindow(printWindow,`Facture ${sale.invoice_no}`,printableContent);

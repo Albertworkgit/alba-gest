@@ -58,10 +58,18 @@ function RegisterPage() {
               <select name="activity_type" defaultValue="" required>
                 <option value="" disabled>Choisir le type d'activité</option>
                 <option value="pharmaceutical">Pharmaceutique</option>
-                <option value="commercial">Commerciale</option>
-                <option value="other">Autres</option>
+                <option value="commercial">Commerce général</option>
+                <option value="alimentation_boissons">Alimentation et boissons</option>
+                <option value="quincaillerie">Quincaillerie</option>
+                <option value="materiaux_construction">Matériaux de construction</option>
+                <option value="agriculture">Agriculture</option>
+                <option value="informatique_electronique">Informatique et électronique</option>
+                <option value="habillement">Habillement</option>
+                <option value="transport_logistique">Transport et logistique</option>
+                <option value="industrie">Industrie</option>
+                <option value="other">Autres secteurs</option>
               </select>
-              <small>Le thème vert est appliqué par défaut aux entreprises pharmaceutiques. L’administrateur pourra le modifier dans les paramètres.</small>
+              <small>Ce secteur permet de proposer les jeux de données les plus pertinents pour votre activité. Le thème reste personnalisable dans les paramètres.</small>
             </label>
             <label className="register-field">
               Téléphone de l'entreprise

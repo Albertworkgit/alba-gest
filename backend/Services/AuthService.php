@@ -786,7 +786,11 @@ final class AuthService
         if ($name === '' || $email === '' || $fullName === '' || $username === '' || strlen($password) < 6) {
             throw new RuntimeException('Tous les champs sont obligatoires et le mot de passe doit contenir au moins 6 caractères.');
         }
-        if (!in_array($activityType, ['pharmaceutical', 'commercial', 'other'], true)) {
+        if (!in_array($activityType, [
+            'pharmaceutical', 'commercial', 'other', 'alimentation_boissons', 'quincaillerie',
+            'materiaux_construction', 'agriculture', 'informatique_electronique',
+            'habillement', 'transport_logistique', 'industrie',
+        ], true)) {
             throw new RuntimeException('Le type d’entreprise sélectionné est invalide.');
         }
         $language = (string) ($data['preferred_language'] ?? 'fr');
