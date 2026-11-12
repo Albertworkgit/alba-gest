@@ -4285,10 +4285,11 @@ function printReportInWindow(printWindow, title, content, note = '', orientation
     let qrCodeModule = null;
     if (qrPlaceholders.some(placeholder => qrCodesAllowedAtBranch(Number(placeholder.dataset.qrBranch)))) {
       try {
-        qrCodeModulePromise ||= import('./build/qrCode.js?v=20261109-invoice-qr');
+        qrCodeModulePromise ||= import('./build/qrCode.js?v=20261112-invoice-qr-fix');
         qrCodeModule = await qrCodeModulePromise;
       } catch (error) {
         console.error('Chargement du générateur QR impossible.', error);
+        showToast('Le code QR ne peut pas être généré. Vérifiez le chargement du module QR puis réessayez.');
       }
     }
     for (const placeholder of qrPlaceholders) {
@@ -4755,7 +4756,7 @@ async function printSaleInvoice(button){
       showToast('QR non affiché : autorisez les QR codes pour la succursale de cette vente.');
     }
     const qrPlaceholder = documentQrMarkup(sale.succursale_id, qrPayload, sale.vente_id);
-    const printableContent = content.replace('</div></section>' + signature, `${qrPlaceholder}</div></section>${signature}`);
+    const printableContent = content.replace(signature, `${qrPlaceholder}${signature}`);
     printReportInWindow(printWindow,`Facture ${sale.invoice_no}`,printableContent);
   }catch(error){printWindow.close();showToast(`Impression de la facture impossible : ${error.message}`);}
 }
