@@ -89,12 +89,12 @@
       <section class="admin-view" id="admin-view-datasets" hidden>
         <div class="dashboard-grid dataset-admin-stats">
           <article class="stat-card"><span class="stat-label">Jeux de données</span><div class="stat-value" id="dataset-stat-total">0</div></article>
-          <article class="stat-card"><span class="stat-label">Jeux actifs</span><div class="stat-value" id="dataset-stat-active">0</div></article>
-          <article class="stat-card"><span class="stat-label">Secteurs couverts</span><div class="stat-value" id="dataset-stat-sectors">0</div></article>
+          <article class="stat-card"><span class="stat-label">Jeux publiés</span><div class="stat-value" id="dataset-stat-active">0</div></article>
+          <article class="stat-card"><span class="stat-label">Secteurs publiés</span><div class="stat-value" id="dataset-stat-sectors">0</div></article>
         </div>
         <div class="admin-panel">
           <h2>Créer ou mettre à jour un jeu de données</h2>
-          <p>Les mises à jour créent une nouvelle version ; les versions précédentes restent disponibles. Le catalogue global est modifiable uniquement par les super-administrateurs.</p>
+          <p>Enregistrer crée un brouillon qui n’est pas visible par les entreprises. Après vérification, publiez-le depuis la bibliothèque centrale. Toute modification d’un jeu publié crée une nouvelle version en brouillon et suspend sa disponibilité jusqu’à sa publication.</p>
           <form id="dataset-form" class="currency-form dataset-form">
             <input type="hidden" name="jeu_donnees_id">
             <label>Nom du jeu<input name="name" maxlength="150" required></label>
@@ -103,15 +103,16 @@
             </select></label>
             <label>Catégorie du jeu<input name="categorie" maxlength="80" placeholder="Ex. Catalogue initial" required></label>
             <label class="dataset-description-field">Description<textarea name="description" rows="2" maxlength="10000"></textarea></label>
-            <div class="dataset-toolbar"><button type="button" class="status-button" id="dataset-add-row">Ajouter une ligne</button><button type="button" class="status-button" id="dataset-template">Télécharger le modèle CSV</button><label class="dataset-file-label">Importer un CSV<input id="dataset-csv-file" type="file" accept=".csv,text/csv"></label><button type="button" id="dataset-reset" class="status-button">Nouveau jeu</button></div>
-            <p id="dataset-preview-message" class="dataset-preview-message" role="status">Ajoutez des lignes ou importez le modèle CSV pour prévisualiser les données.</p>
+            <div class="dataset-toolbar"><label>Construire depuis une entreprise<select id="dataset-source-enterprise"><option value="">Chargement des entreprises…</option></select></label><button type="button" class="status-button" id="dataset-from-enterprise">Créer un brouillon depuis le catalogue</button></div>
+            <div class="dataset-toolbar"><button type="button" class="status-button" id="dataset-add-row">Ajouter une ligne</button><button type="button" class="status-button" id="dataset-template">Télécharger le modèle Excel</button><label class="dataset-file-label">Importer Excel ou CSV<input id="dataset-csv-file" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"></label><button type="button" id="dataset-reset" class="status-button">Nouveau jeu</button></div>
+            <p id="dataset-preview-message" class="dataset-preview-message" role="status">Le classeur Excel doit contenir l’onglet « Jeux des données » avec les en-têtes sur la première ligne. CSV reste accepté.</p>
             <div class="dataset-table-wrap"><table class="admin-table dataset-items-table"><thead><tr><th>Type</th><th>Nom</th><th>Référence</th><th>Catégorie</th><th>Unité</th><th>Symbole unité</th><th>Prix vente</th><th>Coût</th><th>Monnaie</th><th>Périssable</th><th>Description</th><th>Validation</th><th></th></tr></thead><tbody id="dataset-item-rows"><tr data-dataset-empty><td colspan="13">Aucune ligne ajoutée.</td></tr></tbody></table></div>
             <button type="submit" class="currency-submit" id="dataset-save">Enregistrer le jeu de données</button>
           </form>
         </div>
         <div class="admin-panel">
-          <div class="dataset-list-heading"><div><h2>Bibliothèque centrale</h2><p>Recherchez, exportez, désactivez ou modifiez les jeux publiés.</p></div><input id="dataset-search-admin" type="search" placeholder="Rechercher un jeu"><select id="dataset-sector-filter" aria-label="Filtrer par secteur"><option value="">Tous les secteurs</option><option value="commerce_general">Commerce général</option><option value="pharmacie">Pharmacie</option><option value="alimentation_boissons">Alimentation et boissons</option><option value="quincaillerie">Quincaillerie</option><option value="materiaux_construction">Matériaux de construction</option><option value="agriculture">Agriculture</option><option value="informatique_electronique">Informatique et électronique</option><option value="habillement">Habillement</option><option value="transport_logistique">Transport et logistique</option><option value="industrie">Industrie</option><option value="autres">Autres secteurs</option><option value="all">Tous secteurs</option></select><select id="dataset-status-filter" aria-label="Filtrer par statut"><option value="">Tous les statuts</option><option value="1">Actifs</option><option value="0">Inactifs</option></select></div>
-          <div class="dataset-table-wrap"><table class="admin-table"><thead><tr><th>Nom</th><th>Secteur</th><th>Catégorie</th><th>Version</th><th>Lignes</th><th>Créateur</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="dataset-list"><tr><td colspan="8">Chargement…</td></tr></tbody></table></div>
+          <div class="dataset-list-heading"><div><h2>Bibliothèque centrale</h2><p>Seuls les jeux publiés sont visibles par les entreprises dont le secteur correspond. Publiez un brouillon après vérification, ou retirez un jeu déjà publié.</p></div><input id="dataset-search-admin" type="search" placeholder="Rechercher un jeu"><select id="dataset-sector-filter" aria-label="Filtrer par secteur"><option value="">Tous les secteurs</option><option value="commerce_general">Commerce général</option><option value="pharmacie">Pharmacie</option><option value="alimentation_boissons">Alimentation et boissons</option><option value="quincaillerie">Quincaillerie</option><option value="materiaux_construction">Matériaux de construction</option><option value="agriculture">Agriculture</option><option value="informatique_electronique">Informatique et électronique</option><option value="habillement">Habillement</option><option value="transport_logistique">Transport et logistique</option><option value="industrie">Industrie</option><option value="autres">Autres secteurs</option><option value="all">Tous secteurs</option></select><select id="dataset-status-filter" aria-label="Filtrer par publication"><option value="">Tous les statuts</option><option value="1">Publiés</option><option value="0">Brouillons / retirés</option></select></div>
+          <div class="dataset-table-wrap"><table class="admin-table"><thead><tr><th>Nom</th><th>Secteur</th><th>Catégorie</th><th>Version</th><th>Lignes</th><th>Créateur</th><th>Publication</th><th>Actions</th></tr></thead><tbody id="dataset-list"><tr><td colspan="8">Chargement…</td></tr></tbody></table></div>
         </div>
       </section>
       <section class="admin-view" id="admin-view-profile" hidden>
@@ -151,6 +152,6 @@
   <div class="admin-message" id="admin-message" role="status"></div>
   <script src="password-toggle.js?v=20261011-ui-polish-2"></script>
   <script src="interface-language.js?v=20261024-interface-navigation"></script>
-  <script src="superadmin.js?v=20261109-dataset-library"></script>
+  <script src="superadmin.js?v=20261112-dataset-delete"></script>
 </body>
 </html>

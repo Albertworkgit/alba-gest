@@ -15,6 +15,8 @@ const datasetForm = document.getElementById('dataset-form');
 const datasetList = document.getElementById('dataset-list');
 const datasetItemRows = document.getElementById('dataset-item-rows');
 const datasetPreviewMessage = document.getElementById('dataset-preview-message');
+const datasetSourceEnterprise = document.getElementById('dataset-source-enterprise');
+const datasetFromEnterprise = document.getElementById('dataset-from-enterprise');
 const message = document.getElementById('admin-message');
 const adminPageTitle = document.getElementById('admin-page-title');
 const adminPageDescription = document.getElementById('admin-page-description');
@@ -55,6 +57,7 @@ const datasetTypes = {
   subcategory:'Sous-catégorie',brand:'Marque',product_type:'Type de produit',common:'Information commune'
 };
 let datasets = [];
+let datasetSourceEnterprises = [];
 
 function datasetApiUrl(query = '') {
   return `../backend/public/datasets.php${query ? `?${query}` : ''}`;
@@ -64,7 +67,7 @@ function clearDatasetForm() {
   datasetForm.reset();
   datasetForm.elements.namedItem('jeu_donnees_id').value = '';
   datasetItemRows.replaceChildren();
-  datasetPreviewMessage.textContent = 'Ajoutez des lignes ou importez le modèle CSV pour prévisualiser les données.';
+  datasetPreviewMessage.textContent = 'Ajoutez des lignes ou importez le modèle Excel pour prévisualiser les données.';
   document.getElementById('dataset-save').textContent = 'Enregistrer le jeu de données';
   appendDatasetRow();
 }
@@ -123,22 +126,75 @@ async function loadDatasets() {
     const result = await requestJson(datasetApiUrl());
     datasets = result.data;
     renderDatasets();
+    await loadDatasetSourceEnterprises();
   } catch (error) {
     datasetList.innerHTML = `<tr><td colspan="8">${escapeHtml(error.message)}</td></tr>`;
   }
 }
 
+async function loadDatasetSourceEnterprises() {
+  if (!datasetSourceEnterprise) return;
+  try {
+    const result = await requestJson(datasetApiUrl('action=source-enterprises'));
+    datasetSourceEnterprises = result.data;
+    datasetSourceEnterprise.innerHTML = '<option value="">Choisir une entreprise source</option>' + datasetSourceEnterprises.map(enterprise =>
+      `<option value="${Number(enterprise.entreprise_id)}">${escapeHtml(enterprise.name)} · ${escapeHtml(datasetSectors[enterprise.activity_type] || enterprise.activity_type)}</option>`
+    ).join('');
+  } catch (error) {
+    datasetSourceEnterprise.innerHTML = '<option value="">Entreprises sources indisponibles</option>';
+    notify(error.message);
+  }
+}
+
+datasetSourceEnterprise?.addEventListener('change', () => {
+  const enterprise = datasetSourceEnterprises.find(item => Number(item.entreprise_id) === Number(datasetSourceEnterprise.value));
+  if (!enterprise) return;
+  const sector = {pharmaceutical:'pharmacie', commercial:'commerce_general', other:'autres'}[enterprise.activity_type] || enterprise.activity_type;
+  const sectorSelect = datasetForm.elements.namedItem('secteur_activite');
+  if ([...sectorSelect.options].some(option => option.value === sector)) sectorSelect.value = sector;
+});
+
+datasetFromEnterprise?.addEventListener('click', async () => {
+  if (!datasetForm.reportValidity()) return;
+  const enterpriseId = Number(datasetSourceEnterprise?.value || 0);
+  const enterprise = datasetSourceEnterprises.find(item => Number(item.entreprise_id) === enterpriseId);
+  if (!enterpriseId || !enterprise) {
+    notify('Choisissez une entreprise source.');
+    return;
+  }
+  if (!window.confirm(`Créer un brouillon depuis le catalogue de « ${enterprise.name} » ? Les catégories, unités et produits actifs sans prix de revient seront copiés. Aucun fournisseur, stock, coût d’achat, identifiant personnel ou contact ne sera inclus.`)) return;
+  datasetFromEnterprise.disabled = true;
+  try {
+    const data = Object.fromEntries(new FormData(datasetForm));
+    const result = await requestJson(datasetApiUrl('action=from-enterprise'), {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        entreprise_id:enterpriseId,
+        name:data.name,
+        categorie:data.categorie,
+        description:data.description
+      })
+    });
+    const counts = result.data.counts;
+    notify(`Brouillon créé : ${counts.categories} catégorie(s), ${counts.units} unité(s), ${counts.products} produit(s). Vérifiez-le puis publiez-le.`);
+    clearDatasetForm();
+    await loadDatasets();
+  } catch (error) { notify(error.message); }
+  finally { datasetFromEnterprise.disabled = false; }
+});
+
 function renderDatasets() {
   document.getElementById('dataset-stat-total').textContent = datasets.length.toLocaleString('fr-FR');
   document.getElementById('dataset-stat-active').textContent = datasets.filter(dataset => Number(dataset.is_active) === 1).length.toLocaleString('fr-FR');
-  document.getElementById('dataset-stat-sectors').textContent = new Set(datasets.map(dataset => dataset.secteur_activite)).size.toLocaleString('fr-FR');
+  document.getElementById('dataset-stat-sectors').textContent = new Set(datasets.filter(dataset => Number(dataset.is_active) === 1).map(dataset => dataset.secteur_activite)).size.toLocaleString('fr-FR');
   const query = document.getElementById('dataset-search-admin').value.trim().toLocaleLowerCase();
   const sectorFilter = document.getElementById('dataset-sector-filter').value;
   const statusFilter = document.getElementById('dataset-status-filter').value;
   const rows = datasets.filter(dataset => (!query || `${dataset.name} ${dataset.description || ''} ${dataset.categorie}`.toLocaleLowerCase().includes(query))
     && (!sectorFilter || dataset.secteur_activite === sectorFilter)
     && (statusFilter === '' || Number(dataset.is_active) === Number(statusFilter)));
-  datasetList.innerHTML = rows.length ? rows.map(dataset => `<tr><td><strong>${escapeHtml(dataset.name)}</strong></td><td>${escapeHtml(datasetSectors[dataset.secteur_activite] || dataset.secteur_activite)}</td><td>${escapeHtml(dataset.categorie)}</td><td>${dataset.version_number ? `v${Number(dataset.version_number)}` : '—'}</td><td>${Number(dataset.item_count || 0)}</td><td>${escapeHtml(dataset.creator_name || '—')}</td><td><span class="status ${Number(dataset.is_active) ? 'success' : 'danger'}">${Number(dataset.is_active) ? 'Actif' : 'Inactif'}</span></td><td><div class="super-admin-row-actions"><button type="button" data-dataset-edit="${Number(dataset.jeu_donnees_id)}">Modifier</button><a href="${datasetApiUrl(`action=export&id=${Number(dataset.jeu_donnees_id)}&version_id=${Number(dataset.jeu_donnees_version_id || 0)}`)}">Exporter</a><button type="button" class="${Number(dataset.is_active) ? 'delete-super-admin' : ''}" data-dataset-status="${Number(dataset.jeu_donnees_id)}" data-next-status="${Number(dataset.is_active) ? 0 : 1}">${Number(dataset.is_active) ? 'Désactiver' : 'Activer'}</button></div></td></tr>`).join('') : '<tr><td colspan="8">Aucun jeu de données enregistré.</td></tr>';
+  datasetList.innerHTML = rows.length ? rows.map(dataset => `<tr><td><strong>${escapeHtml(dataset.name)}</strong></td><td>${escapeHtml(datasetSectors[dataset.secteur_activite] || dataset.secteur_activite)}</td><td>${escapeHtml(dataset.categorie)}</td><td>${dataset.version_number ? `v${Number(dataset.version_number)}` : '—'}</td><td>${Number(dataset.item_count || 0)}</td><td>${escapeHtml(dataset.creator_name || '—')}</td><td><span class="status ${Number(dataset.is_active) ? 'success' : 'danger'}">${Number(dataset.is_active) ? 'Publié' : 'Brouillon / retiré'}</span></td><td><div class="super-admin-row-actions"><button type="button" data-dataset-edit="${Number(dataset.jeu_donnees_id)}">Modifier</button><a href="${datasetApiUrl(`action=export-xlsx&id=${Number(dataset.jeu_donnees_id)}&version_id=${Number(dataset.jeu_donnees_version_id || 0)}`)}">Télécharger Excel</a><button type="button" class="${Number(dataset.is_active) ? 'delete-super-admin' : ''}" data-dataset-status="${Number(dataset.jeu_donnees_id)}" data-next-status="${Number(dataset.is_active) ? 0 : 1}">${Number(dataset.is_active) ? 'Retirer de la bibliothèque' : 'Publier'}</button>${Number(dataset.is_active) ? '' : `<button type="button" class="delete-super-admin" data-dataset-delete="${Number(dataset.jeu_donnees_id)}">Supprimer</button>`}</div></td></tr>`).join('') : '<tr><td colspan="8">Aucun jeu de données enregistré.</td></tr>';
 }
 
 datasetForm?.addEventListener('submit', async event => {
@@ -155,7 +211,7 @@ datasetForm?.addEventListener('submit', async event => {
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(data)
     });
-    notify(`Jeu enregistré en version ${result.data.version_number}.`);
+    notify(`Brouillon enregistré en version ${result.data.version_number}. Publiez-le depuis la bibliothèque centrale après vérification.`);
     clearDatasetForm();
     await loadDatasets();
   } catch (error) { notify(error.message); }
@@ -171,6 +227,7 @@ document.getElementById('dataset-status-filter')?.addEventListener('change', ren
 datasetList?.addEventListener('click', async event => {
   const edit = event.target.closest('[data-dataset-edit]');
   const toggle = event.target.closest('[data-dataset-status]');
+  const remove = event.target.closest('[data-dataset-delete]');
   if (edit) {
     try {
       const {data} = await requestJson(datasetApiUrl(`id=${encodeURIComponent(edit.dataset.datasetEdit)}`));
@@ -186,12 +243,27 @@ datasetList?.addEventListener('click', async event => {
     } catch (error) { notify(error.message); }
   }
   if (toggle) {
+    const publish = toggle.dataset.nextStatus === '1';
+    const datasetName = toggle.closest('tr')?.querySelector('strong')?.textContent || 'ce jeu de données';
+    if (publish && !window.confirm(`Publier « ${datasetName} » ? Il sera visible et importable par les entreprises de son secteur.`)) return;
     try {
       await requestJson(datasetApiUrl('action=status'), {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({id:Number(toggle.dataset.datasetStatus),is_active:toggle.dataset.nextStatus === '1'})
+        body:JSON.stringify({id:Number(toggle.dataset.datasetStatus),is_active:publish})
       });
-      notify('Statut du jeu de données mis à jour.');
+      notify(publish ? 'Jeu publié et disponible pour les entreprises du secteur.' : 'Jeu retiré de la bibliothèque des entreprises.');
+      await loadDatasets();
+    } catch (error) { notify(error.message);     }
+  }
+  if (remove) {
+    const datasetName = remove.closest('tr')?.querySelector('strong')?.textContent || 'ce jeu de données';
+    if (!window.confirm(`Supprimer définitivement « ${datasetName} » ? Cette action est possible uniquement si le jeu est inactif et n’a pas d’historique d’importation ni de références utilisées.`)) return;
+    try {
+      await requestJson(datasetApiUrl('action=delete'), {
+        method:'DELETE', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id:Number(remove.dataset.datasetDelete)})
+      });
+      notify('Jeu de données supprimé.');
       await loadDatasets();
     } catch (error) { notify(error.message); }
   }
@@ -202,11 +274,11 @@ document.getElementById('dataset-csv-file')?.addEventListener('change', async ev
   if (!file) return;
   const formData = new FormData();
   formData.append('file', file);
-  datasetPreviewMessage.textContent = 'Analyse du fichier CSV…';
+  datasetPreviewMessage.textContent = file.name.toLowerCase().endsWith('.xlsx') ? 'Analyse du classeur Excel…' : 'Analyse du fichier CSV…';
   try {
     const response = await fetch(datasetApiUrl('action=preview-csv'), {method:'POST',credentials:'include',body:formData});
     const result = await response.json();
-    if (!response.ok || !result.success) throw new Error(result.message || 'Analyse CSV impossible.');
+    if (!response.ok || !result.success) throw new Error(result.message || 'Analyse du fichier impossible.');
     const rows = result.data.items;
     datasetItemRows.replaceChildren();
     rows.forEach(item => appendDatasetRow(item));

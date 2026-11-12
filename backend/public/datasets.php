@@ -7,10 +7,12 @@ require_once __DIR__ . '/../Core/JsonResponse.php';
 require_once __DIR__ . '/../Core/Session.php';
 require_once __DIR__ . '/../Core/AuthGuard.php';
 require_once __DIR__ . '/../Core/Authorization.php';
+require_once __DIR__ . '/../Core/DatasetSpreadsheet.php';
 
 use AlbaStock\Core\AuthGuard;
 use AlbaStock\Core\Authorization;
 use AlbaStock\Core\Database;
+use AlbaStock\Core\DatasetSpreadsheet;
 use AlbaStock\Core\JsonResponse;
 $method = $_SERVER['REQUEST_METHOD'];
 $action = trim((string) ($_GET['action'] ?? ''));
@@ -24,22 +26,29 @@ try {
 
     if ($isSuperAdmin) {
         if ($method === 'GET' && $action === 'template') {
-            header('Content-Type: text/csv; charset=utf-8');
-            header('Content-Disposition: attachment; filename="modele-jeu-de-donnees.csv"');
-            $out = fopen('php://output', 'wb');
-            fwrite($out, "\xEF\xBB\xBF");
-            fputcsv($out, ['type', 'name', 'reference', 'description', 'category', 'unit', 'unit_symbol', 'sale_price', 'cost_price', 'currency', 'perishable'], ';', '"', '\\');
-            fputcsv($out, ['category', 'Boissons', '', 'Catégorie de démonstration', '', '', '', '', '', '', ''], ';', '"', '\\');
-            fputcsv($out, ['unit', 'Litre', '', '', '', '', 'L', '', '', '', ''], ';', '"', '\\');
-            fputcsv($out, ['product', 'Eau minérale', 'EAU-001', '', 'Boissons', 'Litre', 'L', '1.50', '1.00', '', '0'], ';', '"', '\\');
-            fclose($out);
-            exit;
+            DatasetSpreadsheet::download('modele-jeu-de-donnees', spreadsheetRows([
+                ['type' => 'category', 'name' => 'Boissons', 'description' => 'Catégorie de démonstration'],
+                ['type' => 'unit', 'name' => 'Litre', 'unit_symbol' => 'L'],
+                ['type' => 'product', 'name' => 'Eau minérale', 'reference' => 'EAU-001', 'category' => 'Boissons', 'unit' => 'Litre', 'unit_symbol' => 'L', 'sale_price' => '1.50', 'cost_price' => '1.00'],
+            ]));
+        }
+        if ($method === 'GET' && $action === 'source-enterprises') {
+            $result = $db->query('SELECT entreprise_id, name, activity_type FROM entreprises ORDER BY name');
+            JsonResponse::send(['success' => true, 'data' => $result->fetch_all(MYSQLI_ASSOC)]);
         }
         if ($method === 'GET' && $action === 'export') {
             exportDataset($db, (int) ($_GET['id'] ?? 0), (int) ($_GET['version_id'] ?? 0));
         }
+        if ($method === 'GET' && $action === 'export-xlsx') {
+            exportDatasetXlsx($db, (int) ($_GET['id'] ?? 0), (int) ($_GET['version_id'] ?? 0));
+        }
         if ($method === 'POST' && $action === 'preview-csv') {
             previewCsv();
+        }
+        if ($method === 'DELETE' && $action === 'delete') {
+            $body = json_decode((string) file_get_contents('php://input'), true);
+            if (!is_array($body)) JsonResponse::error('Corps JSON invalide.', 400);
+            deleteInactiveDataset($db, (int) ($body['id'] ?? 0));
         }
         if ($method === 'GET') {
             $datasetId = (int) ($_GET['id'] ?? 0);
@@ -50,10 +59,23 @@ try {
         if (in_array($method, ['POST', 'PUT', 'PATCH'], true)) {
             $body = json_decode((string) file_get_contents('php://input'), true);
             if (!is_array($body)) JsonResponse::error('Corps JSON invalide.', 400);
+            if ($action === 'from-enterprise' && $method === 'POST') {
+                $result = datasetFromEnterprise($db, $actor, $body);
+                JsonResponse::send(['success' => true, 'data' => $result], 201);
+            }
             if ($action === 'status') {
                 $id = (int) ($body['id'] ?? 0);
                 $active = filter_var($body['is_active'] ?? null, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
                 if ($id < 1 || $active === null) JsonResponse::error('Jeu de données et statut valides requis.', 422);
+                if ($active) {
+                    $versionQuery = $db->prepare('SELECT jeu_donnees_version_id FROM jeux_donnees_versions WHERE jeu_donnees_id = ? ORDER BY version_number DESC LIMIT 1');
+                    $versionQuery->bind_param('i', $id);
+                    $versionQuery->execute();
+                    $version = $versionQuery->get_result()->fetch_assoc();
+                    if (!$version || versionItems($db, (int) $version['jeu_donnees_version_id']) === []) {
+                        JsonResponse::error('Enregistrez au moins une ligne valide avant de publier ce jeu de données.', 422);
+                    }
+                }
                 $statement = $db->prepare('UPDATE jeux_donnees SET is_active = ? WHERE jeu_donnees_id = ?');
                 $activeInt = $active ? 1 : 0;
                 $statement->bind_param('ii', $activeInt, $id);
@@ -116,6 +138,9 @@ try {
         if ($action === 'export') {
             exportDataset($db, $datasetId, (int) ($_GET['version_id'] ?? 0), false, $activityType);
         }
+        if ($action === 'export-xlsx') {
+            exportDatasetXlsx($db, $datasetId, (int) ($_GET['version_id'] ?? 0), false, $activityType);
+        }
         if ($datasetId > 0) {
             $dataset = datasetDetails($db, $datasetId, false, $activityType);
             JsonResponse::send(['success' => true, 'data' => $dataset]);
@@ -147,6 +172,126 @@ function datasetExists(mysqli $db, int $id): bool
     $statement->bind_param('i', $id);
     $statement->execute();
     return (bool) $statement->get_result()->fetch_assoc();
+}
+
+function deleteInactiveDataset(mysqli $db, int $datasetId): never
+{
+    global $transaction;
+    if ($datasetId < 1) JsonResponse::error('Jeu de données invalide.', 422);
+
+    $db->begin_transaction();
+    $transaction = true;
+    $datasetQuery = $db->prepare('SELECT is_active FROM jeux_donnees WHERE jeu_donnees_id = ? FOR UPDATE');
+    $datasetQuery->bind_param('i', $datasetId);
+    $datasetQuery->execute();
+    $dataset = $datasetQuery->get_result()->fetch_assoc();
+    if (!$dataset) {
+        $db->rollback();
+        $transaction = false;
+        JsonResponse::error('Jeu de données introuvable.', 404);
+    }
+    if ((int) $dataset['is_active'] !== 0) {
+        $db->rollback();
+        $transaction = false;
+        JsonResponse::error('Seuls les jeux de données inactifs peuvent être supprimés.', 409);
+    }
+
+    $usageQuery = $db->prepare('SELECT (SELECT COUNT(*) FROM jeux_donnees_importations WHERE jeu_donnees_id = ?) + (SELECT COUNT(*) FROM jeux_donnees_references WHERE jeu_donnees_id = ?) AS usage_count');
+    $usageQuery->bind_param('ii', $datasetId, $datasetId);
+    $usageQuery->execute();
+    $usageCount = (int) $usageQuery->get_result()->fetch_assoc()['usage_count'];
+    if ($usageCount > 0) {
+        $db->rollback();
+        $transaction = false;
+        JsonResponse::error('Ce jeu ne peut pas être supprimé, car il possède un historique d’importation ou des références utilisées par des entreprises.', 409);
+    }
+
+    $deleteQuery = $db->prepare('DELETE FROM jeux_donnees WHERE jeu_donnees_id = ? AND is_active = 0');
+    $deleteQuery->bind_param('i', $datasetId);
+    $deleteQuery->execute();
+    if ($deleteQuery->affected_rows !== 1) {
+        $db->rollback();
+        $transaction = false;
+        JsonResponse::error('Le jeu a changé de statut ou est introuvable. Actualisez la liste puis réessayez.', 409);
+    }
+
+    $db->commit();
+    $transaction = false;
+    JsonResponse::send(['success' => true, 'message' => 'Jeu de données supprimé.']);
+}
+
+function spreadsheetRows(array $items): array
+{
+    $keys = ['type', 'name', 'reference', 'description', 'category', 'unit', 'unit_symbol', 'sale_price', 'cost_price', 'currency', 'perishable'];
+    $rows = [['Type', 'Nom', 'Référence', 'Description', 'Catégorie', 'Unité', 'Symbole unité', 'Prix de vente', 'Prix de revient', 'Monnaie', 'Périssable']];
+    foreach ($items as $item) {
+        $rows[] = array_map(static fn (string $key): mixed => $item[$key] ?? '', $keys);
+    }
+    return $rows;
+}
+
+function datasetFromEnterprise(mysqli $db, array $actor, array $body): array
+{
+    $enterpriseId = (int) ($body['entreprise_id'] ?? 0);
+    $name = trim((string) ($body['name'] ?? ''));
+    $category = trim((string) ($body['categorie'] ?? 'Catalogue importé'));
+    $description = trim((string) ($body['description'] ?? ''));
+    if ($enterpriseId < 1 || $name === '') throw new RuntimeException('Choisissez une entreprise source et donnez un nom au jeu de données.');
+    $sourceQuery = $db->prepare('SELECT name, activity_type FROM entreprises WHERE entreprise_id = ? LIMIT 1');
+    $sourceQuery->bind_param('i', $enterpriseId);
+    $sourceQuery->execute();
+    $source = $sourceQuery->get_result()->fetch_assoc();
+    if (!$source) throw new RuntimeException('Entreprise source introuvable.');
+    $sector = sectorForActivity((string) $source['activity_type']);
+    $items = [];
+    $categories = $db->prepare('SELECT name FROM categories WHERE entreprise_id = ? ORDER BY name');
+    $categories->bind_param('i', $enterpriseId);
+    $categories->execute();
+    foreach ($categories->get_result()->fetch_all(MYSQLI_ASSOC) as $row) {
+        $items[] = ['type' => 'category', 'name' => $row['name']];
+    }
+    $units = $db->prepare('SELECT name, symbole FROM unites_mesure WHERE entreprise_id = ? ORDER BY name');
+    $units->bind_param('i', $enterpriseId);
+    $units->execute();
+    foreach ($units->get_result()->fetch_all(MYSQLI_ASSOC) as $row) {
+        $items[] = ['type' => 'unit', 'name' => $row['name'], 'unit_symbol' => $row['symbole']];
+    }
+    $products = $db->prepare('SELECT p.sku, p.name, p.unit_price, p.monais, p.est_perisable, c.name AS category_name, u.name AS unit_name, u.symbole AS unit_symbol FROM produits p LEFT JOIN categories c ON c.category_id = p.category_id AND c.entreprise_id = p.entreprise_id INNER JOIN unites_mesure u ON u.unite_mesure_id = p.unite_de_mesure AND u.entreprise_id = p.entreprise_id WHERE p.entreprise_id = ? AND p.is_active = 1 AND p.cost_price <= 0 AND p.sku <> \'\' ORDER BY p.name, p.sku LIMIT 5001');
+    $products->bind_param('i', $enterpriseId);
+    $products->execute();
+    foreach ($products->get_result()->fetch_all(MYSQLI_ASSOC) as $row) {
+        $items[] = [
+            'type' => 'product',
+            'name' => $row['name'],
+            'reference' => $row['sku'],
+            'description' => '',
+            'category' => $row['category_name'] ?? '',
+            'unit' => $row['unit_name'] ?? '',
+            'unit_symbol' => $row['unit_symbol'] ?? '',
+            'sale_price' => $row['unit_price'],
+            'cost_price' => 0,
+            'currency' => $row['monais'],
+            'perishable' => (int) $row['est_perisable'],
+        ];
+    }
+    if (count($items) > 5000) {
+        throw new RuntimeException('Le catalogue source dépasse 5 000 lignes. Réduisez le catalogue avant de générer un jeu de données.');
+    }
+    if (!$items) throw new RuntimeException('Cette entreprise ne possède aucune catégorie, unité ou produit actif sans prix de revient à exporter.');
+    $dataset = saveDataset($db, $actor, [
+        'name' => $name,
+        'description' => $description !== '' ? $description : 'Catalogue de référence généré depuis les catégories, unités et produits disponibles.',
+        'secteur_activite' => $sector,
+        'categorie' => $category,
+        'items' => $items,
+    ]);
+    $dataset['source_enterprise'] = $source['name'];
+    $dataset['counts'] = [
+        'categories' => count(array_filter($items, static fn (array $item): bool => $item['type'] === 'category')),
+        'units' => count(array_filter($items, static fn (array $item): bool => $item['type'] === 'unit')),
+        'products' => count(array_filter($items, static fn (array $item): bool => $item['type'] === 'product')),
+    ];
+    return $dataset;
 }
 
 function datasetList(mysqli $db, ?string $sector, bool $includeInactive): array
@@ -228,8 +373,9 @@ function saveDataset(mysqli $db, array $actor, array $body): array
     }
     $seen = [];
     foreach ($items as $index => $item) {
-        $keys = [$item['type'] . ':' . mb_strtolower($item['name'], 'UTF-8')];
-        if ($item['type'] === 'product' && $item['reference'] !== '') $keys[] = 'product-reference:' . mb_strtolower($item['reference'], 'UTF-8');
+        $keys = $item['type'] === 'product'
+            ? ['product-reference:' . mb_strtolower($item['reference'], 'UTF-8')]
+            : [$item['type'] . ':' . mb_strtolower($item['name'], 'UTF-8')];
         foreach ($keys as $key) {
             if (isset($seen[$key])) throw new RuntimeException('Doublon détecté aux lignes ' . $seen[$key] . ' et ' . ($index + 1) . '.');
             $seen[$key] = $index + 1;
@@ -245,7 +391,7 @@ function saveDataset(mysqli $db, array $actor, array $body): array
             $lock->bind_param('i', $datasetId);
             $lock->execute();
             if (!$lock->get_result()->fetch_assoc()) throw new RuntimeException('Jeu de données introuvable.');
-            $update = $db->prepare('UPDATE jeux_donnees SET name = ?, description = ?, secteur_activite = ?, categorie = ? WHERE jeu_donnees_id = ?');
+            $update = $db->prepare('UPDATE jeux_donnees SET name = ?, description = ?, secteur_activite = ?, categorie = ?, is_active = 0 WHERE jeu_donnees_id = ?');
             $update->bind_param('ssssi', $name, $description, $sector, $category, $datasetId);
             $update->execute();
             $version = $db->prepare('SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version FROM jeux_donnees_versions WHERE jeu_donnees_id = ?');
@@ -253,7 +399,7 @@ function saveDataset(mysqli $db, array $actor, array $body): array
             $version->execute();
             $nextVersion = (int) $version->get_result()->fetch_assoc()['next_version'];
         } else {
-            $insert = $db->prepare('INSERT INTO jeux_donnees (name, description, secteur_activite, categorie, created_by, created_by_name) VALUES (?, ?, ?, ?, ?, ?)');
+            $insert = $db->prepare('INSERT INTO jeux_donnees (name, description, secteur_activite, categorie, is_active, created_by, created_by_name) VALUES (?, ?, ?, ?, 0, ?, ?)');
             $insert->bind_param('ssssis', $name, $description, $sector, $category, $creatorId, $creatorName);
             $insert->execute();
             $datasetId = (int) $db->insert_id;
@@ -339,31 +485,39 @@ function validMoney(mixed $value, string $label): float
 
 function previewCsv(): never
 {
-    if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) JsonResponse::error('Sélectionnez un fichier CSV valide.', 422);
+    if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) JsonResponse::error('Sélectionnez un fichier Excel ou CSV valide.', 422);
     $file = $_FILES['file'];
-    if ((int) $file['size'] > 5 * 1024 * 1024) JsonResponse::error('Le fichier CSV ne peut pas dépasser 5 Mo.', 413);
-    $handle = fopen($file['tmp_name'], 'rb');
-    if ($handle === false) JsonResponse::error('Lecture du fichier CSV impossible.', 422);
-    $firstLine = fgets($handle);
-    if ($firstLine === false) JsonResponse::error('Le fichier CSV est vide.', 422);
-    $delimiter = substr_count($firstLine, ';') > substr_count($firstLine, ',') ? ';' : ',';
-    rewind($handle);
-    $headers = fgetcsv($handle, 0, $delimiter, '"', '\\');
-    if (!is_array($headers)) JsonResponse::error('En-têtes CSV introuvables.', 422);
-    $headers = array_map(static fn ($value): string => trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $value)), $headers);
-    $aliases = ['type de donnée' => 'type', 'type de donnee' => 'type', 'nom' => 'name', 'référence' => 'reference', 'reference' => 'reference', 'description' => 'description', 'catégorie' => 'category', 'categorie' => 'category', 'unité' => 'unit', 'unite' => 'unit', 'symbole unité' => 'unit_symbol', 'symbole unite' => 'unit_symbol', 'prix de vente' => 'sale_price', 'coût' => 'cost_price', 'cout' => 'cost_price', 'monnaie' => 'currency', 'périssable' => 'perishable', 'perissable' => 'perishable'];
+    $isExcel = strtolower(pathinfo((string) ($file['name'] ?? ''), PATHINFO_EXTENSION)) === 'xlsx';
+    if ((int) $file['size'] > ($isExcel ? 10 : 5) * 1024 * 1024) JsonResponse::error('Le fichier dépasse la taille maximale autorisée.', 413);
+    if ($isExcel) {
+        $rows = DatasetSpreadsheet::read($file['tmp_name']);
+        $delimiter = 'xlsx';
+    } else {
+        $handle = fopen($file['tmp_name'], 'rb');
+        if ($handle === false) JsonResponse::error('Lecture du fichier CSV impossible.', 422);
+        $firstLine = fgets($handle);
+        if ($firstLine === false) JsonResponse::error('Le fichier CSV est vide.', 422);
+        $delimiter = substr_count($firstLine, ';') > substr_count($firstLine, ',') ? ';' : ',';
+        rewind($handle);
+        $rows = [];
+        while (($row = fgetcsv($handle, 0, $delimiter, '"', '\\')) !== false) $rows[] = $row;
+        fclose($handle);
+    }
+    if (!$rows || !is_array($rows[0])) JsonResponse::error('En-têtes introuvables dans le fichier.', 422);
+    $headers = array_map(static fn ($value): string => trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $value)), $rows[0]);
+    $aliases = ['type de donnée' => 'type', 'type de donnee' => 'type', 'nom' => 'name', 'référence' => 'reference', 'reference' => 'reference', 'description' => 'description', 'catégorie' => 'category', 'categorie' => 'category', 'unité' => 'unit', 'unite' => 'unit', 'symbole unité' => 'unit_symbol', 'symbole unite' => 'unit_symbol', 'prix de vente' => 'sale_price', 'prix de revient' => 'cost_price', "prix d'achat" => 'cost_price', 'prix d’achat' => 'cost_price', 'coût' => 'cost_price', 'cout' => 'cost_price', 'monnaie' => 'currency', 'périssable' => 'perishable', 'perissable' => 'perishable'];
     $normalized = [];
     foreach ($headers as $index => $header) {
         $key = mb_strtolower(trim($header), 'UTF-8');
         $normalized[$index] = $aliases[$key] ?? $key;
     }
     if (!in_array('type', $normalized, true) || !in_array('name', $normalized, true)) {
-        JsonResponse::error('Les colonnes type et name (ou Type de donnée et Nom) sont obligatoires. Téléchargez le modèle CSV pour consulter les colonnes attendues.', 422);
+        JsonResponse::error('Les colonnes Type et Nom sont obligatoires. Téléchargez le modèle Excel pour consulter les colonnes attendues.', 422);
     }
     $items = [];
-    $rowNumber = 1;
-    while (($values = fgetcsv($handle, 0, $delimiter, '"', '\\')) !== false) {
-        $rowNumber++;
+    foreach (array_slice($rows, 1) as $rowIndex => $values) {
+        $rowNumber = $rowIndex + 2;
+        if (!is_array($values)) continue;
         if (count(array_filter($values, static fn ($value): bool => trim((string) $value) !== '')) === 0) continue;
         if (count($items) >= 5000) JsonResponse::error('Le fichier ne peut pas dépasser 5 000 lignes.', 413);
         $item = array_fill_keys(['type', 'name', 'reference', 'description', 'category', 'unit', 'unit_symbol', 'sale_price', 'cost_price', 'currency', 'perishable'], '');
@@ -383,7 +537,6 @@ function previewCsv(): never
         $item['_source_row'] = $rowNumber;
         $items[] = $item;
     }
-    fclose($handle);
     $validated = [];
     $errors = [];
     foreach ($items as $item) {
@@ -398,8 +551,9 @@ function previewCsv(): never
     }
     $seen = [];
     foreach ($validated as $index => $item) {
-        $keys = [$item['type'] . ':' . mb_strtolower($item['name'], 'UTF-8')];
-        if ($item['type'] === 'product' && $item['reference'] !== '') $keys[] = 'product-reference:' . mb_strtolower($item['reference'], 'UTF-8');
+        $keys = $item['type'] === 'product' && $item['reference'] !== ''
+            ? ['product-reference:' . mb_strtolower($item['reference'], 'UTF-8')]
+            : [$item['type'] . ':' . mb_strtolower($item['name'], 'UTF-8')];
         foreach ($keys as $key) {
             if (isset($seen[$key])) {
                 $errors[] = ['row' => $item['_source_row'], 'message' => 'Doublon détecté avec la ligne ' . $seen[$key] . '.'];
@@ -502,8 +656,8 @@ function importDataset(mysqli $db, array $actor, int $enterpriseId): never
             $sku = trim((string) ($item['reference'] ?? ''));
             $name = trim((string) ($item['name'] ?? ''));
             if ($sku === '' || $name === '') throw new RuntimeException('Chaque produit importé doit avoir un nom et une référence.');
-            $duplicate = $db->prepare('SELECT produit_id FROM produits WHERE entreprise_id = ? AND (sku = ? OR name = ?) LIMIT 1');
-            $duplicate->bind_param('iss', $enterpriseId, $sku, $name);
+                $duplicate = $db->prepare('SELECT produit_id FROM produits WHERE entreprise_id = ? AND sku = ? LIMIT 1');
+                $duplicate->bind_param('is', $enterpriseId, $sku);
             $duplicate->execute();
             if ($duplicate->get_result()->fetch_assoc()) { $counts['duplicates']++; continue; }
             $categoryId = null;
@@ -615,4 +769,16 @@ function exportDataset(mysqli $db, int $datasetId, int $versionId, bool $include
     }
     fclose($out);
     exit;
+}
+
+function exportDatasetXlsx(mysqli $db, int $datasetId, int $versionId, bool $includeInactive = true, ?string $activityType = null): never
+{
+    $dataset = datasetDetails($db, $datasetId, $includeInactive, $activityType);
+    if ($versionId > 0) {
+        $versionIds = array_column($dataset['versions'], 'jeu_donnees_version_id');
+        if (!in_array($versionId, $versionIds, true)) JsonResponse::error('Version introuvable.', 404);
+        $dataset['items'] = versionItems($db, $versionId);
+    }
+    $filename = preg_replace('/[^A-Za-z0-9_-]+/', '-', (string) $dataset['name']) ?: 'jeu-de-donnees';
+    DatasetSpreadsheet::download($filename, spreadsheetRows($dataset['items']));
 }
