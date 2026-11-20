@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Super administration | ALBA-GEST</title>
+  <link rel="stylesheet" href="styles.css?v=20261011-ui-polish-2">
+  <link rel="stylesheet" href="crud-actions.css?v=20261011-ui-polish-2">
+  <style>
+    .module-access-form{display:grid;gap:16px;margin-top:20px}.module-access-company{max-width:420px;display:grid;gap:7px;color:#51615b;font-size:12px;font-weight:700}.module-access-company select{padding:10px;border:1px solid #e6ebe7;border-radius:6px;font:inherit}.module-access-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px 18px;border:0;padding:0;margin:0}.module-access-list label{display:flex;align-items:center;gap:9px;padding:11px 12px;border:1px solid #e6ebe7;border-radius:6px;color:#33433d;font-size:13px}.module-access-list input{accent-color:#147c70;width:16px;height:16px}.module-access-submit{justify-self:start;background:#147c70;color:#fff;border:0;padding:10px 14px;border-radius:6px;font-weight:700;cursor:pointer}.module-access-submit:disabled{opacity:.6;cursor:wait}    .admin-pagination{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-top:12px;color:#73807b;font-size:12px}.admin-pagination>div{display:flex;align-items:center;gap:8px}.admin-pagination label{display:flex;align-items:center;gap:6px}.admin-pagination select,.admin-pagination button{padding:7px 9px;border:1px solid #e6ebe7;border-radius:6px;background:#fff;color:#1d2926;font:inherit}.admin-pagination button{cursor:pointer}.admin-pagination button:disabled{opacity:.45;cursor:not-allowed}.branch-limit-form{display:flex;align-items:center;gap:6px}.branch-limit-form input{width:68px;min-width:0;padding:7px;border:1px solid #e6ebe7;border-radius:6px;font:inherit}.branch-limit-form button,.super-admin-row-actions button{border:0;border-radius:6px;padding:7px 9px;background:#e6f2ee;color:#147c70;font-weight:700;cursor:pointer;white-space:nowrap}.super-admin-row-actions{display:flex;gap:6px}.super-admin-row-actions .delete-super-admin{background:#fde8e4;color:#bb5149}.admin-edit-backdrop{position:fixed;inset:0;z-index:10;display:grid;place-items:center;padding:20px;background:#132a25a6}.admin-edit-backdrop[hidden]{display:none}.admin-edit-dialog{width:min(460px,100%);padding:24px;border-radius:12px;background:#fff;box-shadow:0 22px 65px #132a2540}.admin-edit-dialog h2{margin:0 0 8px;font:600 21px 'Space Grotesk'}.admin-edit-dialog p{margin:0 0 18px;color:#73807b;font-size:13px}.admin-edit-dialog .currency-form{align-items:stretch;flex-direction:column}.admin-edit-dialog .currency-form label{width:100%}.admin-edit-dialog .currency-form input{width:100%;box-sizing:border-box}.admin-edit-actions{display:flex;gap:8px}.admin-edit-actions button{width:auto}
+    @media(max-width:700px){.admin-shell{grid-template-columns:1fr}.admin-sidebar{padding:10px;flex-direction:row;overflow:auto}.admin-sidebar-label{display:none}.admin-nav-item{white-space:nowrap;width:auto}}
+  </style>
+  <style>
+    body{margin:0;background:#f5f7f3;color:#1d2926}.admin-top{height:66px;background:#183b35;color:#fff;padding:0 4%;display:flex;justify-content:space-between;align-items:center}.admin-top strong{font:700 20px 'Space Grotesk'}.logout,.currency-submit{background:#f07f5f;color:#fff;border:0;padding:10px 14px;border-radius:6px;font-weight:700;cursor:pointer}.admin-shell{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:calc(100vh - 66px)}.admin-sidebar{background:#183b35;color:#d8e8e3;padding:28px 16px;display:flex;flex-direction:column;gap:8px}.admin-sidebar-label{margin:0 12px 10px;color:#89aaa1;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;font-weight:700}.admin-nav-item{width:100%;padding:12px;border:0;border-radius:7px;background:transparent;color:#aac3bd;text-align:left;font:600 13px 'DM Sans',sans-serif;cursor:pointer}.admin-nav-item:hover,.admin-nav-item.active{background:#2a5e54;color:#fff}.admin-nav-item span{display:inline-block;width:28px;font-size:17px}.admin-content{width:100%;max-width:1250px;margin:0 auto;padding:38px 4%}.admin-heading{margin-bottom:24px}.admin-heading h1{font:600 32px 'Space Grotesk';margin:0}.admin-heading p,.admin-panel>p{color:#73807b}.admin-view[hidden]{display:none}.admin-panel{background:#fff;border:1px solid #e6ebe7;border-radius:10px;padding:22px;margin-top:18px;overflow:auto}.admin-panel h2{margin:0;font:600 20px 'Space Grotesk'}.currency-form{display:flex;align-items:end;gap:12px;flex-wrap:wrap;margin:18px 0}.currency-form label{display:flex;flex-direction:column;gap:6px;color:#51615b;font-size:12px;font-weight:700}.currency-form input{min-width:180px;padding:10px;border:1px solid #e6ebe7;border-radius:6px;font:inherit}.admin-table{width:100%;border-collapse:collapse;min-width:520px}.admin-table th,.admin-table td{padding:13px;text-align:left;border-bottom:1px solid #edf1ee;font-size:12px}.admin-table th{font-size:10px;color:#73807b;text-transform:uppercase}.status-button{border:0;border-radius:6px;padding:8px 10px;font-weight:700;font-size:11px;cursor:pointer}.activate{background:#dcefe8;color:#147c70}.deactivate{background:#fde8e4;color:#bb5149}.admin-message{position:fixed;right:20px;bottom:20px;background:#183b35;color:#fff;padding:12px 15px;border-radius:6px;display:none;z-index:5}.admin-message.visible{display:block}@media(max-width:700px){.admin-shell{grid-template-columns:1fr}.admin-sidebar{padding:12px;display:flex;flex-direction:row;overflow:auto}.admin-sidebar-label{display:none}.admin-nav-item{white-space:nowrap;width:auto}.admin-content{padding:25px 16px}.admin-heading h1{font-size:27px}}
+  </style>
+  <link rel="stylesheet" href="component-polish.css?v=20261024-alba-gest-brand">
+  <link rel="stylesheet" href="superadmin.css?v=20261104-enterprise-delete-visible">
+  <link rel="stylesheet" href="datasets.css?v=20261109-dataset-library">
+</head>
+<body>
+  <header class="admin-top"><strong>ALBA-GEST · Super administration</strong><button class="logout" id="logout">Se déconnecter</button></header>
+  <div class="admin-shell">
+    <aside class="admin-sidebar" aria-label="Menu super administrateur">
+      <p class="admin-sidebar-label">Administration</p>
+      <button class="admin-nav-item active" type="button" data-admin-view="enterprises"><span>▦</span>Entreprises</button>
+      <button class="admin-nav-item" type="button" data-admin-view="notifications"><span>✉</span>Notifications email</button>
+      <button class="admin-nav-item" type="button" data-admin-view="super-admins"><span>♙</span>Super administrateurs</button>
+      <button class="admin-nav-item" type="button" data-admin-view="modules"><span>◈</span>Droits des modules</button>
+      <button class="admin-nav-item" type="button" data-admin-view="currencies"><span>¤</span>Monnaies</button>
+      <button class="admin-nav-item" type="button" data-admin-view="datasets"><span>▤</span>Jeux de données</button>
+      <button class="admin-nav-item" type="button" data-admin-view="profile"><span>♙</span>Mon profil</button>
+    </aside>
+    <main class="admin-content">
+      <header class="admin-heading"><h1 id="admin-page-title">Gestion des entreprises</h1><p id="admin-page-description">Configurez les notifications et gérez les comptes inscrits sur la plateforme.</p></header>
+      <section class="admin-view" id="admin-view-enterprises">
+        <div class="admin-panel enterprise-admin-panel"><table class="admin-table enterprise-admin-table"><thead><tr><th>Entreprise</th><th>Type</th><th>Email</th><th>Date</th><th>Statut</th><th>Action</th><th>Succursales (actuelles / maximum)</th><th>Modules</th><th class="enterprise-delete-column">Suppression</th></tr></thead><tbody id="enterprise-list"><tr><td colspan="9">Chargement…</td></tr></tbody></table></div>
+      </section>
+      <section class="admin-view" id="admin-view-notifications" hidden>
+        <div class="admin-panel">
+          <h2>Destinataires des demandes d’entreprise</h2>
+          <p>Les super-administrateurs actifs reçoivent automatiquement un email lorsqu’une nouvelle entreprise demande un compte. Ajoutez ci-dessous d’autres destinataires, une adresse par ligne. Il s’agit d’un email d’information, sans code OTP. La configuration SMTP reste gérée côté serveur.</p>
+          <form id="registration-notification-form" class="currency-form">
+            <label>Adresses email destinataires<textarea name="emails" id="registration-notification-emails" rows="5" maxlength="5000" autocomplete="off" required style="min-width:280px;max-width:100%;padding:10px;border:1px solid #e6ebe7;border-radius:6px;font:inherit"></textarea></label>
+            <button class="currency-submit" type="submit">Enregistrer les destinataires</button>
+          </form>
+        </div>
+      </section>
+      <section class="admin-view" id="admin-view-super-admins" hidden>
+        <div class="admin-panel">
+          <h2>Créer un super administrateur</h2>
+          <p>Le nouveau compte pourra se connecter à l’espace de super administration.</p>
+          <form id="super-admin-form" class="currency-form">
+            <label>Nom complet<input name="full_name" maxlength="100" required></label>
+            <label>Email<input name="email" type="email" maxlength="150" required></label>
+            <label>Mot de passe<input name="password" type="password" minlength="6" autocomplete="new-password" required></label>
+            <button class="currency-submit" type="submit">Créer le compte</button>
+          </form>
+        </div>
+        <div class="admin-panel">
+          <h2>Comptes super administrateurs</h2>
+          <div style="overflow:auto"><table class="admin-table"><thead><tr><th>Nom complet</th><th>Email</th><th>Créé le</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="super-admin-list"><tr><td colspan="5">Chargement…</td></tr></tbody></table></div>
+          <div id="super-admin-pagination" class="admin-pagination"></div>
+        </div>
+      </section>
+      <section class="admin-view" id="admin-view-modules" hidden>
+        <div class="admin-panel">
+          <h2>Droits d’utilisation des modules</h2>
+          <p>Choisissez les modules auxquels chaque entreprise peut accéder. Cochez « Gestion des risques de stock » pour afficher ce module dans l’espace de l’entreprise et autoriser ses API.</p>
+          <form id="module-access-form" class="module-access-form">
+            <label class="module-access-company">Entreprise<select id="module-access-enterprise" required><option value="">Sélectionner une entreprise</option></select></label>
+            <fieldset id="module-access-list" class="module-access-list" disabled></fieldset>
+            <button class="module-access-submit" type="submit" disabled>Enregistrer les droits</button>
+          </form>
+        </div>
+      </section>
+      <section class="admin-view" id="admin-view-currencies" hidden>
+        <div class="admin-panel">
+          <h2>Monnaies disponibles</h2>
+          <p>Ajoutez les monnaies que les utilisateurs pourront choisir lors de la création d’un produit.</p>
+          <form id="currency-form" class="currency-form" method="post" action="../backend/public/auth.php?action=super-admin-currencies">
+            <label>Code monnaie<input name="type_monais" maxlength="10" placeholder="Ex. USD" required></label>
+            <label>Symbole ou nom court<input name="description" maxlength="10" placeholder="Ex. $" required></label>
+            <button class="currency-submit" type="submit">Enregistrer la monnaie</button>
+            <button class="status-button" id="currency-cancel" type="button" hidden>Annuler la modification</button>
+          </form>
+          <div style="overflow:auto"><table class="admin-table"><thead><tr><th>Code monnaie</th><th>Symbole / nom court</th><th>Actions</th></tr></thead><tbody id="currency-list"><tr><td colspan="3">Chargement des monnaies…</td></tr></tbody></table></div>
+        </div>
+      </section>
+      <section class="admin-view" id="admin-view-datasets" hidden>
+        <div class="dashboard-grid dataset-admin-stats">
+          <article class="stat-card"><span class="stat-label">Jeux de données</span><div class="stat-value" id="dataset-stat-total">0</div></article>
+          <article class="stat-card"><span class="stat-label">Jeux publiés</span><div class="stat-value" id="dataset-stat-active">0</div></article>
+          <article class="stat-card"><span class="stat-label">Secteurs publiés</span><div class="stat-value" id="dataset-stat-sectors">0</div></article>
+        </div>
+        <div class="admin-panel">
+          <h2>Créer ou mettre à jour un jeu de données</h2>
+          <p>Enregistrer crée un brouillon qui n’est pas visible par les entreprises. Après vérification, publiez-le depuis la bibliothèque centrale. Toute modification d’un jeu publié crée une nouvelle version en brouillon et suspend sa disponibilité jusqu’à sa publication.</p>
+          <form id="dataset-form" class="currency-form dataset-form">
+            <input type="hidden" name="jeu_donnees_id">
+            <label>Nom du jeu<input name="name" maxlength="150" required></label>
+            <label>Secteur d’activité<select name="secteur_activite" required>
+              <option value="commerce_general">Commerce général</option><option value="pharmacie">Pharmacie</option><option value="alimentation_boissons">Alimentation et boissons</option><option value="quincaillerie">Quincaillerie</option><option value="materiaux_construction">Matériaux de construction</option><option value="agriculture">Agriculture</option><option value="informatique_electronique">Informatique et électronique</option><option value="habillement">Habillement</option><option value="transport_logistique">Transport et logistique</option><option value="industrie">Industrie</option><option value="autres">Autres secteurs</option><option value="all">Tous secteurs</option>
+            </select></label>
+            <label>Catégorie du jeu<input name="categorie" maxlength="80" placeholder="Ex. Catalogue initial" required></label>
+            <label class="dataset-description-field">Description<textarea name="description" rows="2" maxlength="10000"></textarea></label>
+            <div class="dataset-toolbar"><label>Construire depuis une entreprise<select id="dataset-source-enterprise"><option value="">Chargement des entreprises…</option></select></label><button type="button" class="status-button" id="dataset-from-enterprise">Créer un brouillon depuis le catalogue</button></div>
+            <div class="dataset-toolbar"><button type="button" class="status-button" id="dataset-add-row">Ajouter une ligne</button><button type="button" class="status-button" id="dataset-template">Télécharger le modèle Excel</button><label class="dataset-file-label">Importer Excel ou CSV<input id="dataset-csv-file" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"></label><button type="button" id="dataset-reset" class="status-button">Nouveau jeu</button></div>
+            <p id="dataset-preview-message" class="dataset-preview-message" role="status">Le classeur Excel doit contenir l’onglet « Jeux des données » avec les en-têtes sur la première ligne. CSV reste accepté.</p>
+            <div class="dataset-table-wrap"><table class="admin-table dataset-items-table"><thead><tr><th>Type</th><th>Nom</th><th>Référence</th><th>Catégorie</th><th>Unité</th><th>Symbole unité</th><th>Prix vente</th><th>Coût</th><th>Monnaie</th><th>Périssable</th><th>Description</th><th>Validation</th><th></th></tr></thead><tbody id="dataset-item-rows"><tr data-dataset-empty><td colspan="13">Aucune ligne ajoutée.</td></tr></tbody></table></div>
+            <button type="submit" class="currency-submit" id="dataset-save">Enregistrer le jeu de données</button>
+          </form>
+        </div>
+        <div class="admin-panel">
+          <div class="dataset-list-heading"><div><h2>Bibliothèque centrale</h2><p>Seuls les jeux publiés sont visibles par les entreprises dont le secteur correspond. Publiez un brouillon après vérification, ou retirez un jeu déjà publié.</p></div><input id="dataset-search-admin" type="search" placeholder="Rechercher un jeu"><select id="dataset-sector-filter" aria-label="Filtrer par secteur"><option value="">Tous les secteurs</option><option value="commerce_general">Commerce général</option><option value="pharmacie">Pharmacie</option><option value="alimentation_boissons">Alimentation et boissons</option><option value="quincaillerie">Quincaillerie</option><option value="materiaux_construction">Matériaux de construction</option><option value="agriculture">Agriculture</option><option value="informatique_electronique">Informatique et électronique</option><option value="habillement">Habillement</option><option value="transport_logistique">Transport et logistique</option><option value="industrie">Industrie</option><option value="autres">Autres secteurs</option><option value="all">Tous secteurs</option></select><select id="dataset-status-filter" aria-label="Filtrer par publication"><option value="">Tous les statuts</option><option value="1">Publiés</option><option value="0">Brouillons / retirés</option></select></div>
+          <div class="dataset-table-wrap"><table class="admin-table"><thead><tr><th>Nom</th><th>Secteur</th><th>Catégorie</th><th>Version</th><th>Lignes</th><th>Créateur</th><th>Publication</th><th>Actions</th></tr></thead><tbody id="dataset-list"><tr><td colspan="8">Chargement…</td></tr></tbody></table></div>
+        </div>
+      </section>
+      <section class="admin-view" id="admin-view-profile" hidden>
+        <div class="admin-panel">
+          <h2>Informations du compte</h2>
+          <form id="admin-profile-form" class="currency-form">
+            <label>Nom complet<input name="full_name" id="admin-profile-name" required></label>
+            <label>Email<input name="email" id="admin-profile-email" type="email" required></label>
+            <button class="currency-submit" type="submit">Enregistrer le profil</button>
+          </form>
+        </div>
+        <div class="admin-panel">
+          <h2>Modifier le mot de passe</h2>
+          <form id="admin-password-form" class="currency-form">
+            <label>Mot de passe actuel<input name="current_password" type="password" autocomplete="current-password" required></label>
+            <label>Nouveau mot de passe<input name="new_password" type="password" minlength="6" autocomplete="new-password" required></label>
+            <label>Confirmer le mot de passe<input name="confirm_password" type="password" minlength="6" autocomplete="new-password" required></label>
+            <button class="currency-submit" type="submit">Modifier le mot de passe</button>
+          </form>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div class="admin-edit-backdrop" id="super-admin-edit-modal" hidden>
+    <section class="admin-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="super-admin-edit-title">
+      <h2 id="super-admin-edit-title">Modifier un super administrateur</h2>
+      <p>Laissez le mot de passe vide pour le conserver.</p>
+      <form id="super-admin-edit-form" class="currency-form">
+        <input type="hidden" name="super_admin_id">
+        <label>Nom complet<input name="full_name" maxlength="100" required></label>
+        <label>Email<input name="email" type="email" maxlength="150" required></label>
+        <label>Nouveau mot de passe (facultatif)<input name="password" type="password" minlength="6" autocomplete="new-password"></label>
+        <div class="admin-edit-actions"><button class="currency-submit" type="submit">Enregistrer</button><button class="status-button" id="super-admin-edit-cancel" type="button">Annuler</button></div>
+      </form>
+    </section>
+  </div>
+  <div class="admin-message" id="admin-message" role="status"></div>
+  <script src="password-toggle.js?v=20261011-ui-polish-2"></script>
+  <script src="interface-language.js?v=20261024-interface-navigation"></script>
+  <script src="superadmin.js?v=20261112-dataset-delete"></script>
+</body>
+</html>

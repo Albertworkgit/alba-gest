@@ -1,0 +1,3 @@
+# Adresse publique canonique utilisée dans les liens QR des factures.
+# Modifiez cette valeur lors d'un changement d'hébergement ou de domaine.
+APP_BASE_URL=https://example.com/front/index.html

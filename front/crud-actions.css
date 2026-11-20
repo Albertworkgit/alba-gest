@@ -1,0 +1,291 @@
+/* Shared action styles for edit and delete controls in the CRUD tables. */
+button[data-product-edit],
+button[data-category-edit],
+button[data-branch-edit],
+button[data-role-edit],
+button[data-user-edit],
+button[data-supplier-edit],
+button[data-client-edit],
+button[data-currency-edit],
+button[data-stock-edit] {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 2px 5px 2px 0;
+  padding: 6px 10px;
+  border: 1px solid #cfe4db;
+  border-radius: 7px;
+  background: #edf7f2;
+  color: #126b5e;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+button[data-product-edit]::before,
+button[data-category-edit]::before,
+button[data-branch-edit]::before,
+button[data-role-edit]::before,
+button[data-user-edit]::before,
+button[data-supplier-edit]::before,
+button[data-client-edit]::before,
+button[data-currency-edit]::before {
+  content: "✎";
+  font-size: 13px;
+}
+
+button[data-stock-edit]::before { content: "↕"; font-size: 13px; }
+
+button[data-product-edit]:hover,
+button[data-category-edit]:hover,
+button[data-branch-edit]:hover,
+button[data-role-edit]:hover,
+button[data-user-edit]:hover,
+button[data-supplier-edit]:hover,
+button[data-client-edit]:hover,
+button[data-currency-edit]:hover,
+button[data-stock-edit]:hover {
+  border-color: #9ccbbb;
+  background: #dcefe7;
+  transform: translateY(-1px);
+}
+
+button[data-product-delete],
+button[data-category-delete],
+button[data-branch-delete],
+button[data-role-delete],
+button[data-user-delete],
+button[data-supplier-delete],
+button[data-client-delete],
+button[data-currency-delete] {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 2px 0;
+  padding: 6px 10px;
+  border: 1px solid #f0d2cd;
+  border-radius: 7px;
+  background: #fff2ef;
+  color: #b54840;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+button[data-product-delete]::before,
+button[data-category-delete]::before,
+button[data-branch-delete]::before,
+button[data-role-delete]::before,
+button[data-user-delete]::before,
+button[data-supplier-delete]::before,
+button[data-client-delete]::before,
+button[data-currency-delete]::before {
+  content: "×";
+  font-size: 16px;
+  line-height: 10px;
+}
+
+button[data-product-delete]:hover,
+button[data-category-delete]:hover,
+button[data-branch-delete]:hover,
+button[data-role-delete]:hover,
+button[data-user-delete]:hover,
+button[data-supplier-delete]:hover,
+button[data-client-delete]:hover,
+button[data-currency-delete]:hover {
+  border-color: #e5aaa2;
+  background: #fde4df;
+  transform: translateY(-1px);
+}
+
+button[data-product-edit]:focus-visible,
+button[data-category-edit]:focus-visible,
+button[data-branch-edit]:focus-visible,
+button[data-role-edit]:focus-visible,
+button[data-user-edit]:focus-visible,
+button[data-client-edit]:focus-visible,
+button[data-supplier-edit]:focus-visible,
+button[data-currency-edit]:focus-visible,
+button[data-stock-edit]:focus-visible,
+button[data-product-delete]:focus-visible,
+button[data-category-delete]:focus-visible,
+button[data-branch-delete]:focus-visible,
+button[data-role-delete]:focus-visible,
+button[data-user-delete]:focus-visible,
+button[data-client-delete]:focus-visible,
+button[data-supplier-delete]:focus-visible,
+button[data-currency-delete]:focus-visible {
+  outline: 3px solid #83b9a8;
+  outline-offset: 2px;
+}
+
+.dark-theme button[data-product-edit],
+.dark-theme button[data-category-edit],
+.dark-theme button[data-branch-edit],
+.dark-theme button[data-role-edit],
+.dark-theme button[data-user-edit],
+.dark-theme button[data-supplier-edit],
+.dark-theme button[data-client-edit],
+.dark-theme button[data-currency-edit],
+.dark-theme button[data-stock-edit] {
+  border-color: #416e61;
+  background: #294b41;
+  color: #a8dfcd;
+}
+
+.dark-theme button[data-product-delete],
+.dark-theme button[data-category-delete],
+.dark-theme button[data-branch-delete],
+.dark-theme button[data-role-delete],
+.dark-theme button[data-user-delete],
+.dark-theme button[data-supplier-delete],
+.dark-theme button[data-client-delete],
+.dark-theme button[data-currency-delete] {
+  border-color: #764944;
+  background: #4b302d;
+  color: #ffb6a9;
+}
+
+/* Compact icon controls keep table actions readable without widening each row. */
+button[data-product-edit],
+button[data-category-edit],
+button[data-branch-edit],
+button[data-role-edit],
+button[data-user-edit],
+button[data-supplier-edit],
+button[data-client-edit],
+button[data-stock-edit],
+button[data-unit-edit],
+button[data-currency-edit],
+button[data-product-delete],
+button[data-category-delete],
+button[data-branch-delete],
+button[data-role-delete],
+button[data-user-delete],
+button[data-supplier-delete],
+button[data-client-delete],
+button[data-unit-delete],
+button[data-currency-delete],
+button[data-cash-delete] {
+  box-sizing: border-box;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  margin: 2px;
+  display: inline-grid;
+  place-items: center;
+  gap: 0;
+  vertical-align: middle;
+  overflow: hidden;
+  font-size: 0;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+button[data-product-edit]::before,
+button[data-category-edit]::before,
+button[data-branch-edit]::before,
+button[data-role-edit]::before,
+button[data-user-edit]::before,
+button[data-supplier-edit]::before,
+button[data-client-edit]::before,
+button[data-stock-edit]::before,
+button[data-unit-edit]::before,
+button[data-currency-edit]::before { content: "\270E"; font-size: 15px; }
+
+button[data-product-delete]::before,
+button[data-category-delete]::before,
+button[data-branch-delete]::before,
+button[data-role-delete]::before,
+button[data-user-delete]::before,
+button[data-supplier-delete]::before,
+button[data-client-delete]::before,
+button[data-unit-delete]::before,
+button[data-currency-delete]::before,
+button[data-cash-delete]::before { content: "\1F5D1"; font-size: 14px; }
+
+button[data-stock-edit]::before { content: "\21C5"; font-size: 16px; }
+button[data-purchase-voucher] svg { width: 16px; height: 16px; }
+button[data-unit-edit] span[aria-hidden="true"],
+button[data-unit-delete] span[aria-hidden="true"],
+button[data-role-edit] span[aria-hidden="true"],
+button[data-role-delete] span[aria-hidden="true"],
+button[data-user-edit] span[aria-hidden="true"],
+button[data-user-delete] span[aria-hidden="true"] { display: none; }
+
+button[data-product-edit]:focus-visible,
+button[data-category-edit]:focus-visible,
+button[data-branch-edit]:focus-visible,
+button[data-role-edit]:focus-visible,
+button[data-user-edit]:focus-visible,
+button[data-supplier-edit]:focus-visible,
+button[data-client-edit]:focus-visible,
+button[data-stock-edit]:focus-visible,
+button[data-unit-edit]:focus-visible,
+button[data-currency-edit]:focus-visible,
+button[data-product-delete]:focus-visible,
+button[data-category-delete]:focus-visible,
+button[data-branch-delete]:focus-visible,
+button[data-role-delete]:focus-visible,
+button[data-user-delete]:focus-visible,
+button[data-supplier-delete]:focus-visible,
+button[data-client-delete]:focus-visible,
+button[data-unit-delete]:focus-visible,
+button[data-currency-delete]:focus-visible,
+button[data-cash-delete]:focus-visible,
+button[data-sale-receipt]:focus-visible,
+button[data-purchase-voucher]:focus-visible { outline: 2px solid #147c70; outline-offset: 2px; }
+
+/* Service sale workflow */
+.sales-panel-heading { align-items: center; }
+.service-sale-button { display:inline-flex; align-items:center; gap:8px; padding:10px 15px; border:1px solid #c8e3d9; border-radius:8px; background:linear-gradient(135deg,#f1faf5,#e2f2eb); color:#12695d; font-size:12px; font-weight:700; box-shadow:0 3px 9px #164c3c12; transition:transform .16s ease,box-shadow .16s ease,background .16s ease; }
+.service-sale-button[hidden] { display:none; }
+
+.service-sale-button:hover { transform:translateY(-1px); background:#e5f4ec; box-shadow:0 6px 14px #164c3c1a; }
+.service-sale-button:focus-visible { outline:3px solid #83b9a8; outline-offset:2px; }
+.service-sale-dialog { width:min(920px,100%); }
+.service-sale-dialog > p:first-of-type { margin:7px 0 20px; color:#73807b; }
+.service-sale-dialog .sale-lines-wrap { border-color:#dce9e2; background:linear-gradient(180deg,#fbfdfb,#fff); }
+.service-sale-dialog .sale-line { grid-template-columns:minmax(145px,1.6fr) minmax(90px,.8fr) minmax(110px,1fr) minmax(100px,.9fr) minmax(110px,.9fr) minmax(120px,1fr) 36px; gap:9px; }
+.service-sale-dialog .sale-line label { color:#5f7169; font-weight:600; }
+.service-sale-dialog .sale-line input,.service-sale-dialog .sale-line select { min-height:39px; border-color:#dbe5df; box-shadow:0 1px 2px #183b3508; }
+.service-sale-dialog .sale-line input:focus,.service-sale-dialog .sale-line select:focus { outline:2px solid #9dcdbb; border-color:#65a892; }
+.service-sale-dialog .sale-line > strong { align-self:center; padding:10px 5px 5px; color:#12695d; font-size:12px; }
+.service-sale-dialog .sale-lines-heading button { border:1px solid #c8e3d9; background:#edf8f2; transition:background .15s ease; }
+.service-sale-dialog .sale-lines-heading button:hover { background:#dcefe8; }
+.service-sale-dialog .sale-line [data-service-remove] { width:36px; height:36px; padding:0; border:1px solid #f1d8d2; background:#fff4f1; color:#bd5e4c; font-size:19px; }
+.service-sale-dialog .sale-line [data-service-remove]:hover { background:#fde8e4; }
+.service-sale-dialog .sale-total { padding:14px 4px 0; border-top:1px solid #e7eee9; }
+.service-sale-dialog .modal-submit { min-width:185px; }
+@media (max-width:760px) { .service-sale-dialog .sale-line { grid-template-columns:1fr 1fr; padding:13px 0; } .service-sale-dialog .sale-line label:first-child { grid-column:1/-1; } .service-sale-dialog .sale-line > strong { padding:7px; } }.service-sale-hero { display:flex; justify-content:space-between; align-items:center; gap:20px; margin:-2px -2px 18px; padding:20px 22px; border:1px solid #dcece3; border-radius:12px; background:radial-gradient(circle at 88% 12%,#fff 0,#f2f9f5 32%,#e7f3ec 100%); }
+.service-sale-hero h2 { margin:5px 0 4px; color:#1d3932; font:600 22px 'Space Grotesk',sans-serif; letter-spacing:-.5px; }
+.service-sale-hero p { margin:0; color:#6d7e76; font-size:12px; }
+.service-sale-eyebrow { color:#168071; font-size:9px; font-weight:800; letter-spacing:1.25px; }
+
+.service-sale-steps { display:flex; align-items:center; gap:11px; margin:0 2px 20px; color:#65776f; font-size:10px; font-weight:700; }
+.service-sale-steps span { display:flex; align-items:center; gap:6px; white-space:nowrap; }
+.service-sale-steps b { display:grid; width:20px; height:20px; place-items:center; border-radius:50%; background:#dcefe8; color:#12695d; font-size:10px; }
+.service-sale-steps i { width:24px; height:1px; background:#dce5df; }
+.service-sale-form > label:not(.full) { min-width:0; }
+.service-sale-form > label small { color:#83918b; font-size:10px; font-weight:400; }
+.service-sale-form > label input,.service-sale-form > label select { min-height:40px; }
+.service-sale-form > [data-service-client] { max-width:100%; }
+.service-sale-total-label { margin:0 0 -14px; color:#76877f; font-size:10px; font-weight:800; letter-spacing:.7px; text-align:right; text-transform:uppercase; }
+.service-sale-total { margin-top:0; padding:13px 15px!important; border:1px solid #dcece3; border-radius:9px; background:#f3faf6; }
+.service-sale-dialog .entity-modal-actions { padding-top:8px; }
+@media (max-width:600px) { .service-sale-hero { padding:16px; } .service-sale-steps { gap:6px; font-size:9px; } .service-sale-steps i { width:12px; } }
+.product-barcode-field { min-width:0; }
+.product-barcode-control { display:grid; grid-template-columns:minmax(0,1fr) 40px; gap:6px; }
+.barcode-scan-button { display:grid; width:40px; height:40px; place-items:center; border:1px solid #cfe3da; border-radius:6px; background:#edf7f2; color:#147c70; }
+.barcode-scan-button svg,.cash-manual-actions [data-cash-scan-invoice] svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.scanner-dialog { width:min(480px,100%); }
+.scanner-dialog [data-scanner-video] { display:block; width:100%; aspect-ratio:4/3; margin:0 0 12px; border-radius:7px; background:#111916; object-fit:cover; }
+.scanner-dialog [data-scanner-video][hidden] { display:none; }
+.scanner-dialog [data-scanner-status] { margin:0 0 12px; }
+.dark-theme .barcode-scan-button { border-color:#416e61; background:#294b41; color:#a8dfcd; }

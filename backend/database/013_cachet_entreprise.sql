@@ -1,0 +1,2 @@
+ALTER TABLE entreprises
+    ADD COLUMN IF NOT EXISTS cachet VARCHAR(255) NULL AFTER logo;
