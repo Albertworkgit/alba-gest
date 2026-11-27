@@ -636,6 +636,10 @@ try {
         $actor=AuthGuard::requireAuthenticated(); if(!$actor||$actor['type']!=='user') JsonResponse::error('Action réservée à un utilisateur d’entreprise.',403);
         Authorization::requirePermission($actor,'creer_ventes'); $body=json_decode((string)file_get_contents('php://input'),true)?:[];
         $requested=isset($body['succursale_id'])?(int)$body['succursale_id']:null; $allowed=Authorization::branchId($actor,$requested); if($allowed!==null)$body['succursale_id']=$allowed;
+        if (!empty($body['service_items'])) {
+            $saleBranchId=(int)($body['succursale_id']??$actor['succursale_id']??0);
+            (new ServiceSalesSettingsService(Database::connection()))->requireAllowed((int)$actor['entreprise_id'],$saleBranchId);
+        }
         $id=(new SalesService(Database::connection()))->create($actor,$body); JsonResponse::send(['success'=>true,'data'=>['vente_id'=>$id]],201);
     }
     if ($action === 'create-service-sale' && $method === 'POST') {
